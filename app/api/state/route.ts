@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { z } from "zod";
+import { requireAuth } from "../../lib/auth-server";
 
 export const dynamic = "force-dynamic";
 
@@ -229,8 +230,10 @@ function documentMath(data: z.infer<typeof documentPayload>) {
   return { subtotal, total };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const authError = await requireAuth(request);
+    if (authError) return authError;
     await ensureDatabase();
     return Response.json(await getState());
   } catch (error) {
@@ -240,6 +243,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const authError = await requireAuth(request);
+    if (authError) return authError;
     await ensureDatabase();
     const payload = actionPayload.parse(await request.json());
 

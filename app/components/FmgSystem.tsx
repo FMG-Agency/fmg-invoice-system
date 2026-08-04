@@ -12,21 +12,25 @@ import {
   Clock3,
   Download,
   Eye,
+  EyeOff,
   FileCheck2,
   FilePenLine,
   FilePlus2,
   FileText,
   FolderKanban,
   LayoutDashboard,
+  KeyRound,
+  LockKeyhole,
+  LogOut,
   Menu,
   Moon,
-  MoreHorizontal,
   Pencil,
   Plus,
   Printer,
   ReceiptText,
   Search,
   Settings2,
+  ShieldCheck,
   Sparkles,
   Sun,
   Tag,
@@ -45,6 +49,7 @@ import type { AppState, Category, Client, DocumentDraft, DocumentRecord, LineIte
 
 type View = "dashboard" | "invoice" | "quotation" | "clients" | "categories" | "data" | "settings";
 type Mutation = (body: Record<string, unknown>) => Promise<AppState>;
+type AuthState = { checking: boolean; authenticated: boolean; setupRequired: boolean; username: string };
 
 const clientSchema = z.object({
   name: z.string().trim().min(1, "Client name is required"),
@@ -179,8 +184,63 @@ function EmptyPanel({ icon: Icon, title, body, action }: { icon: typeof FileText
   return <div className="empty-panel"><div className="empty-icon"><Icon size={24} /></div><h3>{title}</h3><p>{body}</p>{action}</div>;
 }
 
+function AuthScreen({ setupRequired, onAuthenticated }: { setupRequired: boolean; onAuthenticated: (username: string) => Promise<void> }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    if (setupRequired && password !== confirmPassword) return setError("Passwords do not match.");
+    if (setupRequired && password.length < 8) return setError("Use at least 8 characters for the password.");
+    setBusy(true);
+    try {
+      const response = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: setupRequired ? "setup" : "login", username, password }),
+      });
+      const result = await response.json() as { authenticated?: boolean; username?: string; error?: string };
+      if (!response.ok) throw new Error(result.error || "Could not sign in.");
+      await onAuthenticated(result.username || username);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not sign in.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <main className="auth-page">
+    <div className="auth-slash" />
+    <section className="auth-brand">
+      <Image src="/fmg-logo-light.png" alt="FMG Agency" width={520} height={180} unoptimized />
+      <div><span>PRIVATE AGENCY WORKSPACE</span><h1>Documents protected.<br />Business moving.</h1><p>Clients, invoices, quotations, and PDFs stay behind one secure FMG administrator account.</p></div>
+      <small>FMG AGENCY • SUPERHEROES WHO CREATE</small>
+    </section>
+    <section className="auth-card-wrap">
+      <form className="auth-card" onSubmit={submit}>
+        <div className="auth-icon"><ShieldCheck size={23} /></div>
+        <span className="eyebrow">{setupRequired ? "FIRST-TIME SETUP" : "SECURE ACCESS"}</span>
+        <h2>{setupRequired ? "Create the admin account" : "Welcome back"}</h2>
+        <p>{setupRequired ? "Choose the username and password you will use to enter the FMG system." : "Enter your FMG administrator credentials to continue."}</p>
+        <label className="auth-field"><span>Username</span><div><UserRound size={17} /><input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder={setupRequired ? "Choose a username" : "Your username"} required minLength={setupRequired ? 3 : 1} autoFocus /></div></label>
+        <label className="auth-field"><span>Password</span><div><LockKeyhole size={17} /><input type={showPassword ? "text" : "password"} autoComplete={setupRequired ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={setupRequired ? "At least 8 characters" : "Your password"} required minLength={setupRequired ? 8 : 1} /><button type="button" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>
+        {setupRequired && <label className="auth-field"><span>Confirm password</span><div><KeyRound size={17} /><input type={showPassword ? "text" : "password"} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Repeat the password" required minLength={8} /></div></label>}
+        {error && <div className="auth-error" role="alert">{error}</div>}
+        <button className="auth-submit" disabled={busy}>{busy ? "Please wait…" : setupRequired ? "Create account & enter" : "Sign in"}<ArrowLeft size={17} /></button>
+        <div className="auth-security"><LockKeyhole size={14} /><span>Your password is encrypted and never stored as readable text.</span></div>
+      </form>
+    </section>
+  </main>;
+}
+
 export function FmgSystem() {
   const [state, setState] = useState<AppState>(emptyState);
+  const [auth, setAuth] = useState<AuthState>({ checking: true, authenticated: false, setupRequired: false, username: "" });
   const [view, setView] = useState<View>("dashboard");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -196,15 +256,20 @@ export function FmgSystem() {
     const shouldDark = storedTheme ? storedTheme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
     const themeFrame = window.requestAnimationFrame(() => setDark(shouldDark));
     document.documentElement.dataset.theme = shouldDark ? "dark" : "light";
-    void fetch("/api/state", { cache: "no-store" })
-      .then(async (response) => {
-        const result = await response.json() as AppState | { error?: string };
-        if (!response.ok) throw new Error("error" in result && result.error ? result.error : "Could not load your workspace");
-        setState(result as AppState);
-      })
-      .catch((error: Error) => showToast(error.message))
-      .finally(() => setLoading(false));
+    void fetch("/api/auth", { cache: "no-store" }).then(async (response) => {
+      const result = await response.json() as { setupRequired?: boolean; authenticated?: boolean; username?: string; error?: string };
+      if (!response.ok) throw new Error(result.error || "Could not check access.");
+      const nextAuth = { checking: false, setupRequired: Boolean(result.setupRequired), authenticated: Boolean(result.authenticated), username: result.username ?? "" };
+      setAuth(nextAuth);
+      if (nextAuth.authenticated) await loadWorkspace(); else setLoading(false);
+    }).catch((error: Error) => {
+      setAuth({ checking: false, authenticated: false, setupRequired: false, username: "" });
+      setLoading(false);
+      showToast(error.message);
+    });
     return () => window.cancelAnimationFrame(themeFrame);
+    // Initial access check intentionally runs once; later workspace refreshes are explicit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function showToast(message: string) {
@@ -227,11 +292,49 @@ export function FmgSystem() {
     localStorage.setItem("fmg-theme", next ? "dark" : "light");
   }
 
+  async function loadWorkspace() {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/state", { cache: "no-store" });
+      const result = await response.json() as AppState | { error?: string; code?: string };
+      if (response.status === 401) {
+        setAuth({ checking: false, authenticated: false, setupRequired: false, username: "" });
+        setState(emptyState);
+        return;
+      }
+      if (!response.ok) throw new Error("error" in result && result.error ? result.error : "Could not load your workspace");
+      setState(result as AppState);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not load your workspace");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAuthenticated(username: string) {
+    setAuth({ checking: false, authenticated: true, setupRequired: false, username });
+    await loadWorkspace();
+  }
+
+  async function logout() {
+    try { await fetch("/api/auth", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "logout" }) }); } finally {
+      setState(emptyState);
+      setView("dashboard");
+      setAuth({ checking: false, authenticated: false, setupRequired: false, username: "" });
+      setMenuOpen(false);
+    }
+  }
+
   async function mutate(body: Record<string, unknown>) {
     setBusy(true);
     try {
       const response = await fetch("/api/state", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const result = await response.json() as AppState | { error?: string };
+      if (response.status === 401) {
+        setAuth({ checking: false, authenticated: false, setupRequired: false, username: "" });
+        setState(emptyState);
+        throw new Error("Your session expired. Please sign in again.");
+      }
       if (!response.ok) throw new Error("error" in result && result.error ? result.error : "Could not save changes");
       setState(result as AppState);
       return result as AppState;
@@ -250,7 +353,8 @@ export function FmgSystem() {
 
   const copy = viewCopy[view];
 
-  if (loading) return <div className="app-loader"><Image src="/fmg-logo-light.png" alt="FMG Agency" width={380} height={130} unoptimized /><span /><p>Preparing your agency workspace…</p></div>;
+  if (auth.checking || (auth.authenticated && loading)) return <div className="app-loader"><Image src="/fmg-logo-light.png" alt="FMG Agency" width={380} height={130} unoptimized /><span /><p>Preparing your agency workspace…</p></div>;
+  if (!auth.authenticated) return <AuthScreen setupRequired={auth.setupRequired} onAuthenticated={handleAuthenticated} />;
 
   return (
     <div className="app-shell" dir="ltr">
@@ -268,7 +372,7 @@ export function FmgSystem() {
           })}
         </nav>
         <div className="side-foot">
-          <div className="workspace-chip"><div className="avatar">FM</div><div><strong>FMG Agency</strong><small>Primary workspace</small></div><MoreHorizontal size={18} /></div>
+          <div className="workspace-chip"><div className="avatar">{initials(auth.username)}</div><div><strong>{auth.username}</strong><small>FMG administrator</small></div><button onClick={logout} aria-label="Sign out" title="Sign out"><LogOut size={17} /></button></div>
           <p><span /> All systems operational</p>
         </div>
       </aside>
@@ -290,7 +394,7 @@ export function FmgSystem() {
           <div className="top-actions">
             <button className="icon-button" onClick={toggleTheme} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
             <button className="icon-button notification" aria-label="Notifications"><Bell size={18} /><span /></button>
-            <div className="top-avatar">FM</div>
+            <div className="top-avatar">{initials(auth.username)}</div>
           </div>
         </header>
 
@@ -305,7 +409,7 @@ export function FmgSystem() {
           {view === "categories" && <CategoriesPanel categories={state.categories} mutate={mutate} busy={busy} showToast={showToast} />}
           {(view === "invoice" || view === "quotation") && <DocumentEditor key={`${view}-${editingDocument?.id ?? "new"}`} type={view} state={state} mutate={mutate} busy={busy} editing={editingDocument} onDone={() => { setEditingDocument(null); chooseView("data"); }} showToast={showToast} />}
           {view === "data" && <DataPanel state={state} mutate={mutate} busy={busy} showToast={showToast} editDocument={(document) => { setEditingDocument(document); setView(document.type); }} />}
-          {view === "settings" && <SettingsPanel settings={state.settings} mutate={mutate} busy={busy} showToast={showToast} />}
+          {view === "settings" && <SettingsPanel settings={state.settings} mutate={mutate} busy={busy} showToast={showToast} authUsername={auth.username} onCredentialsChanged={(username) => setAuth((current) => ({ ...current, username }))} />}
         </div>
       </main>
 
@@ -450,12 +554,41 @@ function DataPanel({ state, mutate, busy, showToast, editDocument }: { state: Ap
   return <section className="panel data-panel"><div className="data-tabs"><button className={tab === "all" ? "active" : ""} onClick={() => setTab("all")}>All documents <span>{state.documents.length}</span></button><button className={tab === "invoice" ? "active" : ""} onClick={() => setTab("invoice")}>Invoices <span>{state.documents.filter((item) => item.type === "invoice").length}</span></button><button className={tab === "quotation" ? "active" : ""} onClick={() => setTab("quotation")}>Quotations <span>{state.documents.filter((item) => item.type === "quotation").length}</span></button></div><div className="filters-row"><div className="filter-search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by code or client" /></div><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">All categories</option>{state.categories.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}</select><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option>{["Draft", "Sent", "Approved", "Paid", "Rejected"].map((record) => <option key={record}>{record}</option>)}</select><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">Newest first</option><option value="amount">Highest value</option><option value="client">Client A–Z</option></select></div>{filtered.length ? <div className="table-scroll"><table className="data-table document-table"><thead><tr><th>Document</th><th>Client</th><th>Category</th><th>Date</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody>{filtered.map((document) => <tr key={document.id}><td><div className="document-code"><span className={document.type}>{document.type === "invoice" ? <ReceiptText size={17} /> : <FileText size={17} />}</span><span><strong>{document.generatedCode}</strong><small>{document.type}</small></span></div></td><td><strong className="table-main">{document.companyName || document.clientName}</strong><small className="table-sub">{document.ownerName}</small></td><td><span className="category-pill">{document.categoryPrefix}</span> {document.categoryName}</td><td>{prettyDate(document.date)}</td><td><strong className="table-main">{money(document.total, document.currency)}</strong></td><td><select className="status-select" value={document.status} onChange={(event) => setDocumentStatus(document, event.target.value)} disabled={busy}>{["Draft", "Sent", "Approved", "Paid", "Rejected"].map((record) => <option key={record}>{record}</option>)}</select></td><td><div className="document-actions"><button onClick={() => window.open(`/api/pdf/${document.id}`, "_blank")} title="Preview"><Eye size={16} /></button><a href={`/api/pdf/${document.id}?download=1`} title="Download"><Download size={16} /></a><button onClick={() => editDocument(document)} title="Edit"><Pencil size={16} /></button><button className="danger" onClick={() => remove(document)} title="Delete"><Trash2 size={16} /></button></div></td></tr>)}</tbody></table></div> : <EmptyPanel icon={FolderKanban} title={state.documents.length ? "No documents match these filters" : "Your archive is ready"} body={state.documents.length ? "Clear a filter or try a different search." : "Every generated invoice and quotation will be permanently stored here."} />}</section>;
 }
 
-function SettingsPanel({ settings, mutate, busy, showToast }: { settings: Settings; mutate: Mutation; busy: boolean; showToast: (message: string) => void }) {
+function SettingsPanel({ settings, mutate, busy, showToast, authUsername, onCredentialsChanged }: { settings: Settings; mutate: Mutation; busy: boolean; showToast: (message: string) => void; authUsername: string; onCredentialsChanged: (username: string) => void }) {
   const schema = z.object({ agencyName: z.string().min(1), defaultCurrency: z.string().min(1), preparedBy: z.string().min(1), defaultPaymentTerms: z.string(), defaultTax: z.number().min(0).max(100), phone: z.string(), email: z.union([z.string().email(), z.literal("")]), address: z.string() });
   type Input = z.infer<typeof schema>;
   const form = useForm<Input>({ resolver: zodResolver(schema), values: { agencyName: settings.agencyName, defaultCurrency: settings.defaultCurrency, preparedBy: settings.preparedBy, defaultPaymentTerms: settings.defaultPaymentTerms, defaultTax: settings.defaultTax, phone: settings.phone, email: settings.email, address: settings.address } });
   const submit = form.handleSubmit(async (data) => { try { await mutate({ action: "updateSettings", data }); showToast("Workspace settings saved."); } catch (error) { showToast(error instanceof Error ? error.message : "Could not save settings"); } });
-  return <form className="settings-layout" onSubmit={submit}><section className="panel settings-card"><div className="settings-heading"><div className="settings-icon"><Building2 size={20} /></div><div><h2>Agency profile</h2><p>Defaults used when preparing FMG documents.</p></div></div><div className="form-grid"><Field label="Agency name"><input {...form.register("agencyName")} /></Field><Field label="Prepared by"><input {...form.register("preparedBy")} /></Field><Field label="Phone" hint="Optional"><input {...form.register("phone")} placeholder="+20…" /></Field><Field label="Email" hint="Optional"><input {...form.register("email")} placeholder="finance@fmg.agency" /></Field><Field label="Address" wide hint="Optional"><input {...form.register("address")} placeholder="Agency address" /></Field></div></section><section className="panel settings-card"><div className="settings-heading"><div className="settings-icon yellow"><CircleDollarSign size={20} /></div><div><h2>Document defaults</h2><p>These values prefill new invoices and quotations.</p></div></div><div className="form-grid"><Field label="Default currency"><select {...form.register("defaultCurrency")}><option>EGP</option><option>USD</option><option>EUR</option><option>SAR</option><option>AED</option></select></Field><Field label="Default tax / VAT %"><input type="number" min="0" max="100" step="0.01" {...form.register("defaultTax", { valueAsNumber: true })} /></Field><Field label="Default payment terms" wide><textarea rows={3} {...form.register("defaultPaymentTerms")} /></Field></div></section><section className="settings-save"><div><Check size={16} /><span>Changes apply to new documents. Existing PDFs stay unchanged.</span></div><button className="primary-button" disabled={busy}>{busy ? "Saving…" : "Save settings"}</button></section></form>;
+  return <div className="settings-stack"><form className="settings-layout" onSubmit={submit}><section className="panel settings-card"><div className="settings-heading"><div className="settings-icon"><Building2 size={20} /></div><div><h2>Agency profile</h2><p>Defaults used when preparing FMG documents.</p></div></div><div className="form-grid"><Field label="Agency name"><input {...form.register("agencyName")} /></Field><Field label="Prepared by"><input {...form.register("preparedBy")} /></Field><Field label="Phone" hint="Optional"><input {...form.register("phone")} placeholder="+20…" /></Field><Field label="Email" hint="Optional"><input {...form.register("email")} placeholder="finance@fmg.agency" /></Field><Field label="Address" wide hint="Optional"><input {...form.register("address")} placeholder="Agency address" /></Field></div></section><section className="panel settings-card"><div className="settings-heading"><div className="settings-icon yellow"><CircleDollarSign size={20} /></div><div><h2>Document defaults</h2><p>These values prefill new invoices and quotations.</p></div></div><div className="form-grid"><Field label="Default currency"><select {...form.register("defaultCurrency")}><option>EGP</option><option>USD</option><option>EUR</option><option>SAR</option><option>AED</option></select></Field><Field label="Default tax / VAT %"><input type="number" min="0" max="100" step="0.01" {...form.register("defaultTax", { valueAsNumber: true })} /></Field><Field label="Default payment terms" wide><textarea rows={3} {...form.register("defaultPaymentTerms")} /></Field></div></section><section className="settings-save"><div><Check size={16} /><span>Changes apply to new documents. Existing PDFs stay unchanged.</span></div><button className="primary-button" disabled={busy}>{busy ? "Saving…" : "Save settings"}</button></section></form><CredentialsPanel username={authUsername} onChanged={onCredentialsChanged} showToast={showToast} /></div>;
+}
+
+function CredentialsPanel({ username, onChanged, showToast }: { username: string; onChanged: (username: string) => void; showToast: (message: string) => void }) {
+  const schema = z.object({
+    currentPassword: z.string().min(1, "Enter your current password."),
+    newUsername: z.string().trim().min(3, "Use at least 3 characters.").max(80).regex(/^[A-Za-z0-9._-]+$/, "Use letters, numbers, dots, dashes, or underscores."),
+    newPassword: z.union([z.string().min(8, "Use at least 8 characters."), z.literal("")]),
+    confirmPassword: z.string(),
+  }).refine((value) => value.newPassword === value.confirmPassword, { path: ["confirmPassword"], message: "Passwords do not match." });
+  type Input = z.infer<typeof schema>;
+  const form = useForm<Input>({ resolver: zodResolver(schema), defaultValues: { currentPassword: "", newUsername: username, newPassword: "", confirmPassword: "" } });
+  const [saving, setSaving] = useState(false);
+  const submit = form.handleSubmit(async (data) => {
+    setSaving(true);
+    try {
+      const response = await fetch("/api/auth", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "change", currentPassword: data.currentPassword, newUsername: data.newUsername, newPassword: data.newPassword }) });
+      const result = await response.json() as { username?: string; error?: string };
+      if (!response.ok) throw new Error(result.error || "Could not update credentials.");
+      const nextUsername = result.username || data.newUsername;
+      onChanged(nextUsername);
+      form.reset({ currentPassword: "", newUsername: nextUsername, newPassword: "", confirmPassword: "" });
+      showToast("Login credentials updated. Other sessions were signed out.");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not update credentials.");
+    } finally {
+      setSaving(false);
+    }
+  });
+  return <form className="panel settings-card security-card" onSubmit={submit}><div className="settings-heading"><div className="settings-icon yellow"><ShieldCheck size={20} /></div><div><h2>Login credentials</h2><p>Change the username or set a new password for the FMG administrator account.</p></div></div><div className="form-grid security-grid"><Field label="Current password" error={form.formState.errors.currentPassword?.message}><input type="password" autoComplete="current-password" {...form.register("currentPassword")} placeholder="Required to confirm changes" /></Field><Field label="Username" error={form.formState.errors.newUsername?.message}><input autoComplete="username" {...form.register("newUsername")} /></Field><Field label="New password" hint="Leave blank to keep it" error={form.formState.errors.newPassword?.message}><input type="password" autoComplete="new-password" {...form.register("newPassword")} placeholder="At least 8 characters" /></Field><Field label="Confirm new password" error={form.formState.errors.confirmPassword?.message}><input type="password" autoComplete="new-password" {...form.register("confirmPassword")} placeholder="Repeat the new password" /></Field></div><div className="security-actions"><div><LockKeyhole size={15} /><span>Changing credentials signs out every other active session.</span></div><button className="primary-button" disabled={saving}>{saving ? "Updating…" : "Update login"}</button></div></form>;
 }
 
 function Field({ label, hint, error, wide, children }: { label: string; hint?: string; error?: string; wide?: boolean; children: React.ReactNode }) {

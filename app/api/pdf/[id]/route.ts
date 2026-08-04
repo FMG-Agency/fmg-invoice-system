@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { requireAuth } from "../../../lib/auth-server";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +8,8 @@ const runtime = env as unknown as AppEnv;
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const authError = await requireAuth(request);
+    if (authError) return authError;
     const { id } = await context.params;
     const numericId = Number(id);
     if (!Number.isInteger(numericId) || numericId <= 0) return new Response("Invalid document", { status: 400 });
