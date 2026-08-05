@@ -73,7 +73,7 @@ input, select, textarea { color: var(--ink); }
 .brand-block img { width: 151px; height: 54px; object-fit: contain; object-position: left center; }
 .mobile-close { display: none; border: 0; background: #242424; color: #fff; width: 34px; height: 34px; border-radius: 9px; align-items: center; justify-content: center; }
 .side-label { margin: 18px 12px 8px; color: #777; font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
-.sidebar nav { display: flex; flex-direction: column; gap: 3px; }
+.sidebar nav { min-height: 0; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
 .nav-item { position: relative; width: 100%; height: 54px; padding: 0 12px; border: 0; border-radius: 9px; background: transparent; color: #858585; display: flex; align-items: center; gap: 12px; text-align: left; cursor: pointer; transition: background .18s ease, color .18s ease; }
 .nav-item:hover { background: #1b1b1b; color: #d4d4d4; }
 .nav-item span { display: flex; flex-direction: column; gap: 2px; }
@@ -148,6 +148,17 @@ input, select, textarea { color: var(--ink); }
 .quick-actions button span { display: flex; flex-direction: column; gap: 3px; }
 .quick-actions strong { font-size: 11px; }
 .quick-actions small { color: #656565; font-size: 9px; }
+.hr-quick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.hr-quick-card { min-height: 108px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); display: grid; grid-template-columns: 45px 1fr 20px; align-items: center; gap: 15px; text-align: left; cursor: pointer; box-shadow: var(--shadow); }
+.hr-quick-card:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+.hr-quick-card > span:nth-child(2) { display: flex; flex-direction: column; gap: 4px; }
+.hr-quick-card small { color: var(--yellow-ink); font-size: 8px; font-weight: 900; letter-spacing: 1px; }
+.hr-quick-card strong { font-size: 14px; }
+.hr-quick-card p { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.45; }
+.hr-quick-icon { width: 45px; height: 45px; border-radius: 10px; display: grid; place-items: center; background: #111; color: var(--yellow); }
+.attendance-card { background: #111; border-color: #111; color: #fff; }
+.attendance-card p { color: #7d7d7d; }
+.attendance-card .hr-quick-icon { background: var(--yellow); color: #111; }
 .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
 .stat-card { min-height: 145px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .stat-top { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 10px; font-weight: 700; }
@@ -223,6 +234,40 @@ input, select, textarea { color: var(--ink); }
 .row-actions button, .document-actions button, .document-actions a { width: 31px; height: 31px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--muted); display: grid; place-items: center; cursor: pointer; text-decoration: none; }
 .row-actions button:hover, .document-actions button:hover, .document-actions a:hover { border-color: var(--line-strong); color: var(--ink); }
 .row-actions .danger:hover, .document-actions .danger:hover { color: var(--danger); border-color: #efc7c2; }
+.toolbar-spacer { flex: 1; }
+.record-count { color: var(--muted); font-size: 9px; }
+.muted-row { opacity: .58; }
+.positive-value { color: var(--success) !important; }
+.negative-value { color: var(--danger) !important; }
+.hr-status, .attendance-status { width: fit-content; min-height: 22px; padding: 0 8px; border-radius: 12px; display: inline-flex; align-items: center; background: var(--surface-2); color: var(--muted); font-size: 8px; font-weight: 800; text-transform: capitalize; }
+.hr-status.active, .attendance-present, .attendance-vacation, .attendance-sick_leave, .attendance-urgent_leave, .attendance-normal_leave, .attendance-assignment { background: #e4f3e9; color: var(--success); }
+.hr-status.inactive, .attendance-absent { background: #f8e7e5; color: var(--danger); }
+.attendance-incomplete { background: #fff4c4; color: #806900; }
+.attendance-friday { background: #e8effb; color: #3b67a3; }
+.employee-table td, .attendance-table td, .payroll-table td { height: 71px; }
+.hr-commandbar { min-height: 75px; margin-bottom: 13px; padding: 14px 17px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.month-control { display: flex; align-items: center; gap: 11px; }
+.month-control span { color: var(--muted); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .7px; }
+.month-control input { height: 41px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 11px; }
+.hr-command-actions { display: flex; gap: 8px; }
+.policy-strip { min-height: 62px; margin-bottom: 14px; padding: 12px 17px; border: 1px solid #ead35d; border-radius: 11px; background: #fff8cf; color: #5e5100; display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 10px; }
+:root[data-theme="dark"] .policy-strip { border-color: #5a4f17; background: #302b11; color: #ffeb77; }
+.policy-strip div { display: flex; flex-direction: column; gap: 3px; }
+.policy-strip strong { font-size: 10px; }
+.policy-strip span, .policy-strip small { font-size: 8px; line-height: 1.4; }
+.policy-strip small { padding: 6px 8px; border-radius: 6px; background: rgba(17,17,17,.06); font-weight: 700; }
+.hr-stats .stat-card { min-width: 0; }
+.hr-money-value { font-size: clamp(18px, 1.8vw, 27px); }
+.impact-add, .impact-minus { display: block; font-size: 8px; }
+.impact-add { color: var(--success); }
+.impact-minus { margin-top: 3px; color: var(--danger); }
+.table-review { min-height: 31px; padding: 0 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--muted); display: inline-flex; align-items: center; gap: 5px; font-size: 8px; cursor: pointer; }
+.table-review:hover { border-color: var(--line-strong); color: var(--ink); }
+.net-salary { color: var(--ink); font-size: 12px; }
+.hr-modal-wide { width: min(880px, 100%); }
+.check-field { min-height: 42px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 9px; line-height: 1.4; }
+.check-field input { width: 16px; height: 16px; accent-color: #111; }
+.calculation-preview { margin-top: 15px; padding: 11px 12px; border-radius: 8px; background: var(--surface-2); color: var(--muted); display: flex; align-items: center; gap: 8px; font-size: 8px; line-height: 1.4; }
 .section-actions { margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 15px; }
 .info-note { display: flex; align-items: center; gap: 10px; color: var(--muted); }
 .info-note > svg { color: var(--yellow-ink); }
@@ -412,6 +457,11 @@ input, select, textarea { color: var(--ink); }
   .quick-create { align-items: stretch; flex-direction: column; }
   .quick-actions { width: 100%; }
   .quick-actions button { flex: 1; min-width: 0; }
+  .hr-commandbar { align-items: stretch; flex-direction: column; }
+  .hr-command-actions { justify-content: stretch; }
+  .hr-command-actions > button { flex: 1; }
+  .policy-strip { grid-template-columns: 22px 1fr; }
+  .policy-strip > small { grid-column: 2; width: fit-content; }
   .settings-layout { grid-template-columns: 1fr; }
   .settings-save { grid-column: auto; }
   .editor-panel { padding-left: 16px; padding-right: 16px; }
@@ -431,6 +481,11 @@ input, select, textarea { color: var(--ink); }
   .top-avatar { width: 34px; height: 34px; }
   .quick-actions { flex-direction: column; }
   .quick-actions button { width: 100%; }
+  .hr-quick-grid { grid-template-columns: 1fr; }
+  .hr-quick-card { padding: 16px; grid-template-columns: 42px 1fr 18px; }
+  .month-control { align-items: stretch; flex-direction: column; }
+  .hr-command-actions { flex-direction: column; }
+  .policy-strip { grid-template-columns: 20px 1fr; }
   .stats-grid, .category-grid { grid-template-columns: 1fr; }
   .chart-panel, .recent-panel { padding: 17px; }
   .bar-chart { gap: 5px; }

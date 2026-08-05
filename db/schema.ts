@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const clients = sqliteTable("clients", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -84,3 +84,84 @@ export const authAttempts = sqliteTable("auth_attempts", {
   attempts: integer("attempts").notNull().default(0),
   resetAt: integer("reset_at").notNull(),
 });
+
+export const employees = sqliteTable("employees", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  biometricCode: text("biometric_code").notNull().default(""),
+  name: text("name").notNull(),
+  title: text("title").notNull().default(""),
+  department: text("department").notNull().default(""),
+  email: text("email").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  hireDate: text("hire_date").notNull().default(""),
+  baseSalary: real("base_salary").notNull().default(0),
+  monthlyCommission: real("monthly_commission").notNull().default(0),
+  monthlyDeduction: real("monthly_deduction").notNull().default(0),
+  active: integer("active").notNull().default(1),
+  notes: text("notes").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("idx_employees_name").on(table.name),
+  uniqueIndex("idx_employees_biometric_code").on(table.biometricCode).where(sql`${table.biometricCode} <> ''`),
+]);
+
+export const hrPolicy = sqliteTable("hr_policy", {
+  id: integer("id").primaryKey(),
+  currency: text("currency").notNull().default("EGP"),
+  salaryDivisor: real("salary_divisor").notNull().default(30),
+  workdayMinutes: integer("workday_minutes").notNull().default(480),
+  freeArrivalUntil: text("free_arrival_until").notNull().default("11:05"),
+  minorLateUntil: text("minor_late_until").notNull().default("11:15"),
+  quarterDayUntil: text("quarter_day_until").notNull().default("11:45"),
+  overtimeStartsAt: text("overtime_starts_at").notNull().default("19:15"),
+  overtimeArrivalCutoff: text("overtime_arrival_cutoff").notNull().default("11:30"),
+  minutePenaltyMultiplier: real("minute_penalty_multiplier").notNull().default(4),
+  overtimeMultiplier: real("overtime_multiplier").notNull().default(2),
+  fridayMultiplier: real("friday_multiplier").notNull().default(2),
+  absenceDeductionEnabled: integer("absence_deduction_enabled").notNull().default(0),
+  absenceDayMultiplier: real("absence_day_multiplier").notNull().default(1),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const attendanceImports = sqliteTable("attendance_imports", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  fileName: text("file_name").notNull(),
+  periodStart: text("period_start").notNull(),
+  periodEnd: text("period_end").notNull(),
+  employeeCount: integer("employee_count").notNull().default(0),
+  recordCount: integer("record_count").notNull().default(0),
+  createdEmployees: integer("created_employees").notNull().default(0),
+  importedAt: text("imported_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const attendanceRecords = sqliteTable("attendance_records", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  importId: integer("import_id").references(() => attendanceImports.id, { onDelete: "set null" }),
+  employeeId: integer("employee_id").notNull().references(() => employees.id),
+  workDate: text("work_date").notNull(),
+  firstIn: text("first_in").notNull().default(""),
+  lastOut: text("last_out").notNull().default(""),
+  punchesJson: text("punches_json").notNull().default("[]"),
+  status: text("status").notNull().default("present"),
+  lateExcused: integer("late_excused").notNull().default(0),
+  overtimeApproved: integer("overtime_approved").notNull().default(1),
+  notes: text("notes").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("attendance_records_employee_id_work_date_unique").on(table.employeeId, table.workDate),
+  index("idx_attendance_work_date").on(table.workDate),
+  index("idx_attendance_employee_date").on(table.employeeId, table.workDate),
+]);
+
+export const payrollAdjustments = sqliteTable("payroll_adjustments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  employeeId: integer("employee_id").notNull().references(() => employees.id),
+  periodMonth: text("period_month").notNull(),
+  type: text("type", { enum: ["commission", "bonus", "allowance", "deduction"] }).notNull(),
+  label: text("label").notNull(),
+  amount: real("amount").notNull().default(0),
+  notes: text("notes").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_adjustments_month_employee").on(table.periodMonth, table.employeeId)]);

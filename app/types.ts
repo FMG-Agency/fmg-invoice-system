@@ -85,6 +85,122 @@ export type AppState = {
   settings: Settings;
 };
 
+export type Employee = {
+  id: number;
+  biometricCode: string;
+  name: string;
+  title: string;
+  department: string;
+  email: string;
+  phone: string;
+  hireDate: string;
+  baseSalary: number;
+  monthlyCommission: number;
+  monthlyDeduction: number;
+  active: boolean;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HrPolicy = {
+  id: number;
+  currency: string;
+  salaryDivisor: number;
+  workdayMinutes: number;
+  freeArrivalUntil: string;
+  minorLateUntil: string;
+  quarterDayUntil: string;
+  overtimeStartsAt: string;
+  overtimeArrivalCutoff: string;
+  minutePenaltyMultiplier: number;
+  overtimeMultiplier: number;
+  fridayMultiplier: number;
+  absenceDeductionEnabled: boolean;
+  absenceDayMultiplier: number;
+  updatedAt: string;
+};
+
+export type AttendanceStatus = "present" | "incomplete" | "absent" | "friday" | "vacation" | "sick_leave" | "urgent_leave" | "normal_leave" | "assignment";
+
+export type AttendanceRecord = {
+  id: number;
+  importId: number | null;
+  employeeId: number;
+  employeeName: string;
+  biometricCode: string;
+  workDate: string;
+  firstIn: string;
+  lastOut: string;
+  punches: string[];
+  status: AttendanceStatus;
+  lateExcused: boolean;
+  overtimeApproved: boolean;
+  notes: string;
+  lateMinutes: number;
+  penaltyMinutes: number;
+  overtimeMinutes: number;
+  lateDeduction: number;
+  overtimePay: number;
+  fridayPay: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AttendanceImport = {
+  id: number;
+  fileName: string;
+  periodStart: string;
+  periodEnd: string;
+  employeeCount: number;
+  recordCount: number;
+  createdEmployees: number;
+  importedAt: string;
+};
+
+export type PayrollAdjustment = {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  periodMonth: string;
+  type: "commission" | "bonus" | "allowance" | "deduction";
+  label: string;
+  amount: number;
+  notes: string;
+  createdAt: string;
+};
+
+export type PayrollSummary = {
+  employeeId: number;
+  employeeName: string;
+  title: string;
+  baseSalary: number;
+  monthlyCommission: number;
+  monthlyDeduction: number;
+  manualAdditions: number;
+  manualDeductions: number;
+  lateDeduction: number;
+  overtimePay: number;
+  fridayPay: number;
+  netSalary: number;
+  presentDays: number;
+  absentDays: number;
+  incompleteDays: number;
+  lateDays: number;
+  lateMinutes: number;
+  overtimeMinutes: number;
+};
+
+export type HrState = {
+  month: string;
+  employees: Employee[];
+  policy: HrPolicy;
+  attendance: AttendanceRecord[];
+  imports: AttendanceImport[];
+  adjustments: PayrollAdjustment[];
+  payroll: PayrollSummary[];
+};
+
 export type DocumentDraft = {
   id?: number;
   generatedCode?: string;
