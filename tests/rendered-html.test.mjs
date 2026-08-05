@@ -17,10 +17,11 @@ test("builds the FMG production entrypoint", async () => {
 });
 
 test("ships the complete product, protected access, and persistent storage bindings", async () => {
-  const [component, api, authApi, hosting, migration, authMigration] = await Promise.all([
+  const [component, api, authApi, authServer, hosting, migration, authMigration] = await Promise.all([
     readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
     readFile(new URL("app/api/state/route.ts", root), "utf8"),
     readFile(new URL("app/api/auth/route.ts", root), "utf8"),
+    readFile(new URL("app/lib/auth-server.ts", root), "utf8"),
     readFile(new URL(".openai/hosting.json", root), "utf8"),
     readFile(new URL("drizzle/0000_exotic_nightcrawler.sql", root), "utf8"),
     readFile(new URL("drizzle/0001_gifted_hobgoblin.sql", root), "utf8"),
@@ -35,6 +36,7 @@ test("ships the complete product, protected access, and persistent storage bindi
   for (const action of ["setup", "login", "logout", "change"]) {
     assert.match(authApi, new RegExp(`action: z\\.literal\\(\\"${action}\\"\\)`));
   }
+  assert.match(authServer, /PASSWORD_ITERATIONS = 100_000/);
   assert.match(hosting, /"d1": "DB"/);
   assert.match(hosting, /"r2": "FILES"/);
   assert.match(migration, /CREATE TABLE `documents`/);

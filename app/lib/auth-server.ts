@@ -5,7 +5,8 @@ const runtime = env as unknown as AppEnv;
 
 const COOKIE_NAME = "fmg_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 7;
-export const PASSWORD_ITERATIONS = 210_000;
+// Cloudflare Workers Web Crypto accepts PBKDF2 iteration counts up to 100,000.
+export const PASSWORD_ITERATIONS = 100_000;
 
 const authSchema = [
   `CREATE TABLE IF NOT EXISTS auth_credentials (
