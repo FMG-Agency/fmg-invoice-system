@@ -17,6 +17,7 @@ import {
 } from "../../lib/auth-server";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 const credentialsSchema = z.object({
   username: z.string().trim().min(3).max(80).regex(/^[A-Za-z0-9._-]+$/, "Use letters, numbers, dots, dashes, or underscores."),

@@ -1,7 +1,4 @@
-import { env } from "cloudflare:workers";
-
-type AppEnv = { DB: D1Database };
-const runtime = env as unknown as AppEnv;
+import { database } from "./database";
 
 const COOKIE_NAME = "fmg_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 7;
@@ -82,13 +79,12 @@ export function secureEqual(left: string, right: string) {
 }
 
 export async function ensureAuthDatabase() {
-  if (!runtime.DB) throw new Error("Database binding is unavailable.");
-  await runtime.DB.batch(authSchema.map((statement) => runtime.DB.prepare(statement)));
-  await runtime.DB.prepare("DELETE FROM auth_sessions WHERE expires_at <= ?").bind(Math.floor(Date.now() / 1000)).run();
+  await database.batch(authSchema.map((statement) => database.prepare(statement)));
+  await database.prepare("DELETE FROM auth_sessions WHERE expires_at <= ?").bind(Math.floor(Date.now() / 1000)).run();
 }
 
 export function getDatabase() {
-  return runtime.DB;
+  return database;
 }
 
 function cookieValue(request: Request) {
@@ -113,20 +109,20 @@ export async function createSession(request: Request) {
   const token = randomBase64(32);
   const tokenHash = await sha256(token);
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
-  await runtime.DB.prepare("INSERT INTO auth_sessions (token_hash, user_id, expires_at) VALUES (?, 1, ?)").bind(tokenHash, expiresAt).run();
+  await database.prepare("INSERT INTO auth_sessions (token_hash, user_id, expires_at) VALUES (?, 1, ?)").bind(tokenHash, expiresAt).run();
   return sessionCookie(request, token);
 }
 
 export async function removeCurrentSession(request: Request) {
   const token = cookieValue(request);
-  if (token) await runtime.DB.prepare("DELETE FROM auth_sessions WHERE token_hash = ?").bind(await sha256(token)).run();
+  if (token) await database.prepare("DELETE FROM auth_sessions WHERE token_hash = ?").bind(await sha256(token)).run();
 }
 
 export async function getSession(request: Request) {
   await ensureAuthDatabase();
   const token = cookieValue(request);
   if (!token) return null;
-  return runtime.DB.prepare(`SELECT c.username
+  return database.prepare(`SELECT c.username
     FROM auth_sessions s
     JOIN auth_credentials c ON c.id = s.user_id
     WHERE s.token_hash = ? AND s.expires_at > ?`)
@@ -147,14 +143,14 @@ export function loginAttemptKey(request: Request, username: string) {
 
 export async function checkRateLimit(key: string) {
   const now = Math.floor(Date.now() / 1000);
-  const row = await runtime.DB.prepare("SELECT attempts, reset_at AS resetAt FROM auth_attempts WHERE attempt_key = ?").bind(key).first<{ attempts: number; resetAt: number }>();
+  const row = await database.prepare("SELECT attempts, reset_at AS resetAt FROM auth_attempts WHERE attempt_key = ?").bind(key).first<{ attempts: number; resetAt: number }>();
   if (!row || row.resetAt <= now) return { allowed: true, retryAfter: 0 };
   return { allowed: row.attempts < 5, retryAfter: Math.max(1, row.resetAt - now) };
 }
 
 export async function recordFailedLogin(key: string) {
   const resetAt = Math.floor(Date.now() / 1000) + 15 * 60;
-  await runtime.DB.prepare(`INSERT INTO auth_attempts (attempt_key, attempts, reset_at) VALUES (?, 1, ?)
+  await database.prepare(`INSERT INTO auth_attempts (attempt_key, attempts, reset_at) VALUES (?, 1, ?)
     ON CONFLICT(attempt_key) DO UPDATE SET
       attempts = CASE WHEN auth_attempts.reset_at <= ? THEN 1 ELSE auth_attempts.attempts + 1 END,
       reset_at = CASE WHEN auth_attempts.reset_at <= ? THEN excluded.reset_at ELSE auth_attempts.reset_at END`)
@@ -162,5 +158,5 @@ export async function recordFailedLogin(key: string) {
 }
 
 export async function clearLoginAttempts(key: string) {
-  await runtime.DB.prepare("DELETE FROM auth_attempts WHERE attempt_key = ?").bind(key).run();
+  await database.prepare("DELETE FROM auth_attempts WHERE attempt_key = ?").bind(key).run();
 }

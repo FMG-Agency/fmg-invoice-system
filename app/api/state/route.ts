@@ -1,15 +1,10 @@
-import { env } from "cloudflare:workers";
+import { del, put } from "@vercel/blob";
 import { z } from "zod";
+import { database } from "../../lib/database";
 import { requireAuth } from "../../lib/auth-server";
 
 export const dynamic = "force-dynamic";
-
-type AppEnv = {
-  DB: D1Database;
-  FILES: R2Bucket;
-};
-
-const runtime = env as unknown as AppEnv;
+export const runtime = "nodejs";
 
 const optionalText = z.string().trim().max(5000).default("");
 const clientPayload = z.object({
@@ -147,17 +142,16 @@ const schemaStatements = [
 ];
 
 async function ensureDatabase() {
-  if (!runtime.DB) throw new Error("Database binding is unavailable.");
-  await runtime.DB.batch(schemaStatements.map((statement) => runtime.DB.prepare(statement)));
-  const categoryCount = await runtime.DB.prepare("SELECT COUNT(*) AS count FROM categories").first<{ count: number }>();
+  await database.batch(schemaStatements.map((statement) => database.prepare(statement)));
+  const categoryCount = await database.prepare("SELECT COUNT(*) AS count FROM categories").first<{ count: number }>();
   if (!categoryCount?.count) {
-    await runtime.DB.batch([
-      runtime.DB.prepare("INSERT INTO categories (name, prefix, footer_text_1, footer_text_2) VALUES (?, ?, ?, ?)").bind("Media Guide", "MG", "Thank you for choosing FMG Agency.", "Media Guide services are delivered according to the approved scope."),
-      runtime.DB.prepare("INSERT INTO categories (name, prefix, footer_text_1, footer_text_2) VALUES (?, ?, ?, ?)").bind("Agency Fees", "AF", "Thank you for your partnership.", "Agency fees are subject to the agreed payment schedule."),
-      runtime.DB.prepare("INSERT INTO categories (name, prefix, footer_text_1, footer_text_2) VALUES (?, ?, ?, ?)").bind("Prints", "PR", "Print specifications must be approved before production.", "Color variation may occur within standard production tolerances."),
+    await database.batch([
+      database.prepare("INSERT INTO categories (name, prefix, footer_text_1, footer_text_2) VALUES (?, ?, ?, ?)").bind("Media Guide", "MG", "Thank you for choosing FMG Agency.", "Media Guide services are delivered according to the approved scope."),
+      database.prepare("INSERT INTO categories (name, prefix, footer_text_1, footer_text_2) VALUES (?, ?, ?, ?)").bind("Agency Fees", "AF", "Thank you for your partnership.", "Agency fees are subject to the agreed payment schedule."),
+      database.prepare("INSERT INTO categories (name, prefix, footer_text_1, footer_text_2) VALUES (?, ?, ?, ?)").bind("Prints", "PR", "Print specifications must be approved before production.", "Color variation may occur within standard production tolerances."),
     ]);
   }
-  await runtime.DB.prepare(`INSERT OR IGNORE INTO settings
+  await database.prepare(`INSERT OR IGNORE INTO settings
     (id, agency_name, default_currency, prepared_by, default_payment_terms, default_tax)
     VALUES (1, 'FMG Agency', 'EGP', 'Finance Department', '50% advance payment • 50% upon completion', 0)`).run();
 }
@@ -179,9 +173,9 @@ function numberValue(value: unknown) {
 
 async function getState() {
   const [clientsResult, categoriesResult, documentsResult, settingsResult] = await Promise.all([
-    runtime.DB.prepare("SELECT id, name, company_name AS companyName, owner_name AS ownerName, phone, email, address, notes, created_at AS createdAt, updated_at AS updatedAt FROM clients ORDER BY name COLLATE NOCASE").all(),
-    runtime.DB.prepare("SELECT id, name, prefix, footer_text_1 AS footerText1, footer_text_2 AS footerText2, counter, created_at AS createdAt, updated_at AS updatedAt FROM categories ORDER BY id").all(),
-    runtime.DB.prepare(`SELECT d.id, d.type, d.generated_code AS generatedCode, d.client_id AS clientId,
+    database.prepare("SELECT id, name, company_name AS companyName, owner_name AS ownerName, phone, email, address, notes, created_at AS createdAt, updated_at AS updatedAt FROM clients ORDER BY name COLLATE NOCASE").all(),
+    database.prepare("SELECT id, name, prefix, footer_text_1 AS footerText1, footer_text_2 AS footerText2, counter, created_at AS createdAt, updated_at AS updatedAt FROM categories ORDER BY id").all(),
+    database.prepare(`SELECT d.id, d.type, d.generated_code AS generatedCode, d.client_id AS clientId,
       d.category_id AS categoryId, d.date, d.valid_until AS validUntil, d.prepared_by AS preparedBy,
       d.currency, d.project, d.status, d.items_json AS itemsJson, d.subtotal, d.discount, d.tax,
       d.total, d.payment_terms AS paymentTerms, d.notes_exclusions AS notesExclusions,
@@ -193,7 +187,7 @@ async function getState() {
       JOIN clients c ON c.id = d.client_id
       JOIN categories cat ON cat.id = d.category_id
       ORDER BY d.created_at DESC, d.id DESC`).all<Record<string, unknown>>(),
-    runtime.DB.prepare("SELECT id, agency_name AS agencyName, default_currency AS defaultCurrency, prepared_by AS preparedBy, default_payment_terms AS defaultPaymentTerms, default_tax AS defaultTax, phone, email, address, updated_at AS updatedAt FROM settings WHERE id = 1").first(),
+    database.prepare("SELECT id, agency_name AS agencyName, default_currency AS defaultCurrency, prepared_by AS preparedBy, default_payment_terms AS defaultPaymentTerms, default_tax AS defaultTax, phone, email, address, updated_at AS updatedAt FROM settings WHERE id = 1").first(),
   ]);
 
   const documents = documentsResult.results.map((record) => {
@@ -251,31 +245,31 @@ export async function POST(request: Request) {
     if (payload.action === "createClient" || payload.action === "updateClient") {
       const values = payload.data;
       if (payload.action === "createClient") {
-        await runtime.DB.prepare(`INSERT INTO clients (name, company_name, owner_name, phone, email, address, notes)
+        await database.prepare(`INSERT INTO clients (name, company_name, owner_name, phone, email, address, notes)
           VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(values.name, values.companyName, values.ownerName, values.phone, values.email, values.address, values.notes).run();
       } else {
-        await runtime.DB.prepare(`UPDATE clients SET name = ?, company_name = ?, owner_name = ?, phone = ?, email = ?, address = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        await database.prepare(`UPDATE clients SET name = ?, company_name = ?, owner_name = ?, phone = ?, email = ?, address = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
           .bind(values.name, values.companyName, values.ownerName, values.phone, values.email, values.address, values.notes, payload.id).run();
       }
     }
 
     if (payload.action === "deleteClient") {
-      await runtime.DB.prepare("DELETE FROM clients WHERE id = ?").bind(payload.id).run();
+      await database.prepare("DELETE FROM clients WHERE id = ?").bind(payload.id).run();
     }
 
     if (payload.action === "createCategory" || payload.action === "updateCategory") {
       const values = payload.data;
       if (payload.action === "createCategory") {
-        await runtime.DB.prepare("INSERT INTO categories (name, prefix, footer_text_1, footer_text_2) VALUES (?, ?, ?, ?)")
+        await database.prepare("INSERT INTO categories (name, prefix, footer_text_1, footer_text_2) VALUES (?, ?, ?, ?)")
           .bind(values.name, values.prefix, values.footerText1, values.footerText2).run();
       } else {
-        await runtime.DB.prepare("UPDATE categories SET name = ?, prefix = ?, footer_text_1 = ?, footer_text_2 = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        await database.prepare("UPDATE categories SET name = ?, prefix = ?, footer_text_1 = ?, footer_text_2 = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
           .bind(values.name, values.prefix, values.footerText1, values.footerText2, payload.id).run();
       }
     }
 
     if (payload.action === "deleteCategory") {
-      await runtime.DB.prepare("DELETE FROM categories WHERE id = ?").bind(payload.id).run();
+      await database.prepare("DELETE FROM categories WHERE id = ?").bind(payload.id).run();
     }
 
     if (payload.action === "saveDocument") {
@@ -285,49 +279,50 @@ export async function POST(request: Request) {
       let pdfKey = "";
 
       if (data.id) {
-        const existing = await runtime.DB.prepare("SELECT generated_code AS generatedCode, pdf_key AS pdfKey FROM documents WHERE id = ?").bind(data.id).first<{ generatedCode: string; pdfKey: string }>();
+        const existing = await database.prepare("SELECT generated_code AS generatedCode, pdf_key AS pdfKey FROM documents WHERE id = ?").bind(data.id).first<{ generatedCode: string; pdfKey: string }>();
         if (!existing) throw new Error("Document not found.");
         generatedCode = existing.generatedCode;
         pdfKey = existing.pdfKey;
       } else {
-        const category = await runtime.DB.prepare("UPDATE categories SET counter = counter + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? RETURNING prefix, counter")
+        const category = await database.prepare("UPDATE categories SET counter = counter + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? RETURNING prefix, counter")
           .bind(data.categoryId).first<{ prefix: string; counter: number }>();
-        const client = await runtime.DB.prepare("SELECT name, company_name AS companyName FROM clients WHERE id = ?").bind(data.clientId).first<{ name: string; companyName: string }>();
+        const client = await database.prepare("SELECT name, company_name AS companyName FROM clients WHERE id = ?").bind(data.clientId).first<{ name: string; companyName: string }>();
         if (!category || !client) throw new Error("Choose a valid client and category.");
         const clientPart = (client.companyName || client.name).trim().replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, "-").replace(/^-|-$/g, "") || "CLIENT";
         generatedCode = `${clientPart}-${category.prefix}${String(category.counter).padStart(4, "0")}`;
         pdfKey = `documents/${data.type}/${generatedCode}.pdf`;
       }
 
-      if (!runtime.FILES) throw new Error("Document storage binding is unavailable.");
-      await runtime.FILES.put(pdfKey, decodeBase64(data.pdfBase64), {
-        httpMetadata: { contentType: "application/pdf", contentDisposition: `inline; filename=\"${generatedCode}.pdf\"` },
-        customMetadata: { generatedCode, type: data.type },
+      await put(pdfKey, Buffer.from(decodeBase64(data.pdfBase64)), {
+        access: "private",
+        addRandomSuffix: false,
+        allowOverwrite: true,
+        contentType: "application/pdf",
       });
 
       if (data.id) {
-        await runtime.DB.prepare(`UPDATE documents SET client_id = ?, category_id = ?, date = ?, valid_until = ?, prepared_by = ?, currency = ?, project = ?, status = ?, items_json = ?, subtotal = ?, discount = ?, tax = ?, total = ?, payment_terms = ?, notes_exclusions = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        await database.prepare(`UPDATE documents SET client_id = ?, category_id = ?, date = ?, valid_until = ?, prepared_by = ?, currency = ?, project = ?, status = ?, items_json = ?, subtotal = ?, discount = ?, tax = ?, total = ?, payment_terms = ?, notes_exclusions = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
           .bind(data.clientId, data.categoryId, data.date, data.validUntil, data.preparedBy, data.currency, data.project, data.status, JSON.stringify(data.items), math.subtotal, data.discount, data.tax, math.total, data.paymentTerms, data.notesExclusions, data.id).run();
       } else {
-        await runtime.DB.prepare(`INSERT INTO documents (type, generated_code, client_id, category_id, date, valid_until, prepared_by, currency, project, status, items_json, subtotal, discount, tax, total, payment_terms, notes_exclusions, pdf_key)
+        await database.prepare(`INSERT INTO documents (type, generated_code, client_id, category_id, date, valid_until, prepared_by, currency, project, status, items_json, subtotal, discount, tax, total, payment_terms, notes_exclusions, pdf_key)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .bind(data.type, generatedCode, data.clientId, data.categoryId, data.date, data.validUntil, data.preparedBy, data.currency, data.project, data.status, JSON.stringify(data.items), math.subtotal, data.discount, data.tax, math.total, data.paymentTerms, data.notesExclusions, pdfKey).run();
       }
     }
 
     if (payload.action === "setDocumentStatus") {
-      await runtime.DB.prepare("UPDATE documents SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(payload.status, payload.id).run();
+      await database.prepare("UPDATE documents SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(payload.status, payload.id).run();
     }
 
     if (payload.action === "deleteDocument") {
-      const row = await runtime.DB.prepare("SELECT pdf_key AS pdfKey FROM documents WHERE id = ?").bind(payload.id).first<{ pdfKey: string }>();
-      if (row?.pdfKey && runtime.FILES) await runtime.FILES.delete(row.pdfKey);
-      await runtime.DB.prepare("DELETE FROM documents WHERE id = ?").bind(payload.id).run();
+      const row = await database.prepare("SELECT pdf_key AS pdfKey FROM documents WHERE id = ?").bind(payload.id).first<{ pdfKey: string }>();
+      if (row?.pdfKey) await del(row.pdfKey);
+      await database.prepare("DELETE FROM documents WHERE id = ?").bind(payload.id).run();
     }
 
     if (payload.action === "updateSettings") {
       const values = payload.data;
-      await runtime.DB.prepare(`UPDATE settings SET agency_name = ?, default_currency = ?, prepared_by = ?, default_payment_terms = ?, default_tax = ?, phone = ?, email = ?, address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1`)
+      await database.prepare(`UPDATE settings SET agency_name = ?, default_currency = ?, prepared_by = ?, default_payment_terms = ?, default_tax = ?, phone = ?, email = ?, address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1`)
         .bind(values.agencyName, values.defaultCurrency, values.preparedBy, values.defaultPaymentTerms, values.defaultTax, values.phone, values.email, values.address).run();
     }
 
