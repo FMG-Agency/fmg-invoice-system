@@ -1,11 +1,23 @@
 import { database } from "./database";
+import { ALL_ACCESS_PERMISSIONS, canAccess, parsePermissions, type AccessPermission } from "./permissions";
 
 const COOKIE_NAME = "fmg_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 7;
+let authDatabaseReady: Promise<void> | null = null;
 // Cloudflare Workers Web Crypto accepts PBKDF2 iteration counts up to 100,000.
 export const PASSWORD_ITERATIONS = 100_000;
 
+export type AuthSession = {
+  userId: number;
+  username: string;
+  displayName: string;
+  roleLabel: string;
+  isAdmin: boolean;
+  permissions: AccessPermission[];
+};
+
 const authSchema = [
+  // Legacy tables remain available so the existing administrator can be migrated without a password reset.
   `CREATE TABLE IF NOT EXISTS auth_credentials (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     username TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -21,12 +33,35 @@ const authSchema = [
     expires_at INTEGER NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
-  `CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at ON auth_sessions(expires_at)`,
+  `CREATE TABLE IF NOT EXISTS auth_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    display_name TEXT NOT NULL DEFAULT '',
+    role_label TEXT NOT NULL DEFAULT 'Team Member',
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    password_iterations INTEGER NOT NULL,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    permissions_json TEXT NOT NULL DEFAULT '[]',
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS auth_user_sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    expires_at INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
   `CREATE TABLE IF NOT EXISTS auth_attempts (
     attempt_key TEXT PRIMARY KEY,
     attempts INTEGER NOT NULL DEFAULT 0,
     reset_at INTEGER NOT NULL
   )`,
+  `CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at ON auth_sessions(expires_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_auth_user_sessions_expires_at ON auth_user_sessions(expires_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_auth_users_active ON auth_users(active)`,
 ];
 
 function bytesToBase64(bytes: Uint8Array) {
@@ -78,9 +113,34 @@ export function secureEqual(left: string, right: string) {
   return difference === 0;
 }
 
-export async function ensureAuthDatabase() {
+async function initializeAuthDatabase() {
   await database.batch(authSchema.map((statement) => database.prepare(statement)));
-  await database.prepare("DELETE FROM auth_sessions WHERE expires_at <= ?").bind(Math.floor(Date.now() / 1000)).run();
+  await database.batch([
+    database.prepare(`INSERT OR IGNORE INTO auth_users
+      (id, username, display_name, role_label, password_hash, password_salt, password_iterations,
+        is_admin, active, permissions_json, created_at, updated_at)
+      SELECT id, username, 'Administrator', 'Administrator', password_hash, password_salt,
+        password_iterations, 1, 1, '[]', created_at, updated_at
+      FROM auth_credentials WHERE id = 1`),
+    database.prepare(`INSERT OR IGNORE INTO auth_user_sessions (token_hash, user_id, expires_at, created_at)
+      SELECT token_hash, user_id, expires_at, created_at FROM auth_sessions
+      WHERE user_id IN (SELECT id FROM auth_users)`),
+    database.prepare("DELETE FROM auth_sessions"),
+  ]);
+  const now = Math.floor(Date.now() / 1000);
+  await database.batch([
+    database.prepare("DELETE FROM auth_user_sessions WHERE expires_at <= ?").bind(now),
+  ]);
+}
+
+export async function ensureAuthDatabase() {
+  authDatabaseReady ??= initializeAuthDatabase();
+  try {
+    await authDatabaseReady;
+  } catch (error) {
+    authDatabaseReady = null;
+    throw error;
+  }
 }
 
 export function getDatabase() {
@@ -105,35 +165,71 @@ export function expiredSessionCookie(request: Request) {
   return sessionCookie(request, "", 0);
 }
 
-export async function createSession(request: Request) {
+export async function createSession(request: Request, userId: number) {
   const token = randomBase64(32);
   const tokenHash = await sha256(token);
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
-  await database.prepare("INSERT INTO auth_sessions (token_hash, user_id, expires_at) VALUES (?, 1, ?)").bind(tokenHash, expiresAt).run();
+  await database.prepare("INSERT INTO auth_user_sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)").bind(tokenHash, userId, expiresAt).run();
   return sessionCookie(request, token);
 }
 
 export async function removeCurrentSession(request: Request) {
   const token = cookieValue(request);
-  if (token) await database.prepare("DELETE FROM auth_sessions WHERE token_hash = ?").bind(await sha256(token)).run();
+  if (token) await database.prepare("DELETE FROM auth_user_sessions WHERE token_hash = ?").bind(await sha256(token)).run();
 }
 
-export async function getSession(request: Request) {
+export async function getSession(request: Request): Promise<AuthSession | null> {
   await ensureAuthDatabase();
   const token = cookieValue(request);
   if (!token) return null;
-  return database.prepare(`SELECT c.username
-    FROM auth_sessions s
-    JOIN auth_credentials c ON c.id = s.user_id
-    WHERE s.token_hash = ? AND s.expires_at > ?`)
+  const row = await database.prepare(`SELECT u.id AS userId, u.username, u.display_name AS displayName,
+      u.role_label AS roleLabel, u.is_admin AS isAdmin, u.permissions_json AS permissionsJson
+    FROM auth_user_sessions s
+    JOIN auth_users u ON u.id = s.user_id
+    WHERE s.token_hash = ? AND s.expires_at > ? AND u.active = 1`)
     .bind(await sha256(token), Math.floor(Date.now() / 1000))
-    .first<{ username: string }>();
+    .first<{ userId: number; username: string; displayName: string; roleLabel: string; isAdmin: number; permissionsJson: string }>();
+  if (!row) return null;
+  const isAdmin = Number(row.isAdmin) === 1;
+  return {
+    userId: Number(row.userId),
+    username: row.username,
+    displayName: row.displayName,
+    roleLabel: row.roleLabel,
+    isAdmin,
+    permissions: isAdmin ? ALL_ACCESS_PERMISSIONS : parsePermissions(row.permissionsJson),
+  };
+}
+
+function authRequired(request: Request) {
+  return Response.json({ error: "Authentication required.", code: "AUTH_REQUIRED" }, { status: 401, headers: { "set-cookie": expiredSessionCookie(request) } });
+}
+
+function accessDenied() {
+  return Response.json({ error: "You do not have access to this area.", code: "ACCESS_DENIED" }, { status: 403 });
 }
 
 export async function requireAuth(request: Request) {
   const session = await getSession(request);
-  if (session) return null;
-  return Response.json({ error: "Authentication required.", code: "AUTH_REQUIRED" }, { status: 401, headers: { "set-cookie": expiredSessionCookie(request) } });
+  return session ? null : authRequired(request);
+}
+
+export async function requirePermission(request: Request, permission: AccessPermission) {
+  const session = await getSession(request);
+  if (!session) return authRequired(request);
+  return canAccess(session.permissions, permission, session.isAdmin) ? null : accessDenied();
+}
+
+export async function requireAnyPermission(request: Request, permissions: AccessPermission[]) {
+  const session = await getSession(request);
+  if (!session) return authRequired(request);
+  return session.isAdmin || permissions.some((permission) => session.permissions.includes(permission)) ? null : accessDenied();
+}
+
+export async function requireAdmin(request: Request) {
+  const session = await getSession(request);
+  if (!session) return authRequired(request);
+  return session.isAdmin ? null : accessDenied();
 }
 
 export function loginAttemptKey(request: Request, username: string) {

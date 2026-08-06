@@ -79,6 +79,29 @@ export const authSessions = sqliteTable("auth_sessions", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("idx_auth_sessions_expires_at").on(table.expiresAt)]);
 
+export const authUsers = sqliteTable("auth_users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull().unique(),
+  displayName: text("display_name").notNull().default(""),
+  roleLabel: text("role_label").notNull().default("Team Member"),
+  passwordHash: text("password_hash").notNull(),
+  passwordSalt: text("password_salt").notNull(),
+  passwordIterations: integer("password_iterations").notNull(),
+  isAdmin: integer("is_admin").notNull().default(0),
+  active: integer("active").notNull().default(1),
+  permissionsJson: text("permissions_json").notNull().default("[]"),
+  createdBy: integer("created_by"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_auth_users_active").on(table.active)]);
+
+export const authUserSessions = sqliteTable("auth_user_sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  userId: integer("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+  expiresAt: integer("expires_at").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_auth_user_sessions_expires_at").on(table.expiresAt)]);
+
 export const authAttempts = sqliteTable("auth_attempts", {
   attemptKey: text("attempt_key").primaryKey(),
   attempts: integer("attempts").notNull().default(0),

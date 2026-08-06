@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { requireAuth } from "../../lib/auth-server";
+import { getSession, requireAnyPermission, requirePermission } from "../../lib/auth-server";
 import { database } from "../../lib/database";
 import { ensureHrDatabase, getHrState } from "../../lib/hr";
+import { canAccess } from "../../lib/permissions";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -83,15 +84,24 @@ function responseError(error: unknown) {
   return Response.json({ error: duplicate ? "This biometric ID is already assigned to another employee." : message }, { status: duplicate || error instanceof z.ZodError ? 400 : 500 });
 }
 
+type HrStateResult = Awaited<ReturnType<typeof getHrState>>;
+
+function filterHrState(state: HrStateResult, permissions: Parameters<typeof canAccess>[0], isAdmin: boolean): HrStateResult {
+  if (canAccess(permissions, "attendance", isAdmin)) return state;
+  return { ...state, attendance: [], imports: [], adjustments: [], payroll: [] };
+}
+
 export async function GET(request: Request) {
   try {
-    const authError = await requireAuth(request);
+    const authError = await requireAnyPermission(request, ["employees", "attendance"]);
     if (authError) return authError;
+    const session = await getSession(request);
+    if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
     await ensureHrDatabase();
     const url = new URL(request.url);
     const parsedMonth = monthValue.safeParse(url.searchParams.get("month") || currentMonth());
     if (!parsedMonth.success) return Response.json({ error: "Invalid payroll month." }, { status: 400 });
-    return Response.json(await getHrState(parsedMonth.data));
+    return Response.json(filterHrState(await getHrState(parsedMonth.data), session.permissions, session.isAdmin));
   } catch (error) {
     return responseError(error);
   }
@@ -99,10 +109,17 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const authError = await requireAuth(request);
+    const authError = await requireAnyPermission(request, ["employees", "attendance"]);
     if (authError) return authError;
     await ensureHrDatabase();
     const payload = actionPayload.parse(await request.json());
+    const requiredPermission = payload.action === "createEmployee" || payload.action === "updateEmployee" || payload.action === "deleteEmployee"
+      ? "employees"
+      : "attendance";
+    const permissionError = await requirePermission(request, requiredPermission);
+    if (permissionError) return permissionError;
+    const session = await getSession(request);
+    if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
 
     if (payload.action === "createEmployee") {
       const value = payload.data;
@@ -166,7 +183,7 @@ export async function POST(request: Request) {
       await database.prepare("DELETE FROM payroll_adjustments WHERE id = ?").bind(payload.id).run();
     }
 
-    return Response.json(await getHrState(payload.month));
+    return Response.json(filterHrState(await getHrState(payload.month), session.permissions, session.isAdmin));
   } catch (error) {
     return responseError(error);
   }

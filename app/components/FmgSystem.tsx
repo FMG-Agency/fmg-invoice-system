@@ -45,12 +45,52 @@ import { useForm } from "react-hook-form";
 import Image from "next/image";
 import { z } from "zod";
 import { generateDocumentPdf, pdfDataUri, savePdf } from "../lib/pdf";
+import { canAccess, type AccessPermission } from "../lib/permissions";
 import type { AppState, Category, Client, DocumentDraft, DocumentRecord, HrState, LineItem, Settings } from "../types";
+import { AccessPanel } from "./AccessPanel";
 import { AttendancePanel, EmployeesPanel, type HrMutation } from "./HrPanels";
 
-type View = "dashboard" | "invoice" | "quotation" | "clients" | "employees" | "attendance" | "categories" | "data" | "settings";
+type View = "dashboard" | "invoice" | "quotation" | "clients" | "employees" | "attendance" | "categories" | "data" | "settings" | "users";
 type Mutation = (body: Record<string, unknown>) => Promise<AppState>;
-type AuthState = { checking: boolean; authenticated: boolean; setupRequired: boolean; username: string };
+type AuthState = {
+  checking: boolean;
+  authenticated: boolean;
+  setupRequired: boolean;
+  userId: number;
+  username: string;
+  displayName: string;
+  roleLabel: string;
+  isAdmin: boolean;
+  permissions: AccessPermission[];
+};
+
+const signedOutAuth: AuthState = {
+  checking: false,
+  authenticated: false,
+  setupRequired: false,
+  userId: 0,
+  username: "",
+  displayName: "",
+  roleLabel: "",
+  isAdmin: false,
+  permissions: [],
+};
+
+type AuthPayload = Partial<Omit<AuthState, "checking">> & { error?: string };
+
+function authFromPayload(payload: AuthPayload): AuthState {
+  return {
+    checking: false,
+    authenticated: Boolean(payload.authenticated),
+    setupRequired: Boolean(payload.setupRequired),
+    userId: Number(payload.userId ?? 0),
+    username: payload.username ?? "",
+    displayName: payload.displayName ?? payload.username ?? "",
+    roleLabel: payload.roleLabel ?? "Team Member",
+    isAdmin: Boolean(payload.isAdmin),
+    permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
+  };
+}
 
 const clientSchema = z.object({
   name: z.string().trim().min(1, "Client name is required"),
@@ -109,16 +149,17 @@ const emptyHrState: HrState = {
   },
 };
 
-const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof LayoutDashboard }> = [
-  { id: "dashboard", label: "Dashboard", eyebrow: "Overview", icon: LayoutDashboard },
-  { id: "invoice", label: "New Invoice", eyebrow: "Create", icon: ReceiptText },
-  { id: "quotation", label: "New Quotation", eyebrow: "Create", icon: FilePlus2 },
-  { id: "clients", label: "Clients", eyebrow: "Directory", icon: UsersRound },
-  { id: "employees", label: "Employees", eyebrow: "People & salaries", icon: UserRound },
-  { id: "attendance", label: "Attendance", eyebrow: "Payroll & biometric", icon: Clock3 },
-  { id: "categories", label: "Categories", eyebrow: "Services", icon: Tag },
-  { id: "data", label: "All Data", eyebrow: "Archive", icon: FolderKanban },
-  { id: "settings", label: "Settings", eyebrow: "Workspace", icon: Settings2 },
+const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof LayoutDashboard; permission: AccessPermission | "users" }> = [
+  { id: "dashboard", label: "Dashboard", eyebrow: "Overview", icon: LayoutDashboard, permission: "dashboard" },
+  { id: "invoice", label: "New Invoice", eyebrow: "Create", icon: ReceiptText, permission: "invoices" },
+  { id: "quotation", label: "New Quotation", eyebrow: "Create", icon: FilePlus2, permission: "quotations" },
+  { id: "clients", label: "Clients", eyebrow: "Directory", icon: UsersRound, permission: "clients" },
+  { id: "employees", label: "Employees", eyebrow: "People & salaries", icon: UserRound, permission: "employees" },
+  { id: "attendance", label: "Attendance", eyebrow: "Payroll & biometric", icon: Clock3, permission: "attendance" },
+  { id: "categories", label: "Categories", eyebrow: "Services", icon: Tag, permission: "categories" },
+  { id: "data", label: "All Data", eyebrow: "Archive", icon: FolderKanban, permission: "all_data" },
+  { id: "settings", label: "Settings", eyebrow: "Workspace", icon: Settings2, permission: "settings" },
+  { id: "users", label: "Users & Access", eyebrow: "Administrator", icon: ShieldCheck, permission: "users" },
 ];
 
 const viewCopy: Record<View, { eyebrow: string; title: string; description: string }> = {
@@ -131,6 +172,7 @@ const viewCopy: Record<View, { eyebrow: string; title: string; description: stri
   categories: { eyebrow: "SERVICE LOGIC", title: "Categories", description: "Control prefixes, counters, and the PDF footer for each service." },
   data: { eyebrow: "DOCUMENT ARCHIVE", title: "All data", description: "Search, filter, preview, and manage every generated document." },
   settings: { eyebrow: "WORKSPACE SETTINGS", title: "Settings", description: "Set the defaults that power every new FMG document." },
+  users: { eyebrow: "ACCESS CONTROL", title: "Users and permissions", description: "Create team accounts and decide exactly which FMG areas each user can access." },
 };
 
 function cx(...classes: Array<string | false | null | undefined>) {
@@ -208,7 +250,7 @@ function EmptyPanel({ icon: Icon, title, body, action }: { icon: typeof FileText
   return <div className="empty-panel"><div className="empty-icon"><Icon size={24} /></div><h3>{title}</h3><p>{body}</p>{action}</div>;
 }
 
-function AuthScreen({ setupRequired, onAuthenticated }: { setupRequired: boolean; onAuthenticated: (username: string) => Promise<void> }) {
+function AuthScreen({ setupRequired, onAuthenticated }: { setupRequired: boolean; onAuthenticated: () => Promise<void> }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -228,9 +270,9 @@ function AuthScreen({ setupRequired, onAuthenticated }: { setupRequired: boolean
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: setupRequired ? "setup" : "login", username, password }),
       });
-      const result = await response.json() as { authenticated?: boolean; username?: string; error?: string };
+      const result = await response.json() as { authenticated?: boolean; error?: string };
       if (!response.ok) throw new Error(result.error || "Could not sign in.");
-      await onAuthenticated(result.username || username);
+      await onAuthenticated();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not sign in.");
     } finally {
@@ -242,7 +284,7 @@ function AuthScreen({ setupRequired, onAuthenticated }: { setupRequired: boolean
     <div className="auth-slash" />
     <section className="auth-brand">
       <Image src="/fmg-logo-light.png" alt="FMG Agency" width={520} height={180} unoptimized />
-      <div><span>PRIVATE AGENCY WORKSPACE</span><h1>Documents protected.<br />Business moving.</h1><p>Clients, invoices, quotations, and PDFs stay behind one secure FMG administrator account.</p></div>
+      <div><span>PRIVATE AGENCY WORKSPACE</span><h1>Documents protected.<br />Business moving.</h1><p>Clients, invoices, quotations, payroll, and PDFs stay behind secure FMG accounts with controlled access.</p></div>
       <small>FMG AGENCY • SUPERHEROES WHO CREATE</small>
     </section>
     <section className="auth-card-wrap">
@@ -250,7 +292,7 @@ function AuthScreen({ setupRequired, onAuthenticated }: { setupRequired: boolean
         <div className="auth-icon"><ShieldCheck size={23} /></div>
         <span className="eyebrow">{setupRequired ? "FIRST-TIME SETUP" : "SECURE ACCESS"}</span>
         <h2>{setupRequired ? "Create the admin account" : "Welcome back"}</h2>
-        <p>{setupRequired ? "Choose the username and password you will use to enter the FMG system." : "Enter your FMG administrator credentials to continue."}</p>
+        <p>{setupRequired ? "Choose the administrator username and password for the FMG system." : "Enter your FMG account credentials to continue."}</p>
         <label className="auth-field"><span>Username</span><div><UserRound size={17} /><input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder={setupRequired ? "Choose a username" : "Your username"} required minLength={setupRequired ? 3 : 1} autoFocus /></div></label>
         <label className="auth-field"><span>Password</span><div><LockKeyhole size={17} /><input type={showPassword ? "text" : "password"} autoComplete={setupRequired ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={setupRequired ? "At least 8 characters" : "Your password"} required minLength={setupRequired ? 8 : 1} /><button type="button" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>
         {setupRequired && <label className="auth-field"><span>Confirm password</span><div><KeyRound size={17} /><input type={showPassword ? "text" : "password"} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Repeat the password" required minLength={8} /></div></label>}
@@ -265,7 +307,7 @@ function AuthScreen({ setupRequired, onAuthenticated }: { setupRequired: boolean
 export function FmgSystem() {
   const [state, setState] = useState<AppState>(emptyState);
   const [hrState, setHrState] = useState<HrState>(emptyHrState);
-  const [auth, setAuth] = useState<AuthState>({ checking: true, authenticated: false, setupRequired: false, username: "" });
+  const [auth, setAuth] = useState<AuthState>({ ...signedOutAuth, checking: true });
   const [view, setView] = useState<View>("dashboard");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -282,13 +324,13 @@ export function FmgSystem() {
     const themeFrame = window.requestAnimationFrame(() => setDark(shouldDark));
     document.documentElement.dataset.theme = shouldDark ? "dark" : "light";
     void fetch("/api/auth", { cache: "no-store" }).then(async (response) => {
-      const result = await response.json() as { setupRequired?: boolean; authenticated?: boolean; username?: string; error?: string };
+      const result = await response.json() as AuthPayload;
       if (!response.ok) throw new Error(result.error || "Could not check access.");
-      const nextAuth = { checking: false, setupRequired: Boolean(result.setupRequired), authenticated: Boolean(result.authenticated), username: result.username ?? "" };
+      const nextAuth = authFromPayload(result);
       setAuth(nextAuth);
-      if (nextAuth.authenticated) await loadWorkspace(); else setLoading(false);
+      if (nextAuth.authenticated) await loadWorkspace(nextAuth); else setLoading(false);
     }).catch((error: Error) => {
-      setAuth({ checking: false, authenticated: false, setupRequired: false, username: "" });
+      setAuth(signedOutAuth);
       setLoading(false);
       showToast(error.message);
     });
@@ -302,7 +344,14 @@ export function FmgSystem() {
     window.setTimeout(() => setToast(null), 3600);
   }
 
+  function canOpenView(next: View, access = auth) {
+    const item = navItems.find((entry) => entry.id === next);
+    if (!item) return false;
+    return item.permission === "users" ? access.isAdmin : canAccess(access.permissions, item.permission, access.isAdmin);
+  }
+
   function chooseView(next: View) {
+    if (!canOpenView(next)) return showToast("You do not have access to this area.");
     if (next !== "invoice" && next !== "quotation") setEditingDocument(null);
     setView(next);
     setMenuOpen(false);
@@ -317,27 +366,28 @@ export function FmgSystem() {
     localStorage.setItem("fmg-theme", next ? "dark" : "light");
   }
 
-  async function loadWorkspace() {
+  async function loadWorkspace(access = auth) {
     setLoading(true);
     try {
+      const loadHrData = access.isAdmin || access.permissions.includes("employees") || access.permissions.includes("attendance");
       const [response, hrResponse] = await Promise.all([
         fetch("/api/state", { cache: "no-store" }),
-        fetch(`/api/hr?month=${encodeURIComponent(currentPayrollMonth())}`, { cache: "no-store" }),
+        loadHrData ? fetch(`/api/hr?month=${encodeURIComponent(currentPayrollMonth())}`, { cache: "no-store" }) : Promise.resolve(null),
       ]);
-      const [result, hrResult] = await Promise.all([
-        response.json() as Promise<AppState | { error?: string; code?: string }>,
-        hrResponse.json() as Promise<HrState | { error?: string }>,
-      ]);
-      if (response.status === 401 || hrResponse.status === 401) {
-        setAuth({ checking: false, authenticated: false, setupRequired: false, username: "" });
+      const result = await response.json() as AppState | { error?: string; code?: string };
+      const hrResult = hrResponse ? await hrResponse.json() as HrState | { error?: string } : emptyHrState;
+      if (response.status === 401 || hrResponse?.status === 401) {
+        setAuth(signedOutAuth);
         setState(emptyState);
         setHrState(emptyHrState);
         return;
       }
       if (!response.ok) throw new Error("error" in result && result.error ? result.error : "Could not load your workspace");
-      if (!hrResponse.ok) throw new Error("error" in hrResult && hrResult.error ? hrResult.error : "Could not load employee and attendance data");
+      if (hrResponse && !hrResponse.ok) throw new Error("error" in hrResult && hrResult.error ? hrResult.error : "Could not load employee and attendance data");
       setState(result as AppState);
-      setHrState(hrResult as HrState);
+      setHrState(loadHrData ? hrResult as HrState : emptyHrState);
+      const allowed = navItems.filter((item) => item.permission === "users" ? access.isAdmin : canAccess(access.permissions, item.permission, access.isAdmin));
+      setView((current) => allowed.some((item) => item.id === current) ? current : allowed[0]?.id ?? "dashboard");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Could not load your workspace");
     } finally {
@@ -345,9 +395,13 @@ export function FmgSystem() {
     }
   }
 
-  async function handleAuthenticated(username: string) {
-    setAuth({ checking: false, authenticated: true, setupRequired: false, username });
-    await loadWorkspace();
+  async function handleAuthenticated() {
+    const response = await fetch("/api/auth", { cache: "no-store" });
+    const result = await response.json() as AuthPayload;
+    if (!response.ok || !result.authenticated) throw new Error(result.error || "Could not load account access.");
+    const nextAuth = authFromPayload(result);
+    setAuth(nextAuth);
+    await loadWorkspace(nextAuth);
   }
 
   async function logout() {
@@ -355,7 +409,7 @@ export function FmgSystem() {
       setState(emptyState);
       setHrState(emptyHrState);
       setView("dashboard");
-      setAuth({ checking: false, authenticated: false, setupRequired: false, username: "" });
+      setAuth(signedOutAuth);
       setMenuOpen(false);
     }
   }
@@ -366,7 +420,7 @@ export function FmgSystem() {
       const response = await fetch("/api/state", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const result = await response.json() as AppState | { error?: string };
       if (response.status === 401) {
-        setAuth({ checking: false, authenticated: false, setupRequired: false, username: "" });
+        setAuth(signedOutAuth);
         setState(emptyState);
         throw new Error("Your session expired. Please sign in again.");
       }
@@ -384,7 +438,7 @@ export function FmgSystem() {
       const response = await fetch("/api/hr", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const result = await response.json() as HrState | { error?: string };
       if (response.status === 401) {
-        setAuth({ checking: false, authenticated: false, setupRequired: false, username: "" });
+        setAuth(signedOutAuth);
         setState(emptyState);
         setHrState(emptyHrState);
         throw new Error("Your session expired. Please sign in again.");
@@ -414,12 +468,13 @@ export function FmgSystem() {
   const searchResults = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return [];
-    const clientResults = state.clients.filter((client) => [client.name, client.companyName, client.ownerName, client.phone, client.email].some((value) => value.toLowerCase().includes(query))).slice(0, 3).map((record) => ({ kind: "Client", title: record.companyName || record.name, meta: record.ownerName, view: "clients" as View }));
-    const docResults = state.documents.filter((document) => [document.generatedCode, document.clientName, document.companyName, document.categoryName, document.type].some((value) => value.toLowerCase().includes(query))).slice(0, 4).map((record) => ({ kind: record.type === "invoice" ? "Invoice" : "Quotation", title: record.generatedCode, meta: record.companyName || record.clientName, view: "data" as View }));
-    const employeeResults = hrState.employees.filter((employee) => [employee.name, employee.title, employee.department, employee.biometricCode].some((value) => value.toLowerCase().includes(query))).slice(0, 3).map((record) => ({ kind: "Employee", title: record.name, meta: record.title || `Biometric ID ${record.biometricCode}`, view: "employees" as View }));
+    const clientResults = canAccess(auth.permissions, "clients", auth.isAdmin) ? state.clients.filter((client) => [client.name, client.companyName, client.ownerName, client.phone, client.email].some((value) => value.toLowerCase().includes(query))).slice(0, 3).map((record) => ({ kind: "Client", title: record.companyName || record.name, meta: record.ownerName, view: "clients" as View })) : [];
+    const docResults = canAccess(auth.permissions, "all_data", auth.isAdmin) ? state.documents.filter((document) => [document.generatedCode, document.clientName, document.companyName, document.categoryName, document.type].some((value) => value.toLowerCase().includes(query))).slice(0, 4).map((record) => ({ kind: record.type === "invoice" ? "Invoice" : "Quotation", title: record.generatedCode, meta: record.companyName || record.clientName, view: "data" as View })) : [];
+    const employeeResults = canAccess(auth.permissions, "employees", auth.isAdmin) ? hrState.employees.filter((employee) => [employee.name, employee.title, employee.department, employee.biometricCode].some((value) => value.toLowerCase().includes(query))).slice(0, 3).map((record) => ({ kind: "Employee", title: record.name, meta: record.title || `Biometric ID ${record.biometricCode}`, view: "employees" as View })) : [];
     return [...employeeResults, ...docResults, ...clientResults];
-  }, [hrState.employees, search, state]);
+  }, [auth, hrState.employees, search, state]);
 
+  const accessibleNavItems = navItems.filter((item) => item.permission === "users" ? auth.isAdmin : canAccess(auth.permissions, item.permission, auth.isAdmin));
   const copy = viewCopy[view];
 
   if (auth.checking || (auth.authenticated && loading)) return <div className="app-loader"><Image src="/fmg-logo-light.png" alt="FMG Agency" width={380} height={130} unoptimized /><span /><p>Preparing your agency workspace…</p></div>;
@@ -434,14 +489,14 @@ export function FmgSystem() {
         </div>
         <p className="side-label">Agency workspace</p>
         <nav aria-label="Main navigation">
-          {navItems.map((item) => {
+          {accessibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = view === item.id;
             return <button key={item.id} className={cx("nav-item", active && "active")} onClick={() => chooseView(item.id)}><Icon size={19} /><span><strong>{item.label}</strong><small>{item.eyebrow}</small></span>{active && <i />}</button>;
           })}
         </nav>
         <div className="side-foot">
-          <div className="workspace-chip"><div className="avatar">{initials(auth.username)}</div><div><strong>{auth.username}</strong><small>FMG administrator</small></div><button onClick={logout} aria-label="Sign out" title="Sign out"><LogOut size={17} /></button></div>
+          <div className="workspace-chip"><div className="avatar">{initials(auth.displayName || auth.username)}</div><div><strong>{auth.displayName || auth.username}</strong><small>{auth.roleLabel}</small></div><button onClick={logout} aria-label="Sign out" title="Sign out"><LogOut size={17} /></button></div>
           <p><span /> All systems operational</p>
         </div>
       </aside>
@@ -453,7 +508,7 @@ export function FmgSystem() {
           <button className="menu-button" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={21} /></button>
           <div className="global-search">
             <Search size={18} />
-            <input value={search} onChange={(event) => { setSearch(event.target.value); setSearchOpen(true); }} onFocus={() => setSearchOpen(true)} placeholder="Search clients, employees, codes, categories…" aria-label="Global search" />
+            <input value={search} onChange={(event) => { setSearch(event.target.value); setSearchOpen(true); }} onFocus={() => setSearchOpen(true)} placeholder="Search the areas you can access…" aria-label="Global search" />
             <kbd>⌘ K</kbd>
             {searchOpen && search && <div className="search-results">
               <div className="search-title"><span>Quick results</span><button onClick={() => setSearchOpen(false)}><X size={15} /></button></div>
@@ -463,36 +518,41 @@ export function FmgSystem() {
           <div className="top-actions">
             <button className="icon-button" onClick={toggleTheme} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
             <button className="icon-button notification" aria-label="Notifications"><Bell size={18} /><span /></button>
-            <div className="top-avatar">{initials(auth.username)}</div>
+            <div className="top-avatar">{initials(auth.displayName || auth.username)}</div>
           </div>
         </header>
 
         <div className="page-wrap">
           <div className="page-heading">
             <div><span className="eyebrow">{copy.eyebrow}</span><h1>{copy.title}</h1><p>{copy.description}</p></div>
-            {view === "dashboard" && <button className="primary-button" onClick={() => chooseView("invoice")}><Plus size={17} /> Create document</button>}
+            {view === "dashboard" && (canOpenView("invoice") || canOpenView("quotation")) && <button className="primary-button" onClick={() => chooseView(canOpenView("invoice") ? "invoice" : "quotation")}><Plus size={17} /> Create document</button>}
           </div>
 
-          {view === "dashboard" && <Dashboard state={state} hrState={hrState} chooseView={chooseView} />}
+          {view === "dashboard" && <Dashboard state={state} hrState={hrState} chooseView={chooseView} canOpenView={canOpenView} />}
           {view === "clients" && <ClientsPanel clients={state.clients} mutate={mutate} busy={busy} showToast={showToast} />}
           {view === "employees" && <EmployeesPanel state={hrState} mutate={mutateHr} busy={busy} showToast={showToast} />}
           {view === "attendance" && <AttendancePanel state={hrState} mutate={mutateHr} busy={busy} onMonthChange={loadHr} onStateChange={setHrState} showToast={showToast} />}
           {view === "categories" && <CategoriesPanel categories={state.categories} mutate={mutate} busy={busy} showToast={showToast} />}
           {(view === "invoice" || view === "quotation") && <DocumentEditor key={`${view}-${editingDocument?.id ?? "new"}`} type={view} state={state} mutate={mutate} busy={busy} editing={editingDocument} onDone={() => { setEditingDocument(null); chooseView("data"); }} showToast={showToast} />}
-          {view === "data" && <DataPanel state={state} mutate={mutate} busy={busy} showToast={showToast} editDocument={(document) => { setEditingDocument(document); setView(document.type); }} />}
+          {view === "data" && <DataPanel state={state} mutate={mutate} busy={busy} showToast={showToast} editDocument={(document) => {
+            if (!canOpenView(document.type)) return showToast(`This account cannot edit ${document.type === "invoice" ? "invoices" : "quotations"}.`);
+            setEditingDocument(document);
+            setView(document.type);
+          }} />}
           {view === "settings" && <SettingsPanel settings={state.settings} mutate={mutate} busy={busy} showToast={showToast} authUsername={auth.username} onCredentialsChanged={(username) => setAuth((current) => ({ ...current, username }))} />}
+          {view === "users" && auth.isAdmin && <AccessPanel showToast={showToast} />}
         </div>
       </main>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {navItems.filter((item) => ["dashboard", "invoice", "quotation", "employees", "attendance"].includes(item.id)).map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => chooseView(item.id)}><Icon size={19} /><span>{item.label.replace("New ", "")}</span></button>; })}
+        {accessibleNavItems.filter((item) => ["dashboard", "invoice", "quotation", "employees", "attendance"].includes(item.id)).slice(0, 5).map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => chooseView(item.id)}><Icon size={19} /><span>{item.label.replace("New ", "")}</span></button>; })}
       </nav>
       {toast && <div className="toast"><Check size={17} /><span>{toast}</span></div>}
     </div>
   );
 }
 
-function Dashboard({ state, hrState, chooseView }: { state: AppState; hrState: HrState; chooseView: (view: View) => void }) {
+function Dashboard({ state, hrState, chooseView, canOpenView }: { state: AppState; hrState: HrState; chooseView: (view: View) => void; canOpenView: (view: View) => boolean }) {
   const invoices = state.documents.filter((document) => document.type === "invoice");
   const quotations = state.documents.filter((document) => document.type === "quotation");
   const revenue = invoices.filter((document) => ["Paid", "Approved"].includes(document.status)).reduce((sum, document) => sum + document.total, 0);
@@ -510,18 +570,18 @@ function Dashboard({ state, hrState, chooseView }: { state: AppState; hrState: H
     { label: "Collected revenue", value: money(revenue), note: "Paid & approved invoices", icon: TrendingUp, tone: "white" },
   ];
   return <>
-    <section className="quick-create">
+    {(canOpenView("invoice") || canOpenView("quotation")) && <section className="quick-create">
       <div className="quick-copy"><span className="spark"><Sparkles size={18} /></span><div><strong>Create something polished.</strong><p>Start with a client, choose the right category, and FMG handles the document number and layout.</p></div></div>
-      <div className="quick-actions"><button onClick={() => chooseView("invoice")}><ReceiptText size={18} /><span><strong>New invoice</strong><small>Bill approved work</small></span><ArrowLeft size={17} /></button><button onClick={() => chooseView("quotation")}><FilePenLine size={18} /><span><strong>New quotation</strong><small>Scope a project</small></span><ArrowLeft size={17} /></button></div>
-    </section>
-    <section className="hr-quick-grid">
-      <button className="hr-quick-card employees-card" onClick={() => chooseView("employees")}><span className="hr-quick-icon"><UsersRound size={23} /></span><span><small>FMG TEAM</small><strong>Employees & salaries</strong><p>{hrState.employees.filter((employee) => employee.active).length} active employees · titles, salary, commission, deductions</p></span><ArrowLeft size={18} /></button>
-      <button className="hr-quick-card attendance-card" onClick={() => chooseView("attendance")}><span className="hr-quick-icon"><Clock3 size={23} /></span><span><small>PEOPLE OPERATIONS</small><strong>Attendance & payroll</strong><p>{hrState.attendance.length ? `${hrState.attendance.length} attendance records in ${hrState.month}` : "Import the biometric Excel file and calculate the month"}</p></span><ArrowLeft size={18} /></button>
-    </section>
+      <div className="quick-actions">{canOpenView("invoice") && <button onClick={() => chooseView("invoice")}><ReceiptText size={18} /><span><strong>New invoice</strong><small>Bill approved work</small></span><ArrowLeft size={17} /></button>}{canOpenView("quotation") && <button onClick={() => chooseView("quotation")}><FilePenLine size={18} /><span><strong>New quotation</strong><small>Scope a project</small></span><ArrowLeft size={17} /></button>}</div>
+    </section>}
+    {(canOpenView("employees") || canOpenView("attendance")) && <section className="hr-quick-grid">
+      {canOpenView("employees") && <button className="hr-quick-card employees-card" onClick={() => chooseView("employees")}><span className="hr-quick-icon"><UsersRound size={23} /></span><span><small>FMG TEAM</small><strong>Employees & salaries</strong><p>{hrState.employees.filter((employee) => employee.active).length} active employees · titles, salary, commission, deductions</p></span><ArrowLeft size={18} /></button>}
+      {canOpenView("attendance") && <button className="hr-quick-card attendance-card" onClick={() => chooseView("attendance")}><span className="hr-quick-icon"><Clock3 size={23} /></span><span><small>PEOPLE OPERATIONS</small><strong>Attendance & payroll</strong><p>{hrState.attendance.length ? `${hrState.attendance.length} attendance records in ${hrState.month}` : "Import the biometric Excel file and calculate the month"}</p></span><ArrowLeft size={18} /></button>}
+    </section>}
     <section className="stats-grid">{stats.map((stat) => { const Icon = stat.icon; return <article key={stat.label} className={cx("stat-card", `stat-${stat.tone}`)}><div className="stat-top"><span>{stat.label}</span><i><Icon size={19} /></i></div><strong className="stat-value">{stat.value}</strong><small>{stat.note}</small></article>; })}</section>
     <section className="dashboard-grid">
       <article className="panel chart-panel"><div className="panel-heading"><div><span className="eyebrow">DOCUMENT VALUE</span><h2>Agency momentum</h2></div><span className="period-chip">Last 6 months <ChevronDown size={14} /></span></div><div className="chart-summary"><strong>{money(state.documents.reduce((sum, document) => sum + document.total, 0))}</strong><span>Total document value</span></div><div className="bar-chart">{months.map((month, index) => <div className="bar-column" key={`${month.label}-${index}`}><div className="bar-track"><i style={{ height: `${month.height}%` }} /></div><span>{month.label}</span></div>)}</div></article>
-      <article className="panel recent-panel"><div className="panel-heading"><div><span className="eyebrow">RECENT ACTIVITY</span><h2>Latest documents</h2></div><button className="text-button" onClick={() => chooseView("data")}>View all <ArrowLeft size={15} /></button></div>{recent.length ? <div className="recent-list">{recent.map((document) => <button key={document.id} onClick={() => chooseView("data")}><span className={cx("file-icon", document.type)}>{document.type === "invoice" ? <ReceiptText size={18} /> : <FileText size={18} />}</span><span className="recent-copy"><strong>{document.generatedCode}</strong><small>{document.companyName || document.clientName} · {prettyDate(document.date)}</small></span><span className="recent-value"><strong>{money(document.total, document.currency)}</strong><StatusBadge value={document.status} /></span></button>)}</div> : <EmptyPanel icon={ClipboardList} title="No documents yet" body="Your latest invoices and quotations will appear here." action={<button className="small-primary" onClick={() => chooseView("invoice")}><Plus size={15} /> Create the first</button>} />}</article>
+      <article className="panel recent-panel"><div className="panel-heading"><div><span className="eyebrow">RECENT ACTIVITY</span><h2>Latest documents</h2></div>{canOpenView("data") && <button className="text-button" onClick={() => chooseView("data")}>View all <ArrowLeft size={15} /></button>}</div>{recent.length ? <div className="recent-list">{recent.map((document) => <button key={document.id} onClick={() => canOpenView("data") && chooseView("data")} disabled={!canOpenView("data")}><span className={cx("file-icon", document.type)}>{document.type === "invoice" ? <ReceiptText size={18} /> : <FileText size={18} />}</span><span className="recent-copy"><strong>{document.generatedCode}</strong><small>{document.companyName || document.clientName} · {prettyDate(document.date)}</small></span><span className="recent-value"><strong>{money(document.total, document.currency)}</strong><StatusBadge value={document.status} /></span></button>)}</div> : <EmptyPanel icon={ClipboardList} title="No documents yet" body="Your latest invoices and quotations will appear here." action={(canOpenView("invoice") || canOpenView("quotation")) ? <button className="small-primary" onClick={() => chooseView(canOpenView("invoice") ? "invoice" : "quotation")}><Plus size={15} /> Create the first</button> : undefined} />}</article>
     </section>
   </>;
 }
@@ -663,7 +723,7 @@ function CredentialsPanel({ username, onChanged, showToast }: { username: string
       setSaving(false);
     }
   });
-  return <form className="panel settings-card security-card" onSubmit={submit}><div className="settings-heading"><div className="settings-icon yellow"><ShieldCheck size={20} /></div><div><h2>Login credentials</h2><p>Change the username or set a new password for the FMG administrator account.</p></div></div><div className="form-grid security-grid"><Field label="Current password" error={form.formState.errors.currentPassword?.message}><input type="password" autoComplete="current-password" {...form.register("currentPassword")} placeholder="Required to confirm changes" /></Field><Field label="Username" error={form.formState.errors.newUsername?.message}><input autoComplete="username" {...form.register("newUsername")} /></Field><Field label="New password" hint="Leave blank to keep it" error={form.formState.errors.newPassword?.message}><input type="password" autoComplete="new-password" {...form.register("newPassword")} placeholder="At least 8 characters" /></Field><Field label="Confirm new password" error={form.formState.errors.confirmPassword?.message}><input type="password" autoComplete="new-password" {...form.register("confirmPassword")} placeholder="Repeat the new password" /></Field></div><div className="security-actions"><div><LockKeyhole size={15} /><span>Changing credentials signs out every other active session.</span></div><button className="primary-button" disabled={saving}>{saving ? "Updating…" : "Update login"}</button></div></form>;
+  return <form className="panel settings-card security-card" onSubmit={submit}><div className="settings-heading"><div className="settings-icon yellow"><ShieldCheck size={20} /></div><div><h2>Login credentials</h2><p>Change the username or set a new password for your current FMG account.</p></div></div><div className="form-grid security-grid"><Field label="Current password" error={form.formState.errors.currentPassword?.message}><input type="password" autoComplete="current-password" {...form.register("currentPassword")} placeholder="Required to confirm changes" /></Field><Field label="Username" error={form.formState.errors.newUsername?.message}><input autoComplete="username" {...form.register("newUsername")} /></Field><Field label="New password" hint="Leave blank to keep it" error={form.formState.errors.newPassword?.message}><input type="password" autoComplete="new-password" {...form.register("newPassword")} placeholder="At least 8 characters" /></Field><Field label="Confirm new password" error={form.formState.errors.confirmPassword?.message}><input type="password" autoComplete="new-password" {...form.register("confirmPassword")} placeholder="Repeat the new password" /></Field></div><div className="security-actions"><div><LockKeyhole size={15} /><span>Changing credentials signs out every other active session.</span></div><button className="primary-button" disabled={saving}>{saving ? "Updating…" : "Update login"}</button></div></form>;
 }
 
 function Field({ label, hint, error, wide, children }: { label: string; hint?: string; error?: string; wide?: boolean; children: React.ReactNode }) {

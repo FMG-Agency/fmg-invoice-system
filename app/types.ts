@@ -1,3 +1,5 @@
+import type { AccessPermission } from "./lib/permissions";
+
 export type Client = {
   id: number;
   name: string;
@@ -199,6 +201,18 @@ export type HrState = {
   imports: AttendanceImport[];
   adjustments: PayrollAdjustment[];
   payroll: PayrollSummary[];
+};
+
+export type ManagedUser = {
+  id: number;
+  username: string;
+  displayName: string;
+  roleLabel: string;
+  isAdmin: boolean;
+  active: boolean;
+  permissions: AccessPermission[];
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type DocumentDraft = {

@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { requireAuth } from "../../../lib/auth-server";
+import { requirePermission } from "../../../lib/auth-server";
 import { database } from "../../../lib/database";
 import { ensureHrDatabase, getHrState } from "../../../lib/hr";
 
@@ -144,7 +144,7 @@ function responseError(error: unknown) {
 
 export async function POST(request: Request) {
   try {
-    const authError = await requireAuth(request);
+    const authError = await requirePermission(request, "attendance");
     if (authError) return authError;
     await ensureHrDatabase();
 

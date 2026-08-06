@@ -1,7 +1,8 @@
 import { del, put } from "@vercel/blob";
 import { z } from "zod";
 import { database } from "../../lib/database";
-import { requireAuth } from "../../lib/auth-server";
+import { getSession, requireAuth, type AuthSession } from "../../lib/auth-server";
+import { canAccess, type AccessPermission } from "../../lib/permissions";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -210,6 +211,26 @@ async function getState() {
   };
 }
 
+type WorkspaceState = Awaited<ReturnType<typeof getState>>;
+
+function filterState(state: WorkspaceState, session: AuthSession): WorkspaceState {
+  const allowed = (permission: AccessPermission) => canAccess(session.permissions, permission, session.isAdmin);
+  const canSeeDocuments = allowed("dashboard") || allowed("all_data") || allowed("invoices") || allowed("quotations");
+  const documents = !canSeeDocuments
+    ? []
+    : state.documents.filter((document) => allowed("dashboard") || allowed("all_data") || allowed(String((document as Record<string, unknown>).type) === "invoice" ? "invoices" : "quotations"));
+  return {
+    clients: allowed("clients") || allowed("dashboard") || allowed("all_data") || allowed("invoices") || allowed("quotations") ? state.clients : [],
+    categories: allowed("categories") || allowed("dashboard") || allowed("all_data") || allowed("invoices") || allowed("quotations") ? state.categories : [],
+    documents,
+    settings: allowed("settings") || allowed("dashboard") || allowed("invoices") || allowed("quotations") ? state.settings : null,
+  };
+}
+
+function accessDenied() {
+  return Response.json({ error: "You do not have access to this area.", code: "ACCESS_DENIED" }, { status: 403 });
+}
+
 function decodeBase64(input: string) {
   const normalized = input.includes(",") ? input.slice(input.indexOf(",") + 1) : input;
   const binary = atob(normalized);
@@ -228,8 +249,10 @@ export async function GET(request: Request) {
   try {
     const authError = await requireAuth(request);
     if (authError) return authError;
+    const session = await getSession(request);
+    if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
     await ensureDatabase();
-    return Response.json(await getState());
+    return Response.json(filterState(await getState(), session));
   } catch (error) {
     return responseError(error);
   }
@@ -239,8 +262,27 @@ export async function POST(request: Request) {
   try {
     const authError = await requireAuth(request);
     if (authError) return authError;
+    const session = await getSession(request);
+    if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
     await ensureDatabase();
     const payload = actionPayload.parse(await request.json());
+    const allowed = (permission: AccessPermission) => canAccess(session.permissions, permission, session.isAdmin);
+    let requiredPermission: AccessPermission = payload.action === "createClient" || payload.action === "updateClient" || payload.action === "deleteClient"
+      ? "clients"
+      : payload.action === "createCategory" || payload.action === "updateCategory" || payload.action === "deleteCategory"
+        ? "categories"
+        : payload.action === "saveDocument"
+          ? payload.data.type === "invoice" ? "invoices" : "quotations"
+          : payload.action === "setDocumentStatus" || payload.action === "deleteDocument"
+            ? "all_data"
+            : "settings";
+    if (payload.action === "saveDocument" && payload.data.id) {
+      const existing = await database.prepare("SELECT type FROM documents WHERE id = ?").bind(payload.data.id).first<{ type: "invoice" | "quotation" }>();
+      if (!existing) return Response.json({ error: "Document not found." }, { status: 404 });
+      if (existing.type !== payload.data.type) return Response.json({ error: "A document type cannot be changed after it is created." }, { status: 400 });
+      requiredPermission = existing.type === "invoice" ? "invoices" : "quotations";
+    }
+    if (!allowed(requiredPermission)) return accessDenied();
 
     if (payload.action === "createClient" || payload.action === "updateClient") {
       const values = payload.data;
@@ -326,7 +368,7 @@ export async function POST(request: Request) {
         .bind(values.agencyName, values.defaultCurrency, values.preparedBy, values.defaultPaymentTerms, values.defaultTax, values.phone, values.email, values.address).run();
     }
 
-    return Response.json(await getState());
+    return Response.json(filterState(await getState(), session));
   } catch (error) {
     return responseError(error);
   }

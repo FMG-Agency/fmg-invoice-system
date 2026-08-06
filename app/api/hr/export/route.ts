@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requireAuth } from "../../../lib/auth-server";
+import { requirePermission } from "../../../lib/auth-server";
 import { ensureHrDatabase, getHrState } from "../../../lib/hr";
 import { payrollWorkbookBuffer } from "../../../lib/hr-export";
 
@@ -14,7 +14,7 @@ function currentMonth() {
 
 export async function GET(request: Request) {
   try {
-    const authError = await requireAuth(request);
+    const authError = await requirePermission(request, "attendance");
     if (authError) return authError;
 
     const url = new URL(request.url);
