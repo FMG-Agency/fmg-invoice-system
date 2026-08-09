@@ -1,6 +1,8 @@
 import { database } from "./database";
 import type { AttendanceRecord, Employee, HrPolicy, HrState, PayrollAdjustment, PayrollSummary } from "../types";
 
+let hrDatabaseReady: Promise<void> | null = null;
+
 const hrSchemaStatements = [
   `CREATE TABLE IF NOT EXISTS employees (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,20 +74,53 @@ const hrSchemaStatements = [
     notes TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS employee_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES employees(id),
+    requester_user_id INTEGER NOT NULL REFERENCES auth_users(id),
+    type TEXT NOT NULL CHECK(type IN ('leave','early_leave','mission')),
+    leave_kind TEXT NOT NULL DEFAULT 'vacation' CHECK(leave_kind IN ('vacation','sick_leave','urgent_leave','normal_leave')),
+    date_from TEXT NOT NULL,
+    date_to TEXT NOT NULL,
+    start_time TEXT NOT NULL DEFAULT '',
+    end_time TEXT NOT NULL DEFAULT '',
+    duration_minutes INTEGER NOT NULL DEFAULT 0,
+    details TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','cancelled')),
+    assigned_reviewer_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL,
+    reviewer_note TEXT NOT NULL DEFAULT '',
+    reviewed_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL,
+    reviewed_at TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_biometric_code ON employees(biometric_code) WHERE biometric_code <> ''",
   "CREATE INDEX IF NOT EXISTS idx_employees_name ON employees(name)",
   "CREATE INDEX IF NOT EXISTS idx_attendance_work_date ON attendance_records(work_date)",
   "CREATE INDEX IF NOT EXISTS idx_attendance_employee_date ON attendance_records(employee_id, work_date)",
   "CREATE INDEX IF NOT EXISTS idx_adjustments_month_employee ON payroll_adjustments(period_month, employee_id)",
+  "CREATE INDEX IF NOT EXISTS idx_employee_requests_employee ON employee_requests(employee_id, created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_employee_requests_status ON employee_requests(status, created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_employee_requests_reviewer ON employee_requests(assigned_reviewer_id, status)",
 ];
 
-export async function ensureHrDatabase() {
+async function initializeHrDatabase() {
   await database.batch(hrSchemaStatements.map((statement) => database.prepare(statement)));
   await database.prepare(`INSERT OR IGNORE INTO hr_policy
     (id, currency, salary_divisor, workday_minutes, free_arrival_until, minor_late_until,
       quarter_day_until, overtime_starts_at, overtime_arrival_cutoff, minute_penalty_multiplier,
       overtime_multiplier, friday_multiplier, absence_deduction_enabled, absence_day_multiplier)
     VALUES (1, 'EGP', 30, 480, '11:05', '11:15', '11:45', '19:15', '11:30', 4, 2, 2, 0, 1)`).run();
+}
+
+export async function ensureHrDatabase() {
+  hrDatabaseReady ??= initializeHrDatabase();
+  try {
+    await hrDatabaseReady;
+  } catch (error) {
+    hrDatabaseReady = null;
+    throw error;
+  }
 }
 
 function numberValue(value: unknown) {
@@ -154,6 +189,11 @@ export function attendanceMath(record: AttendanceSource, employee: Employee, pol
     }
   }
 
+  if (record.missionOvertimeMinutes > 0) {
+    overtimeMinutes += record.missionOvertimeMinutes;
+    overtimePay += record.missionOvertimeMinutes * minuteRate * policy.overtimeMultiplier;
+  }
+
   return {
     lateMinutes,
     penaltyMinutes: Math.round(penaltyMinutes),
@@ -218,6 +258,7 @@ function attendanceFromRow(row: Record<string, unknown>, employees: Map<number, 
     status: String(row.status ?? "present") as AttendanceRecord["status"],
     lateExcused: boolValue(row.lateExcused),
     overtimeApproved: boolValue(row.overtimeApproved),
+    missionOvertimeMinutes: numberValue(row.missionOvertimeMinutes),
     notes: String(row.notes ?? ""),
     createdAt: String(row.createdAt ?? ""),
     updatedAt: String(row.updatedAt ?? ""),
@@ -255,6 +296,7 @@ function payrollForEmployee(employee: Employee, attendance: AttendanceRecord[], 
     lateDays: employeeAttendance.filter((record) => record.lateMinutes > 0).length,
     lateMinutes: employeeAttendance.reduce((sum, record) => sum + record.lateMinutes, 0),
     overtimeMinutes: employeeAttendance.reduce((sum, record) => sum + record.overtimeMinutes, 0),
+    missionOvertimeMinutes: employeeAttendance.reduce((sum, record) => sum + record.missionOvertimeMinutes, 0),
   };
 }
 
@@ -274,7 +316,11 @@ export async function getHrState(month: string): Promise<HrState> {
     database.prepare(`SELECT a.id, a.import_id AS importId, a.employee_id AS employeeId, e.name AS employeeName,
       e.biometric_code AS biometricCode, a.work_date AS workDate, a.first_in AS firstIn, a.last_out AS lastOut,
       a.punches_json AS punchesJson, a.status, a.late_excused AS lateExcused,
-      a.overtime_approved AS overtimeApproved, a.notes, a.created_at AS createdAt, a.updated_at AS updatedAt
+      a.overtime_approved AS overtimeApproved,
+      COALESCE((SELECT SUM(r.duration_minutes) FROM employee_requests r
+        WHERE r.employee_id = a.employee_id AND r.type = 'mission' AND r.status = 'approved'
+          AND a.work_date BETWEEN r.date_from AND r.date_to), 0) AS missionOvertimeMinutes,
+      a.notes, a.created_at AS createdAt, a.updated_at AS updatedAt
       FROM attendance_records a JOIN employees e ON e.id = a.employee_id
       WHERE substr(a.work_date, 1, 7) = ? ORDER BY a.work_date DESC, e.name COLLATE NOCASE`).bind(month).all(),
     database.prepare(`SELECT id, file_name AS fileName, period_start AS periodStart, period_end AS periodEnd,

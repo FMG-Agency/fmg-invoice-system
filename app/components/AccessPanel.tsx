@@ -12,7 +12,10 @@ type UserDraft = {
   password: string;
   active: boolean;
   permissions: AccessPermission[];
+  employeeId: number | null;
 };
+
+type EmployeeOption = { id: number; name: string; title: string; department: string };
 
 const operationManagerDraft: UserDraft = {
   username: "",
@@ -21,6 +24,7 @@ const operationManagerDraft: UserDraft = {
   password: "",
   active: true,
   permissions: [...OPERATION_MANAGER_PERMISSIONS],
+  employeeId: null,
 };
 
 function AccessModal({ title, description, onClose, children }: { title: string; description: string; onClose: () => void; children: React.ReactNode }) {
@@ -34,6 +38,7 @@ function AccessModal({ title, description, onClose, children }: { title: string;
 
 export function AccessPanel({ showToast }: { showToast: (message: string) => void }) {
   const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
@@ -44,9 +49,9 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
     let cancelled = false;
     void fetch("/api/users", { cache: "no-store" })
       .then(async (response) => {
-        const result = await response.json() as { users?: ManagedUser[]; error?: string };
+        const result = await response.json() as { users?: ManagedUser[]; employees?: EmployeeOption[]; error?: string };
         if (!response.ok) throw new Error(result.error || "Could not load users.");
-        if (!cancelled) setUsers(result.users ?? []);
+        if (!cancelled) { setUsers(result.users ?? []); setEmployees(result.employees ?? []); }
       })
       .catch((error: unknown) => {
         if (!cancelled) showToast(error instanceof Error ? error.message : "Could not load users.");
@@ -61,14 +66,14 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
 
   function openCreate() {
     setEditing(null);
-    setDraft({ ...operationManagerDraft, permissions: [...OPERATION_MANAGER_PERMISSIONS] });
+    setDraft({ ...operationManagerDraft, permissions: [...OPERATION_MANAGER_PERMISSIONS], employeeId: null });
     setOpen(true);
   }
 
   function openEdit(user: ManagedUser) {
     if (user.isAdmin) return;
     setEditing(user);
-    setDraft({ username: user.username, displayName: user.displayName, roleLabel: user.roleLabel, password: "", active: user.active, permissions: [...user.permissions] });
+    setDraft({ username: user.username, displayName: user.displayName, roleLabel: user.roleLabel, password: "", active: user.active, permissions: [...user.permissions], employeeId: user.employeeId });
     setOpen(true);
   }
 
@@ -94,9 +99,10 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
         headers: { "content-type": "application/json" },
         body: JSON.stringify(editing ? { action: "update", id: editing.id, data: draft } : { action: "create", data: draft }),
       });
-      const result = await response.json() as { users?: ManagedUser[]; error?: string };
+      const result = await response.json() as { users?: ManagedUser[]; employees?: EmployeeOption[]; error?: string };
       if (!response.ok) throw new Error(result.error || "Could not save the user.");
       setUsers(result.users ?? []);
+      setEmployees(result.employees ?? []);
       setOpen(false);
       showToast(editing ? "User access updated immediately." : "New user created and ready to sign in.");
     } catch (error) {
@@ -116,7 +122,7 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
     <section className="panel data-panel">
       <div className="toolbar"><div><span className="eyebrow">USERS & ACCESS</span><h2 className="access-title">Team accounts</h2></div><div className="toolbar-spacer" /><span className="record-count">Only administrators can manage this page</span></div>
       {loading ? <div className="empty-panel"><div className="empty-icon"><UserCog size={24} /></div><h3>Loading users…</h3></div> : users.length ? <div className="table-scroll"><table className="data-table access-table"><thead><tr><th>User</th><th>Role</th><th>Username</th><th>Allowed areas</th><th>Status</th><th>Actions</th></tr></thead><tbody>{users.map((user) => <tr key={user.id} className={!user.active ? "muted-row" : ""}>
-        <td><div className="client-cell"><span className="avatar-soft">{user.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U"}</span><span><strong>{user.displayName}</strong><small>{user.isAdmin ? "Primary administrator" : "FMG team account"}</small></span></div></td>
+        <td><div className="client-cell"><span className="avatar-soft">{user.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U"}</span><span><strong>{user.displayName}</strong><small>{user.isAdmin ? "Primary administrator" : user.employeeName ? `Linked to ${user.employeeName}` : "Employee profile not linked"}</small></span></div></td>
         <td><span className={user.isAdmin ? "access-role admin" : "access-role"}>{user.roleLabel}</span></td>
         <td><strong className="table-main">{user.username}</strong></td>
         <td><div className="permission-summary">{user.isAdmin ? <span>Full access</span> : user.permissions.map((permission) => <span key={permission}>{ACCESS_PERMISSIONS.find((item) => item.key === permission)?.label ?? permission}</span>)}</div></td>
@@ -133,6 +139,7 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
           <label className="field"><span>Role / title</span><input required value={draft.roleLabel} onChange={(event) => setDraft({ ...draft, roleLabel: event.target.value })} /></label>
           <label className="field"><span>Username</span><input required minLength={3} pattern="[A-Za-z0-9._-]+" autoComplete="off" value={draft.username} onChange={(event) => setDraft({ ...draft, username: event.target.value })} placeholder="operation.manager" /></label>
           <label className="field"><span>{editing ? "New password" : "Temporary password"}<small>{editing ? "Leave blank to keep it" : "At least 8 characters"}</small></span><input type="password" minLength={editing ? undefined : 8} required={!editing} autoComplete="new-password" value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} /></label>
+          <label className="field wide"><span>Linked employee <small>Required to submit personal requests</small></span><select value={draft.employeeId ?? ""} onChange={(event) => setDraft({ ...draft, employeeId: event.target.value ? Number(event.target.value) : null })}><option value="">No employee linked</option>{employees.filter((employee) => !users.some((user) => user.id !== editing?.id && user.employeeId === employee.id)).map((employee) => <option key={employee.id} value={employee.id}>{employee.name}{employee.title ? ` · ${employee.title}` : ""}{employee.department ? ` · ${employee.department}` : ""}</option>)}</select></label>
         </div>
         <div className="permission-heading"><div><KeyRound size={17} /><span><strong>Allowed areas</strong><small>The user only sees the checked sections.</small></span></div><span>{draft.permissions.length} selected</span></div>
         <div className="permission-grid">{ACCESS_PERMISSIONS.map((permission) => {

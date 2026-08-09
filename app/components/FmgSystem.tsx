@@ -49,8 +49,9 @@ import { canAccess, type AccessPermission } from "../lib/permissions";
 import type { AppState, Category, Client, DocumentDraft, DocumentRecord, HrState, LineItem, Settings } from "../types";
 import { AccessPanel } from "./AccessPanel";
 import { AttendancePanel, EmployeesPanel, type HrMutation } from "./HrPanels";
+import { RequestsPanel } from "./RequestsPanel";
 
-type View = "dashboard" | "invoice" | "quotation" | "clients" | "employees" | "attendance" | "categories" | "data" | "settings" | "users";
+type View = "dashboard" | "invoice" | "quotation" | "clients" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
 type Mutation = (body: Record<string, unknown>) => Promise<AppState>;
 type AuthState = {
   checking: boolean;
@@ -62,6 +63,7 @@ type AuthState = {
   roleLabel: string;
   isAdmin: boolean;
   permissions: AccessPermission[];
+  employeeId: number | null;
 };
 
 const signedOutAuth: AuthState = {
@@ -74,6 +76,7 @@ const signedOutAuth: AuthState = {
   roleLabel: "",
   isAdmin: false,
   permissions: [],
+  employeeId: null,
 };
 
 type AuthPayload = Partial<Omit<AuthState, "checking">> & { error?: string };
@@ -89,6 +92,7 @@ function authFromPayload(payload: AuthPayload): AuthState {
     roleLabel: payload.roleLabel ?? "Team Member",
     isAdmin: Boolean(payload.isAdmin),
     permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
+    employeeId: payload.employeeId === null || payload.employeeId === undefined ? null : Number(payload.employeeId),
   };
 }
 
@@ -156,6 +160,7 @@ const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof L
   { id: "clients", label: "Clients", eyebrow: "Directory", icon: UsersRound, permission: "clients" },
   { id: "employees", label: "Employees", eyebrow: "People & salaries", icon: UserRound, permission: "employees" },
   { id: "attendance", label: "Attendance", eyebrow: "Payroll & biometric", icon: Clock3, permission: "attendance" },
+  { id: "requests", label: "Employee Requests", eyebrow: "Leave, excuses & missions", icon: ClipboardList, permission: "requests" },
   { id: "categories", label: "Categories", eyebrow: "Services", icon: Tag, permission: "categories" },
   { id: "data", label: "All Data", eyebrow: "Archive", icon: FolderKanban, permission: "all_data" },
   { id: "settings", label: "Settings", eyebrow: "Workspace", icon: Settings2, permission: "settings" },
@@ -169,6 +174,7 @@ const viewCopy: Record<View, { eyebrow: string; title: string; description: stri
   clients: { eyebrow: "CLIENT DIRECTORY", title: "Clients", description: "One trusted source for every client and contact." },
   employees: { eyebrow: "PEOPLE OPERATIONS", title: "Employees", description: "Titles, salaries, commissions, deductions, and biometric identities in one private directory." },
   attendance: { eyebrow: "ATTENDANCE & PAYROLL", title: "Attendance and payroll", description: "Import biometric Excel files, review every punch, and calculate payroll from the FMG Office Policy." },
+  requests: { eyebrow: "EMPLOYEE SELF-SERVICE", title: "Employee requests", description: "Send, route, approve, and track leave, early-leave excuses, and work missions with automatic payroll impact." },
   categories: { eyebrow: "SERVICE LOGIC", title: "Categories", description: "Control prefixes, counters, and the PDF footer for each service." },
   data: { eyebrow: "DOCUMENT ARCHIVE", title: "All data", description: "Search, filter, preview, and manage every generated document." },
   settings: { eyebrow: "WORKSPACE SETTINGS", title: "Settings", description: "Set the defaults that power every new FMG document." },
@@ -517,7 +523,7 @@ export function FmgSystem() {
           </div>
           <div className="top-actions">
             <button className="icon-button" onClick={toggleTheme} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
-            <button className="icon-button notification" aria-label="Notifications"><Bell size={18} /><span /></button>
+            <button className="icon-button notification" aria-label="Employee request notifications" onClick={() => canOpenView("requests") && chooseView("requests")}><Bell size={18} />{canOpenView("requests") && <span />}</button>
             <div className="top-avatar">{initials(auth.displayName || auth.username)}</div>
           </div>
         </header>
@@ -532,6 +538,7 @@ export function FmgSystem() {
           {view === "clients" && <ClientsPanel clients={state.clients} mutate={mutate} busy={busy} showToast={showToast} />}
           {view === "employees" && <EmployeesPanel state={hrState} mutate={mutateHr} busy={busy} showToast={showToast} />}
           {view === "attendance" && <AttendancePanel state={hrState} mutate={mutateHr} busy={busy} onMonthChange={loadHr} onStateChange={setHrState} showToast={showToast} />}
+          {view === "requests" && <RequestsPanel showToast={showToast} />}
           {view === "categories" && <CategoriesPanel categories={state.categories} mutate={mutate} busy={busy} showToast={showToast} />}
           {(view === "invoice" || view === "quotation") && <DocumentEditor key={`${view}-${editingDocument?.id ?? "new"}`} type={view} state={state} mutate={mutate} busy={busy} editing={editingDocument} onDone={() => { setEditingDocument(null); chooseView("data"); }} showToast={showToast} />}
           {view === "data" && <DataPanel state={state} mutate={mutate} busy={busy} showToast={showToast} editDocument={(document) => {
@@ -545,7 +552,7 @@ export function FmgSystem() {
       </main>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {accessibleNavItems.filter((item) => ["dashboard", "invoice", "quotation", "employees", "attendance"].includes(item.id)).slice(0, 5).map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => chooseView(item.id)}><Icon size={19} /><span>{item.label.replace("New ", "")}</span></button>; })}
+        {accessibleNavItems.filter((item) => ["dashboard", "invoice", "quotation", "employees", "attendance", "requests"].includes(item.id)).slice(0, 5).map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => chooseView(item.id)}><Icon size={19} /><span>{item.label.replace("New ", "")}</span></button>; })}
       </nav>
       {toast && <div className="toast"><Check size={17} /><span>{toast}</span></div>}
     </div>

@@ -5,6 +5,7 @@ export const ACCESS_PERMISSIONS = [
   { key: "clients", label: "Clients", description: "Create, edit, and remove client records." },
   { key: "employees", label: "Employees", description: "Employee profiles, salaries, commissions, and deductions." },
   { key: "attendance", label: "Attendance & payroll", description: "Biometric imports, attendance reviews, payroll, and Excel exports." },
+  { key: "requests", label: "Employee Requests", description: "Submit leave, early-leave excuse, and work-mission requests or review assigned requests." },
   { key: "categories", label: "Categories", description: "Service categories, prefixes, counters, and document footers." },
   { key: "all_data", label: "All Data", description: "Document archive, statuses, downloads, and deletion." },
   { key: "settings", label: "Settings", description: "Agency defaults and the user's own login credentials." },
@@ -21,6 +22,7 @@ export const OPERATION_MANAGER_PERMISSIONS: AccessPermission[] = [
   "clients",
   "categories",
   "all_data",
+  "requests",
 ];
 
 const permissionSet = new Set<string>(ALL_ACCESS_PERMISSIONS);

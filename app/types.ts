@@ -142,6 +142,7 @@ export type AttendanceRecord = {
   lateMinutes: number;
   penaltyMinutes: number;
   overtimeMinutes: number;
+  missionOvertimeMinutes: number;
   lateDeduction: number;
   overtimePay: number;
   fridayPay: number;
@@ -191,6 +192,7 @@ export type PayrollSummary = {
   lateDays: number;
   lateMinutes: number;
   overtimeMinutes: number;
+  missionOvertimeMinutes: number;
 };
 
 export type HrState = {
@@ -211,8 +213,56 @@ export type ManagedUser = {
   isAdmin: boolean;
   active: boolean;
   permissions: AccessPermission[];
+  employeeId: number | null;
+  employeeName: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type EmployeeRequestType = "leave" | "early_leave" | "mission";
+export type EmployeeRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
+export type EmployeeLeaveKind = "vacation" | "sick_leave" | "urgent_leave" | "normal_leave";
+
+export type EmployeeRequest = {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  employeeTitle: string;
+  requesterUserId: number;
+  requesterName: string;
+  type: EmployeeRequestType;
+  leaveKind: EmployeeLeaveKind;
+  dateFrom: string;
+  dateTo: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  details: string;
+  status: EmployeeRequestStatus;
+  assignedReviewerId: number | null;
+  assignedReviewerName: string;
+  reviewerNote: string;
+  reviewedByUserId: number | null;
+  reviewedByName: string;
+  reviewedAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RequestReviewer = {
+  id: number;
+  displayName: string;
+  roleLabel: string;
+};
+
+export type RequestsState = {
+  requests: EmployeeRequest[];
+  reviewers: RequestReviewer[];
+  employeeId: number | null;
+  employeeName: string;
+  isAdmin: boolean;
+  userId: number;
+  pendingCount: number;
 };
 
 export type DocumentDraft = {

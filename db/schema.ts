@@ -90,10 +90,14 @@ export const authUsers = sqliteTable("auth_users", {
   isAdmin: integer("is_admin").notNull().default(0),
   active: integer("active").notNull().default(1),
   permissionsJson: text("permissions_json").notNull().default("[]"),
+  employeeId: integer("employee_id"),
   createdBy: integer("created_by"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-}, (table) => [index("idx_auth_users_active").on(table.active)]);
+}, (table) => [
+  index("idx_auth_users_active").on(table.active),
+  uniqueIndex("idx_auth_users_employee_id").on(table.employeeId).where(sql`${table.employeeId} IS NOT NULL`),
+]);
 
 export const authUserSessions = sqliteTable("auth_user_sessions", {
   tokenHash: text("token_hash").primaryKey(),
@@ -188,3 +192,28 @@ export const payrollAdjustments = sqliteTable("payroll_adjustments", {
   notes: text("notes").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("idx_adjustments_month_employee").on(table.periodMonth, table.employeeId)]);
+
+export const employeeRequests = sqliteTable("employee_requests", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  employeeId: integer("employee_id").notNull().references(() => employees.id),
+  requesterUserId: integer("requester_user_id").notNull().references(() => authUsers.id),
+  type: text("type", { enum: ["leave", "early_leave", "mission"] }).notNull(),
+  leaveKind: text("leave_kind", { enum: ["vacation", "sick_leave", "urgent_leave", "normal_leave"] }).notNull().default("vacation"),
+  dateFrom: text("date_from").notNull(),
+  dateTo: text("date_to").notNull(),
+  startTime: text("start_time").notNull().default(""),
+  endTime: text("end_time").notNull().default(""),
+  durationMinutes: integer("duration_minutes").notNull().default(0),
+  details: text("details").notNull(),
+  status: text("status", { enum: ["pending", "approved", "rejected", "cancelled"] }).notNull().default("pending"),
+  assignedReviewerId: integer("assigned_reviewer_id").references(() => authUsers.id, { onDelete: "set null" }),
+  reviewerNote: text("reviewer_note").notNull().default(""),
+  reviewedByUserId: integer("reviewed_by_user_id").references(() => authUsers.id, { onDelete: "set null" }),
+  reviewedAt: text("reviewed_at").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("idx_employee_requests_employee").on(table.employeeId, table.createdAt),
+  index("idx_employee_requests_status").on(table.status, table.createdAt),
+  index("idx_employee_requests_reviewer").on(table.assignedReviewerId, table.status),
+]);

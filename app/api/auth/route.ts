@@ -47,6 +47,7 @@ function sessionPayload(session: AuthSession) {
     roleLabel: session.roleLabel,
     isAdmin: session.isAdmin,
     permissions: session.permissions,
+    employeeId: session.employeeId,
   };
 }
 
@@ -91,6 +92,7 @@ export async function POST(request: Request) {
         roleLabel: "Administrator",
         isAdmin: true,
         permissions: ALL_ACCESS_PERMISSIONS,
+        employeeId: null,
       }), { status: 201, headers: { "set-cookie": cookie } });
     }
 
@@ -110,8 +112,8 @@ export async function POST(request: Request) {
       await clearLoginAttempts(attemptKey);
       const cookie = await createSession(request, credential.id);
       const session = await db.prepare(`SELECT id AS userId, username, display_name AS displayName, role_label AS roleLabel,
-          is_admin AS isAdmin, permissions_json AS permissionsJson FROM auth_users WHERE id = ?`)
-        .bind(credential.id).first<{ userId: number; username: string; displayName: string; roleLabel: string; isAdmin: number; permissionsJson: string }>();
+          is_admin AS isAdmin, permissions_json AS permissionsJson, employee_id AS employeeId FROM auth_users WHERE id = ?`)
+        .bind(credential.id).first<{ userId: number; username: string; displayName: string; roleLabel: string; isAdmin: number; permissionsJson: string; employeeId: number | null }>();
       const authenticated: AuthSession = {
         userId: credential.id,
         username: credential.username,
@@ -119,6 +121,7 @@ export async function POST(request: Request) {
         roleLabel: session?.roleLabel ?? "Team Member",
         isAdmin: Number(session?.isAdmin) === 1,
         permissions: Number(session?.isAdmin) === 1 ? ALL_ACCESS_PERMISSIONS : parsePermissions(session?.permissionsJson ?? "[]"),
+        employeeId: session?.employeeId === null || session?.employeeId === undefined ? null : Number(session.employeeId),
       };
       return Response.json(sessionPayload(authenticated), { headers: { "set-cookie": cookie } });
     }

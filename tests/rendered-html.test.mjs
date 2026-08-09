@@ -18,12 +18,14 @@ test("builds the FMG production entrypoint", async () => {
 });
 
 test("ships the complete product, protected access, HR payroll, and Vercel storage adapters", async () => {
-  const [component, accessComponent, hrComponent, api, usersApi, hrApi, hrImportApi, hrExportApi, hrExport, pdfApi, authApi, authServer, permissions, database, vercel, migration, authMigration, hrMigration, multiUserMigration] = await Promise.all([
+  const [component, accessComponent, requestsComponent, hrComponent, api, usersApi, requestsApi, hrApi, hrImportApi, hrExportApi, hrExport, pdfApi, authApi, authServer, permissions, database, vercel, migration, authMigration, hrMigration, multiUserMigration, requestsMigration] = await Promise.all([
     readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
     readFile(new URL("app/components/AccessPanel.tsx", root), "utf8"),
+    readFile(new URL("app/components/RequestsPanel.tsx", root), "utf8"),
     readFile(new URL("app/components/HrPanels.tsx", root), "utf8"),
     readFile(new URL("app/api/state/route.ts", root), "utf8"),
     readFile(new URL("app/api/users/route.ts", root), "utf8"),
+    readFile(new URL("app/api/requests/route.ts", root), "utf8"),
     readFile(new URL("app/api/hr/route.ts", root), "utf8"),
     readFile(new URL("app/api/hr/import/route.ts", root), "utf8"),
     readFile(new URL("app/api/hr/export/route.ts", root), "utf8"),
@@ -38,8 +40,9 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
     readFile(new URL("drizzle/0001_gifted_hobgoblin.sql", root), "utf8"),
     readFile(new URL("drizzle/0002_yielding_sally_floyd.sql", root), "utf8"),
     readFile(new URL("drizzle/0003_cheerful_hedge_knight.sql", root), "utf8"),
+    readFile(new URL("drizzle/0004_amusing_boomerang.sql", root), "utf8"),
   ]);
-  for (const expected of ["New Invoice", "New Quotation", "Clients", "Employees", "Attendance", "Categories", "All Data", "Settings"]) {
+  for (const expected of ["New Invoice", "New Quotation", "Clients", "Employees", "Attendance", "Employee Requests", "Categories", "All Data", "Settings"]) {
     assert.match(component, new RegExp(expected));
   }
   for (const expected of ["Import biometric Excel", "Payroll", "Policy settings", "Download full Excel", "Monthly commission"]) {
@@ -71,6 +74,13 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(usersApi, /requireAdmin/);
   assert.match(usersApi, /permissions_json/);
   assert.match(accessComponent, /Operation Manager preset/);
+  assert.match(accessComponent, /Linked employee/);
+  assert.match(requestsComponent, /Leave request/);
+  assert.match(requestsComponent, /Early-leave excuse/);
+  assert.match(requestsComponent, /Work mission/);
+  assert.match(requestsApi, /approvalStatements/);
+  assert.match(requestsApi, /assigned_reviewer_id/);
+  assert.match(requestsApi, /duration_minutes/);
   assert.match(permissions, /OPERATION_MANAGER_PERMISSIONS/);
   assert.doesNotMatch(permissions.match(/OPERATION_MANAGER_PERMISSIONS[\s\S]*?\];/)?.[0] ?? "", /"employees"|"attendance"/);
   assert.match(api, /@vercel\/blob/);
@@ -88,6 +98,8 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(hrMigration, /CREATE TABLE `payroll_adjustments`/);
   assert.match(multiUserMigration, /CREATE TABLE `auth_users`/);
   assert.match(multiUserMigration, /CREATE TABLE `auth_user_sessions`/);
+  assert.match(requestsMigration, /CREATE TABLE `employee_requests`/);
+  assert.match(requestsMigration, /ALTER TABLE `auth_users` ADD `employee_id`/);
 });
 
 test("migrates the existing administrator and active session into multi-user auth", async () => {
@@ -115,5 +127,26 @@ test("migrates the existing administrator and active session into multi-user aut
   assert.deepEqual(admin.rows[0], { username: "admin", isAdmin: 1 });
   assert.deepEqual(session.rows[0], { userId: 1 });
   assert.equal(legacySessions.rows[0].count, 0);
+  db.close();
+});
+
+test("adds employee request routing and the employee-account link to an existing database", async () => {
+  const db = createClient({ url: "file::memory:" });
+  await db.executeMultiple(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE employees (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+    CREATE TABLE auth_users (id INTEGER PRIMARY KEY, username TEXT NOT NULL);
+    INSERT INTO employees (id, name) VALUES (1, 'Employee');
+    INSERT INTO auth_users (id, username) VALUES (1, 'admin'), (2, 'employee');
+  `);
+  const migration = await readFile(new URL("drizzle/0004_amusing_boomerang.sql", root), "utf8");
+  await db.executeMultiple(migration);
+  await db.execute({ sql: `INSERT INTO employee_requests
+    (employee_id, requester_user_id, type, leave_kind, date_from, date_to, start_time, end_time, duration_minutes, details)
+    VALUES (?, ?, 'mission', 'normal_leave', '2026-08-10', '2026-08-10', '18:00', '20:00', 120, 'Client mission')`, args: [1, 2] });
+  const request = await db.execute("SELECT type, duration_minutes AS durationMinutes, status FROM employee_requests");
+  assert.deepEqual(request.rows[0], { type: "mission", durationMinutes: 120, status: "pending" });
+  const columns = await db.execute("PRAGMA table_info(auth_users)");
+  assert.ok(columns.rows.some((column) => column.name === "employee_id"));
   db.close();
 });
