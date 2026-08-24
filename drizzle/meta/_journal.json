@@ -36,6 +36,48 @@
       "when": 1786270054195,
       "tag": "0004_amusing_boomerang",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786283630376,
+      "tag": "0005_dizzy_veda",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786293070649,
+      "tag": "0006_swift_morph",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1786354483464,
+      "tag": "0007_melted_metal_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786359818773,
+      "tag": "0008_hesitant_jack_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1786362081902,
+      "tag": "0009_futuristic_frank_castle",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1786970542599,
+      "tag": "0010_polite_hydra",
+      "breakpoints": true
     }
   ]
 }

@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const authError = await requireAnyPermission(request, ["dashboard", "invoices", "quotations", "all_data"]);
+    const authError = await requireAnyPermission(request, ["invoices", "quotations", "all_data"]);
     if (authError) return authError;
     const session = await getSession(request);
     if (!session) return new Response("Authentication required", { status: 401 });
@@ -19,8 +19,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       .bind(numericId).first<{ type: "invoice" | "quotation"; generatedCode: string; pdfKey: string }>();
     if (!row) return new Response("Document not found", { status: 404 });
     const documentPermission = row.type === "invoice" ? "invoices" : "quotations";
-    if (!canAccess(session.permissions, "dashboard", session.isAdmin)
-      && !canAccess(session.permissions, "all_data", session.isAdmin)
+    if (!canAccess(session.permissions, "all_data", session.isAdmin)
       && !canAccess(session.permissions, documentPermission, session.isAdmin)) {
       return new Response("Access denied", { status: 403 });
     }

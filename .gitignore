@@ -40,11 +40,13 @@ next-env.d.ts
 /dist/
 /.wrangler/
 /outputs/
+/output/
 /work/
 /tmp/
 /tools/inspect_templates.py
 /tsconfig.tsbuildinfo
 /fmg-local.db*
+/.tmp-policy-*
 /.agents/
 /skills-lock.json
 

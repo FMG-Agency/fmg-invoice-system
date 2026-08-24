@@ -1,0 +1,3475 @@
+{
+  "importKey": "fmg-clients-2026-v1",
+  "sourceFile": "FMG Clients 2026.xlsx",
+  "profiles": [
+    {
+      "name": "Alyans",
+      "aliases": [
+        "Alyans",
+        "ALYANS"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "active",
+      "activity": "Gold",
+      "startDate": "",
+      "paymentSchedule": "25th of every month",
+      "monthlyFee": 40000,
+      "contractStatus": "not_set",
+      "relationshipStage": "old"
+    },
+    {
+      "name": "Ashraf Mounir",
+      "aliases": [
+        "Ashraf Mounir",
+        "ASHRAF MOUNIR"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "shoot",
+      "activity": "Gold",
+      "startDate": "",
+      "paymentSchedule": "Shoot",
+      "monthlyFee": 0,
+      "contractStatus": "not_set",
+      "relationshipStage": ""
+    },
+    {
+      "name": "Ayman Riad",
+      "aliases": [
+        "Ayman Riad"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "prospect",
+      "activity": "Gold",
+      "startDate": "",
+      "paymentSchedule": "",
+      "monthlyFee": 0,
+      "contractStatus": "not_set",
+      "relationshipStage": ""
+    },
+    {
+      "name": "Dai Jew",
+      "aliases": [
+        "Dai Jew",
+        "DAI JEW"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "active",
+      "activity": "Gold",
+      "startDate": "2026-03-25",
+      "paymentSchedule": "25th of every month",
+      "monthlyFee": 50000,
+      "contractStatus": "not_set",
+      "relationshipStage": "new"
+    },
+    {
+      "name": "El Medany Jew",
+      "aliases": [
+        "El Medany Jew",
+        "EL MEDANY JEW"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "active",
+      "activity": "Gold",
+      "startDate": "2025-11-10",
+      "paymentSchedule": "10th of every month",
+      "monthlyFee": 40000,
+      "contractStatus": "not_set",
+      "relationshipStage": "old"
+    },
+    {
+      "name": "Élevé",
+      "aliases": [
+        "Élevé",
+        "ÉLEVÉ"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "active",
+      "activity": "Gold",
+      "startDate": "",
+      "paymentSchedule": "25th of every month",
+      "monthlyFee": 40000,
+      "contractStatus": "not_set",
+      "relationshipStage": "old"
+    },
+    {
+      "name": "FT Gold",
+      "aliases": [
+        "FT Gold",
+        "FT GOLD"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "active",
+      "activity": "Gold ( Factory )",
+      "startDate": "",
+      "paymentSchedule": "25th of every month",
+      "monthlyFee": 40000,
+      "contractStatus": "not_set",
+      "relationshipStage": "old"
+    },
+    {
+      "name": "Glo Jew",
+      "aliases": [
+        "Glo Jew",
+        "GLO JEW"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "inactive",
+      "activity": "Gold",
+      "startDate": "2026-06-15",
+      "paymentSchedule": "",
+      "monthlyFee": 0,
+      "contractStatus": "not_set",
+      "relationshipStage": ""
+    },
+    {
+      "name": "Hardware House",
+      "aliases": [
+        "Hardware House"
+      ],
+      "agency": "digital_empire",
+      "lifecycleStatus": "prospect",
+      "activity": "System",
+      "startDate": "",
+      "paymentSchedule": "",
+      "monthlyFee": 0,
+      "contractStatus": "not_set",
+      "relationshipStage": ""
+    },
+    {
+      "name": "Hassan Haiba",
+      "aliases": [
+        "Hassan Haiba"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "active",
+      "activity": "Gold",
+      "startDate": "2026-07-01",
+      "paymentSchedule": "1st of every month",
+      "monthlyFee": 50000,
+      "contractStatus": "not_set",
+      "relationshipStage": "new"
+    },
+    {
+      "name": "House Of Adwar",
+      "aliases": [
+        "House Of Adwar",
+        "HOUSE OF ADWAR"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "active",
+      "activity": "Gold",
+      "startDate": "2025-11-10",
+      "paymentSchedule": "10th of every month",
+      "monthlyFee": 30000,
+      "contractStatus": "not_set",
+      "relationshipStage": "old"
+    },
+    {
+      "name": "Le Prince - Shams",
+      "aliases": [
+        "Le Prince - Shams",
+        "Le Prince- Shams"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "active",
+      "activity": "Gold",
+      "startDate": "2026-07-25",
+      "paymentSchedule": "25th of every month",
+      "monthlyFee": 70000,
+      "contractStatus": "not_set",
+      "relationshipStage": "new"
+    },
+    {
+      "name": "Milad Raouf",
+      "aliases": [
+        "Milad Raouf",
+        "MILAD RAOUF"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "active",
+      "activity": "Gold",
+      "startDate": "",
+      "paymentSchedule": "25th of every month",
+      "monthlyFee": 40000,
+      "contractStatus": "not_set",
+      "relationshipStage": "old"
+    },
+    {
+      "name": "Mishka",
+      "aliases": [
+        "Mishka",
+        "MISHKA"
+      ],
+      "agency": "digital_empire",
+      "lifecycleStatus": "inactive",
+      "activity": "Clothes",
+      "startDate": "2025-11-05",
+      "paymentSchedule": "",
+      "monthlyFee": 0,
+      "contractStatus": "not_set",
+      "relationshipStage": ""
+    },
+    {
+      "name": "Nova",
+      "aliases": [
+        "Nova",
+        "NOVA"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "active",
+      "activity": "Gold",
+      "startDate": "",
+      "paymentSchedule": "15th of every month",
+      "monthlyFee": 40000,
+      "contractStatus": "not_set",
+      "relationshipStage": "old"
+    },
+    {
+      "name": "Pearlé",
+      "aliases": [
+        "Pearlé"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "shoot",
+      "activity": "Gold",
+      "startDate": "",
+      "paymentSchedule": "",
+      "monthlyFee": 0,
+      "contractStatus": "not_set",
+      "relationshipStage": ""
+    },
+    {
+      "name": "Prima",
+      "aliases": [
+        "Prima"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "active",
+      "activity": "Gold",
+      "startDate": "2026-06-25",
+      "paymentSchedule": "",
+      "monthlyFee": 50000,
+      "contractStatus": "not_set",
+      "relationshipStage": "new"
+    },
+    {
+      "name": "Safaa Jew",
+      "aliases": [
+        "Safaa Jew",
+        "SAFAA JEW"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "inactive",
+      "activity": "Gold",
+      "startDate": "2025-12-15",
+      "paymentSchedule": "",
+      "monthlyFee": 0,
+      "contractStatus": "not_set",
+      "relationshipStage": ""
+    },
+    {
+      "name": "San Michael",
+      "aliases": [
+        "San Michael"
+      ],
+      "agency": "digital_empire",
+      "lifecycleStatus": "active",
+      "activity": "Bathroom & Kitchen Fixtures",
+      "startDate": "2026-07-25",
+      "paymentSchedule": "",
+      "monthlyFee": 30000,
+      "contractStatus": "not_set",
+      "relationshipStage": ""
+    },
+    {
+      "name": "Silver Gate",
+      "aliases": [
+        "Silver Gate",
+        "SILVER GATE"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "shoot",
+      "activity": "Silver",
+      "startDate": "",
+      "paymentSchedule": "Shoot",
+      "monthlyFee": 0,
+      "contractStatus": "not_set",
+      "relationshipStage": ""
+    },
+    {
+      "name": "Smile",
+      "aliases": [
+        "Smile",
+        "SMILE"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "inactive",
+      "activity": "Gold",
+      "startDate": "",
+      "paymentSchedule": "",
+      "monthlyFee": 0,
+      "contractStatus": "not_set",
+      "relationshipStage": ""
+    },
+    {
+      "name": "Time Zone",
+      "aliases": [
+        "Time Zone",
+        "TIME ZONE"
+      ],
+      "agency": "fmg",
+      "lifecycleStatus": "inactive",
+      "activity": "Watches",
+      "startDate": "2026-03-25",
+      "paymentSchedule": "",
+      "monthlyFee": 0,
+      "contractStatus": "not_set",
+      "relationshipStage": ""
+    }
+  ],
+  "retainers": [
+    {
+      "clientName": "Alyans",
+      "year": 2026,
+      "month": 1,
+      "amount": 35000,
+      "status": "planned"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "year": 2026,
+      "month": 1,
+      "amount": 25000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Élevé",
+      "year": 2026,
+      "month": 1,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "FT Gold",
+      "year": 2026,
+      "month": 1,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "year": 2026,
+      "month": 1,
+      "amount": 25000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "year": 2026,
+      "month": 1,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Mishka",
+      "year": 2026,
+      "month": 1,
+      "amount": 20000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Nova",
+      "year": 2026,
+      "month": 1,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Safaa Jew",
+      "year": 2026,
+      "month": 1,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Smile",
+      "year": 2026,
+      "month": 1,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Alyans",
+      "year": 2026,
+      "month": 2,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "year": 2026,
+      "month": 2,
+      "amount": 25000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Élevé",
+      "year": 2026,
+      "month": 2,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "FT Gold",
+      "year": 2026,
+      "month": 2,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "year": 2026,
+      "month": 2,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "year": 2026,
+      "month": 2,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Nova",
+      "year": 2026,
+      "month": 2,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Safaa Jew",
+      "year": 2026,
+      "month": 2,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Alyans",
+      "year": 2026,
+      "month": 3,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "year": 2026,
+      "month": 3,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Élevé",
+      "year": 2026,
+      "month": 3,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "FT Gold",
+      "year": 2026,
+      "month": 3,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "year": 2026,
+      "month": 3,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "year": 2026,
+      "month": 3,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Nova",
+      "year": 2026,
+      "month": 3,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Safaa Jew",
+      "year": 2026,
+      "month": 3,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Alyans",
+      "year": 2026,
+      "month": 4,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Dai Jew",
+      "year": 2026,
+      "month": 4,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "year": 2026,
+      "month": 4,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Élevé",
+      "year": 2026,
+      "month": 4,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "FT Gold",
+      "year": 2026,
+      "month": 4,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "year": 2026,
+      "month": 4,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "year": 2026,
+      "month": 4,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Nova",
+      "year": 2026,
+      "month": 4,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Safaa Jew",
+      "year": 2026,
+      "month": 4,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Smile",
+      "year": 2026,
+      "month": 4,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Time Zone",
+      "year": 2026,
+      "month": 4,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Alyans",
+      "year": 2026,
+      "month": 5,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Dai Jew",
+      "year": 2026,
+      "month": 5,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "year": 2026,
+      "month": 5,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Élevé",
+      "year": 2026,
+      "month": 5,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "FT Gold",
+      "year": 2026,
+      "month": 5,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "year": 2026,
+      "month": 5,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "year": 2026,
+      "month": 5,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Nova",
+      "year": 2026,
+      "month": 5,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Time Zone",
+      "year": 2026,
+      "month": 5,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Alyans",
+      "year": 2026,
+      "month": 6,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Dai Jew",
+      "year": 2026,
+      "month": 6,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "year": 2026,
+      "month": 6,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Élevé",
+      "year": 2026,
+      "month": 6,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "FT Gold",
+      "year": 2026,
+      "month": 6,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Glo Jew",
+      "year": 2026,
+      "month": 6,
+      "amount": 60000,
+      "status": "planned"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "year": 2026,
+      "month": 6,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "year": 2026,
+      "month": 6,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Nova",
+      "year": 2026,
+      "month": 6,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Time Zone",
+      "year": 2026,
+      "month": 6,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Alyans",
+      "year": 2026,
+      "month": 7,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Dai Jew",
+      "year": 2026,
+      "month": 7,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "year": 2026,
+      "month": 7,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Élevé",
+      "year": 2026,
+      "month": 7,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "FT Gold",
+      "year": 2026,
+      "month": 7,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Hassan Haiba",
+      "year": 2026,
+      "month": 7,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "year": 2026,
+      "month": 7,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Le Prince - Shams",
+      "year": 2026,
+      "month": 7,
+      "amount": 70000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "year": 2026,
+      "month": 7,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Nova",
+      "year": 2026,
+      "month": 7,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Prima",
+      "year": 2026,
+      "month": 7,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Alyans",
+      "year": 2026,
+      "month": 8,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Dai Jew",
+      "year": 2026,
+      "month": 8,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "year": 2026,
+      "month": 8,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Élevé",
+      "year": 2026,
+      "month": 8,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "FT Gold",
+      "year": 2026,
+      "month": 8,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Hassan Haiba",
+      "year": 2026,
+      "month": 8,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "year": 2026,
+      "month": 8,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Le Prince - Shams",
+      "year": 2026,
+      "month": 8,
+      "amount": 70000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "year": 2026,
+      "month": 8,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Nova",
+      "year": 2026,
+      "month": 8,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Prima",
+      "year": 2026,
+      "month": 8,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Alyans",
+      "year": 2026,
+      "month": 9,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Dai Jew",
+      "year": 2026,
+      "month": 9,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "year": 2026,
+      "month": 9,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Élevé",
+      "year": 2026,
+      "month": 9,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "FT Gold",
+      "year": 2026,
+      "month": 9,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Hassan Haiba",
+      "year": 2026,
+      "month": 9,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "year": 2026,
+      "month": 9,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Le Prince - Shams",
+      "year": 2026,
+      "month": 9,
+      "amount": 70000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "year": 2026,
+      "month": 9,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Nova",
+      "year": 2026,
+      "month": 9,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Prima",
+      "year": 2026,
+      "month": 9,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Alyans",
+      "year": 2026,
+      "month": 10,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Dai Jew",
+      "year": 2026,
+      "month": 10,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "year": 2026,
+      "month": 10,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Élevé",
+      "year": 2026,
+      "month": 10,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "year": 2026,
+      "month": 10,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "year": 2026,
+      "month": 10,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Nova",
+      "year": 2026,
+      "month": 10,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Time Zone",
+      "year": 2026,
+      "month": 10,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Alyans",
+      "year": 2026,
+      "month": 11,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Dai Jew",
+      "year": 2026,
+      "month": 11,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "year": 2026,
+      "month": 11,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Élevé",
+      "year": 2026,
+      "month": 11,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "year": 2026,
+      "month": 11,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "year": 2026,
+      "month": 11,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Nova",
+      "year": 2026,
+      "month": 11,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Time Zone",
+      "year": 2026,
+      "month": 11,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Alyans",
+      "year": 2026,
+      "month": 12,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Dai Jew",
+      "year": 2026,
+      "month": 12,
+      "amount": 50000,
+      "status": "planned"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "year": 2026,
+      "month": 12,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Élevé",
+      "year": 2026,
+      "month": 12,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "year": 2026,
+      "month": 12,
+      "amount": 30000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "year": 2026,
+      "month": 12,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Nova",
+      "year": 2026,
+      "month": 12,
+      "amount": 40000,
+      "status": "planned"
+    },
+    {
+      "clientName": "Time Zone",
+      "year": 2026,
+      "month": 12,
+      "amount": 50000,
+      "status": "planned"
+    }
+  ],
+  "ledger": [
+    {
+      "clientName": "Safaa Jew",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-01-01",
+      "category": "Monthly",
+      "description": "Monthly Payment - January/2026",
+      "sourceKey": "fmg-clients-2026:safaa-jew:5:debit"
+    },
+    {
+      "clientName": "San Michael",
+      "type": "charge",
+      "amount": 20000,
+      "transactionDate": "2026-01-01",
+      "category": "Shoot",
+      "description": "Imported account charge",
+      "sourceKey": "fmg-clients-2026:san-michael:5:debit"
+    },
+    {
+      "clientName": "San Michael",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-01-01",
+      "category": "Monthly",
+      "description": "Imported account charge",
+      "sourceKey": "fmg-clients-2026:san-michael:6:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "charge",
+      "amount": 12000,
+      "transactionDate": "2026-01-03",
+      "category": "Shoot",
+      "description": "Stories Shoot",
+      "sourceKey": "fmg-clients-2026:milad-raouf:5:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "payment",
+      "amount": 18000,
+      "transactionDate": "2026-01-03",
+      "category": "Paid",
+      "description": "Stories Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:milad-raouf:6:credit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "payment",
+      "amount": 35000,
+      "transactionDate": "2026-01-04",
+      "category": "Paid",
+      "description": "Monthly Payment - January/2026 ( Paid )",
+      "sourceKey": "fmg-clients-2026:alyans:5:credit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-01-04",
+      "category": "Paid",
+      "description": "Monthly Payment - January/2026 ( Paid )",
+      "sourceKey": "fmg-clients-2026:ft-gold:5:credit"
+    },
+    {
+      "clientName": "Safaa Jew",
+      "type": "payment",
+      "amount": 35000,
+      "transactionDate": "2026-01-04",
+      "category": "Paid",
+      "description": "Outstanding shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:safaa-jew:6:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 11500,
+      "transactionDate": "2026-01-05",
+      "category": "Prints",
+      "description": "( Note: 100 A5, 100 A6 ) + Print 100 Invoice Books",
+      "sourceKey": "fmg-clients-2026:eleve:5:debit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 25000,
+      "transactionDate": "2026-01-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - January/2026",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:5:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "charge",
+      "amount": 25000,
+      "transactionDate": "2026-01-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - January/2026",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:5:debit"
+    },
+    {
+      "clientName": "Mishka",
+      "type": "charge",
+      "amount": 20000,
+      "transactionDate": "2026-01-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - January/2026",
+      "sourceKey": "fmg-clients-2026:mishka:5:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "payment",
+      "amount": 25000,
+      "transactionDate": "2026-01-11",
+      "category": "Paid",
+      "description": "Monthly Payment - January/2026 ( Paid )",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:6:credit"
+    },
+    {
+      "clientName": "Mishka",
+      "type": "payment",
+      "amount": 20000,
+      "transactionDate": "2026-01-12",
+      "category": "Paid",
+      "description": "Monthly Payment - January/2026 ( Paid )",
+      "sourceKey": "fmg-clients-2026:mishka:6:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "payment",
+      "amount": 25000,
+      "transactionDate": "2026-01-13",
+      "category": "Paid",
+      "description": "Monthly Payment - January/2026 ( Paid )",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:6:credit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "charge",
+      "amount": 15000,
+      "transactionDate": "2026-01-15",
+      "category": "Shoot",
+      "description": "Stories Shoot",
+      "sourceKey": "fmg-clients-2026:alyans:6:debit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-01-15",
+      "category": "Monthly",
+      "description": "Monthly Payment - January/2026",
+      "sourceKey": "fmg-clients-2026:nova:5:debit"
+    },
+    {
+      "clientName": "Smile",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-01-15",
+      "category": "Monthly",
+      "description": "Monthly Payment - January/2026",
+      "sourceKey": "fmg-clients-2026:smile:5:debit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "payment",
+      "amount": 15000,
+      "transactionDate": "2026-01-17",
+      "category": "Paid",
+      "description": "Stories Shoot 15/1 ( Paid )",
+      "sourceKey": "fmg-clients-2026:alyans:7:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 15000,
+      "transactionDate": "2026-01-17",
+      "category": "Shoot",
+      "description": "Stories Shoot",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:7:debit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "payment",
+      "amount": 15000,
+      "transactionDate": "2026-01-17",
+      "category": "Paid",
+      "description": "Stories Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:8:credit"
+    },
+    {
+      "clientName": "Ashraf Mounir",
+      "type": "charge",
+      "amount": 35000,
+      "transactionDate": "2026-01-20",
+      "category": "",
+      "description": "Shoot",
+      "sourceKey": "fmg-clients-2026:ashraf-mounir:5:debit"
+    },
+    {
+      "clientName": "Ashraf Mounir",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-01-20",
+      "category": "",
+      "description": "Part of the Shoot fees — remaining 5,000",
+      "sourceKey": "fmg-clients-2026:ashraf-mounir:6:credit"
+    },
+    {
+      "clientName": "Smile",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-01-20",
+      "category": "Paid",
+      "description": "Monthly Payment - January/2026 ( Paid )",
+      "sourceKey": "fmg-clients-2026:smile:6:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 11500,
+      "transactionDate": "2026-01-23",
+      "category": "Paid",
+      "description": "( Note: 100 A5, 100 A6 ) + Print 100 Invoice Books ( Paid )",
+      "sourceKey": "fmg-clients-2026:eleve:6:credit"
+    },
+    {
+      "clientName": "Ashraf Mounir",
+      "type": "payment",
+      "amount": 5000,
+      "transactionDate": "2026-01-24",
+      "category": "",
+      "description": "Outstanding shoot fees",
+      "sourceKey": "fmg-clients-2026:ashraf-mounir:7:credit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-01-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - February",
+      "sourceKey": "fmg-clients-2026:alyans:8:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-01-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - February",
+      "sourceKey": "fmg-clients-2026:eleve:7:debit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-01-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - February",
+      "sourceKey": "fmg-clients-2026:ft-gold:6:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-01-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - February",
+      "sourceKey": "fmg-clients-2026:milad-raouf:7:debit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-01-25",
+      "category": "Paid",
+      "description": "Monthly Payment - January/2026 ( Paid )",
+      "sourceKey": "fmg-clients-2026:nova:6:credit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-01-27",
+      "category": "Paid",
+      "description": "Monthly Payment - February ( Paid )",
+      "sourceKey": "fmg-clients-2026:milad-raouf:8:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-01-28",
+      "category": "Paid",
+      "description": "Shoot Deposit",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:9:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-01-28",
+      "category": "Paid",
+      "description": "Monthly Payment - February ( Paid )",
+      "sourceKey": "fmg-clients-2026:eleve:8:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 500,
+      "transactionDate": "2026-01-29",
+      "category": "Prints",
+      "description": "2 Cards Boxes",
+      "sourceKey": "fmg-clients-2026:eleve:9:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 500,
+      "transactionDate": "2026-01-29",
+      "category": "Paid",
+      "description": "2 Cards Boxes ( Paid )",
+      "sourceKey": "fmg-clients-2026:eleve:10:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 55000,
+      "transactionDate": "2026-01-31",
+      "category": "Shoot",
+      "description": "G1 + Photography Shoot",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:10:debit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "payment",
+      "amount": 25000,
+      "transactionDate": "2026-01-31",
+      "category": "Paid",
+      "description": "Balance Payment - G1 + Photography Shoot",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:11:credit"
+    },
+    {
+      "clientName": "Safaa Jew",
+      "type": "payment",
+      "amount": 20000,
+      "transactionDate": "2026-01-31",
+      "category": "Paid",
+      "description": "Imported payment",
+      "sourceKey": "fmg-clients-2026:safaa-jew:7:credit"
+    },
+    {
+      "clientName": "Safaa Jew",
+      "type": "charge",
+      "amount": 3200,
+      "transactionDate": "2026-01-31",
+      "category": "Prints",
+      "description": "Imported account charge",
+      "sourceKey": "fmg-clients-2026:safaa-jew:8:debit"
+    },
+    {
+      "clientName": "Safaa Jew",
+      "type": "payment",
+      "amount": 3200,
+      "transactionDate": "2026-01-31",
+      "category": "Paid",
+      "description": "Imported payment",
+      "sourceKey": "fmg-clients-2026:safaa-jew:9:credit"
+    },
+    {
+      "clientName": "Safaa Jew",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-02-01",
+      "category": "Monthly",
+      "description": "Monthly Payment - February",
+      "sourceKey": "fmg-clients-2026:safaa-jew:10:debit"
+    },
+    {
+      "clientName": "Safaa Jew",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-02-02",
+      "category": "Paid",
+      "description": "Monthly Payment - February ( Paid )",
+      "sourceKey": "fmg-clients-2026:safaa-jew:11:credit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-02-03",
+      "category": "Paid",
+      "description": "Monthly Payment - February ( Paid )",
+      "sourceKey": "fmg-clients-2026:alyans:9:credit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-02-03",
+      "category": "Paid",
+      "description": "Monthly Payment - February ( Paid )",
+      "sourceKey": "fmg-clients-2026:ft-gold:7:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 25000,
+      "transactionDate": "2026-02-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - February",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:12:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-02-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - February",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:7:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-02-10",
+      "category": "Paid",
+      "description": "Monthly Payment - February ( Paid )",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:8:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "payment",
+      "amount": 25000,
+      "transactionDate": "2026-02-12",
+      "category": "Paid",
+      "description": "Monthly Payment - February ( Paid )",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:13:credit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-02-15",
+      "category": "Monthly",
+      "description": "Monthly Payment - February",
+      "sourceKey": "fmg-clients-2026:nova:7:debit"
+    },
+    {
+      "clientName": "Smile",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-02-15",
+      "category": "Monthly",
+      "description": "Monthly Payment - February",
+      "sourceKey": "fmg-clients-2026:smile:7:debit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-02-16",
+      "category": "Paid",
+      "description": "Monthly Payment - February ( Paid )",
+      "sourceKey": "fmg-clients-2026:nova:8:credit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "payment",
+      "amount": 20000,
+      "transactionDate": "2026-02-23",
+      "category": "Paid",
+      "description": "Shoot Deposit",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:9:credit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-02-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - March",
+      "sourceKey": "fmg-clients-2026:alyans:10:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-02-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - March",
+      "sourceKey": "fmg-clients-2026:eleve:11:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-02-25",
+      "category": "Paid",
+      "description": "Monthly Payment - March ( Paid )",
+      "sourceKey": "fmg-clients-2026:eleve:12:credit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-02-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - March",
+      "sourceKey": "fmg-clients-2026:ft-gold:8:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-02-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - March",
+      "sourceKey": "fmg-clients-2026:milad-raouf:9:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-02-25",
+      "category": "Paid",
+      "description": "Monthly Payment - March ( Paid )",
+      "sourceKey": "fmg-clients-2026:milad-raouf:10:credit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "charge",
+      "amount": 12000,
+      "transactionDate": "2026-02-26",
+      "category": "Shoot",
+      "description": "Stories Shoot",
+      "sourceKey": "fmg-clients-2026:alyans:11:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-02-28",
+      "category": "Shoot",
+      "description": "Product Videography + Photography",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:10:debit"
+    },
+    {
+      "clientName": "Safaa Jew",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-03-01",
+      "category": "Monthly",
+      "description": "Monthly Payment - March",
+      "sourceKey": "fmg-clients-2026:safaa-jew:12:debit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "charge",
+      "amount": 2100,
+      "transactionDate": "2026-03-02",
+      "category": "Prints",
+      "description": "Roll-Up Banner",
+      "sourceKey": "fmg-clients-2026:nova:9:debit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-03-03",
+      "category": "Paid",
+      "description": "Monthly Payment - March ( Paid )",
+      "sourceKey": "fmg-clients-2026:alyans:12:credit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-03-03",
+      "category": "Paid",
+      "description": "Monthly Payment - March ( Paid )",
+      "sourceKey": "fmg-clients-2026:ft-gold:9:credit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "payment",
+      "amount": 2100,
+      "transactionDate": "2026-03-03",
+      "category": "Paid",
+      "description": "Roll-Up Banner ( Paid )",
+      "sourceKey": "fmg-clients-2026:nova:10:credit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "payment",
+      "amount": 20000,
+      "transactionDate": "2026-03-04",
+      "category": "Paid",
+      "description": "Outstanding shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:11:credit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-03-05",
+      "category": "Shoot",
+      "description": "Product Photography Shoot",
+      "sourceKey": "fmg-clients-2026:milad-raouf:11:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-03-08",
+      "category": "Paid",
+      "description": "Product Photography Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:milad-raouf:12:credit"
+    },
+    {
+      "clientName": "Safaa Jew",
+      "type": "payment",
+      "amount": 20000,
+      "transactionDate": "2026-03-08",
+      "category": "Paid",
+      "description": "Monthly Payment - March ( Paid )",
+      "sourceKey": "fmg-clients-2026:safaa-jew:13:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 12000,
+      "transactionDate": "2026-03-09",
+      "category": "Shoot",
+      "description": "Élevé Shop Stories Shoot",
+      "sourceKey": "fmg-clients-2026:eleve:13:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 1000,
+      "transactionDate": "2026-03-09",
+      "category": "Suplies",
+      "description": "2 Élevé Trophies",
+      "sourceKey": "fmg-clients-2026:eleve:14:debit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "payment",
+      "amount": 12000,
+      "transactionDate": "2026-03-10",
+      "category": "Paid",
+      "description": "Stories Shoot 26/2 ( Paid )",
+      "sourceKey": "fmg-clients-2026:alyans:13:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-03-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - March",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:14:debit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 15000,
+      "transactionDate": "2026-03-10",
+      "category": "Shoot",
+      "description": "Stories Shoot",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:15:debit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-03-10",
+      "category": "Paid",
+      "description": "Monthly Payment - March ( Paid )",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:16:credit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-03-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - March",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:12:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-03-10",
+      "category": "Paid",
+      "description": "Monthly Payment - March ( Paid )",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:13:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 12000,
+      "transactionDate": "2026-03-12",
+      "category": "Paid",
+      "description": "Élevé Shop Stories Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:eleve:15:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 25000,
+      "transactionDate": "2026-03-12",
+      "category": "Shoot",
+      "description": "Product Photography Shoot",
+      "sourceKey": "fmg-clients-2026:eleve:16:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 26000,
+      "transactionDate": "2026-03-14",
+      "category": "Paid",
+      "description": "Product Photography + 2 Élevé Trophies ( Paid )",
+      "sourceKey": "fmg-clients-2026:eleve:17:credit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "charge",
+      "amount": 15000,
+      "transactionDate": "2026-03-14",
+      "category": "Shoot",
+      "description": "Stories Shoot",
+      "sourceKey": "fmg-clients-2026:nova:11:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 10000,
+      "transactionDate": "2026-03-15",
+      "category": "Magazine",
+      "description": "Magazine Post",
+      "sourceKey": "fmg-clients-2026:eleve:18:debit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-03-15",
+      "category": "Monthly",
+      "description": "Monthly Payment - March",
+      "sourceKey": "fmg-clients-2026:nova:12:debit"
+    },
+    {
+      "clientName": "Smile",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-03-15",
+      "category": "Monthly",
+      "description": "Monthly Payment - March",
+      "sourceKey": "fmg-clients-2026:smile:8:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 10000,
+      "transactionDate": "2026-03-16",
+      "category": "Paid",
+      "description": "Magazine Post ( Paid )",
+      "sourceKey": "fmg-clients-2026:eleve:19:credit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-03-16",
+      "category": "Paid",
+      "description": "Monthly Payment - March ( Paid )",
+      "sourceKey": "fmg-clients-2026:nova:13:credit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "payment",
+      "amount": 15000,
+      "transactionDate": "2026-03-16",
+      "category": "Paid",
+      "description": "Stories Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:nova:14:credit"
+    },
+    {
+      "clientName": "Silver Gate",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-03-18",
+      "category": "",
+      "description": "Shoot Deposit",
+      "sourceKey": "fmg-clients-2026:silver-gate:5:credit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-03-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - April",
+      "sourceKey": "fmg-clients-2026:alyans:14:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "charge",
+      "amount": 50000,
+      "transactionDate": "2026-03-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - April",
+      "sourceKey": "fmg-clients-2026:dai-jew:5:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "payment",
+      "amount": 50000,
+      "transactionDate": "2026-03-25",
+      "category": "Paid",
+      "description": "Monthly Payment - April ( Paid )",
+      "sourceKey": "fmg-clients-2026:dai-jew:6:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "payment",
+      "amount": 15000,
+      "transactionDate": "2026-03-25",
+      "category": "Paid",
+      "description": "Stories Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:17:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-03-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - April",
+      "sourceKey": "fmg-clients-2026:eleve:20:debit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-03-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - April",
+      "sourceKey": "fmg-clients-2026:ft-gold:10:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-03-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - April",
+      "sourceKey": "fmg-clients-2026:milad-raouf:13:debit"
+    },
+    {
+      "clientName": "Time Zone",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-03-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - April",
+      "sourceKey": "fmg-clients-2026:time-zone:5:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "charge",
+      "amount": 15000,
+      "transactionDate": "2026-03-26",
+      "category": "Shoot",
+      "description": "Stories",
+      "sourceKey": "fmg-clients-2026:dai-jew:7:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-03-26",
+      "category": "Paid",
+      "description": "Monthly Payment - April ( Paid )",
+      "sourceKey": "fmg-clients-2026:eleve:21:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-03-29",
+      "category": "Shoot",
+      "description": "Stories Shoot + Product Photos",
+      "sourceKey": "fmg-clients-2026:eleve:22:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-03-29",
+      "category": "Paid",
+      "description": "Monthly Payment - April ( Paid )",
+      "sourceKey": "fmg-clients-2026:milad-raouf:14:credit"
+    },
+    {
+      "clientName": "Pearlé",
+      "type": "payment",
+      "amount": 15000,
+      "transactionDate": "2026-03-29",
+      "category": "",
+      "description": "Imported payment",
+      "sourceKey": "fmg-clients-2026:pearle:6:credit"
+    },
+    {
+      "clientName": "Silver Gate",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-03-29",
+      "category": "",
+      "description": "Shoot Deposit",
+      "sourceKey": "fmg-clients-2026:silver-gate:6:credit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "charge",
+      "amount": 55000,
+      "transactionDate": "2026-03-31",
+      "category": "Shoot",
+      "description": "Stories + Product ( Video - Photo )",
+      "sourceKey": "fmg-clients-2026:dai-jew:8:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "payment",
+      "amount": 70000,
+      "transactionDate": "2026-03-31",
+      "category": "Paid",
+      "description": "26,31 / 03 Shoots ( Paid )",
+      "sourceKey": "fmg-clients-2026:dai-jew:9:credit"
+    },
+    {
+      "clientName": "Safaa Jew",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-04-01",
+      "category": "Monthly",
+      "description": "Monthly Payment - April",
+      "sourceKey": "fmg-clients-2026:safaa-jew:14:debit"
+    },
+    {
+      "clientName": "Time Zone",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-04-01",
+      "category": "Paid",
+      "description": "Monthly Payment - April ( Paid )",
+      "sourceKey": "fmg-clients-2026:time-zone:6:credit"
+    },
+    {
+      "clientName": "Silver Gate",
+      "type": "charge",
+      "amount": 142000,
+      "transactionDate": "2026-04-03",
+      "category": "",
+      "description": "Shoot",
+      "sourceKey": "fmg-clients-2026:silver-gate:7:debit"
+    },
+    {
+      "clientName": "Silver Gate",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-04-03",
+      "category": "",
+      "description": "Part of the Shoot fees — remaining 5,000",
+      "sourceKey": "fmg-clients-2026:silver-gate:8:credit"
+    },
+    {
+      "clientName": "Safaa Jew",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-04-04",
+      "category": "Paid",
+      "description": "Monthly Payment - April ( Paid )",
+      "sourceKey": "fmg-clients-2026:safaa-jew:15:credit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-04-06",
+      "category": "Paid",
+      "description": "Monthly Payment - April ( Paid )",
+      "sourceKey": "fmg-clients-2026:alyans:15:credit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-04-06",
+      "category": "Paid",
+      "description": "Monthly Payment - April ( Paid )",
+      "sourceKey": "fmg-clients-2026:ft-gold:11:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-04-07",
+      "category": "Paid",
+      "description": "Stories Shoot + Product Photos ( Paid)",
+      "sourceKey": "fmg-clients-2026:eleve:23:credit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "charge",
+      "amount": 20000,
+      "transactionDate": "2026-04-08",
+      "category": "Shoot",
+      "description": "Stories Shoot",
+      "sourceKey": "fmg-clients-2026:alyans:16:debit"
+    },
+    {
+      "clientName": "Time Zone",
+      "type": "charge",
+      "amount": 20000,
+      "transactionDate": "2026-04-08",
+      "category": "Shoot",
+      "description": "Stories",
+      "sourceKey": "fmg-clients-2026:time-zone:7:debit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-04-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - April",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:18:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-04-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - April",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:14:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-04-14",
+      "category": "Paid",
+      "description": "Monthly Payment - April ( Paid )",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:15:credit"
+    },
+    {
+      "clientName": "Time Zone",
+      "type": "payment",
+      "amount": 20000,
+      "transactionDate": "2026-04-14",
+      "category": "Paid",
+      "description": "Stories Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:time-zone:8:credit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-04-15",
+      "category": "Monthly",
+      "description": "Monthly Payment - April",
+      "sourceKey": "fmg-clients-2026:nova:15:debit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-04-15",
+      "category": "Paid",
+      "description": "Monthly Payment - April ( Paid )",
+      "sourceKey": "fmg-clients-2026:nova:16:credit"
+    },
+    {
+      "clientName": "Smile",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-04-15",
+      "category": "Monthly",
+      "description": "Monthly Payment - April",
+      "sourceKey": "fmg-clients-2026:smile:9:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 10000,
+      "transactionDate": "2026-04-16",
+      "category": "Prints",
+      "description": "2 Banners + Transportation & Installation",
+      "sourceKey": "fmg-clients-2026:eleve:24:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 20000,
+      "transactionDate": "2026-04-16",
+      "category": "",
+      "description": "Booth Rent - District 5 Mall",
+      "sourceKey": "fmg-clients-2026:eleve:25:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 20000,
+      "transactionDate": "2026-04-17",
+      "category": "Paid",
+      "description": "Booth Rent - District 5 Mall ( Paid )",
+      "sourceKey": "fmg-clients-2026:eleve:26:credit"
+    },
+    {
+      "clientName": "Smile",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-04-18",
+      "category": "Paid",
+      "description": "Monthly Payment - April ( Paid )",
+      "sourceKey": "fmg-clients-2026:smile:10:credit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "charge",
+      "amount": 15000,
+      "transactionDate": "2026-04-20",
+      "category": "Shoot",
+      "description": "Stories",
+      "sourceKey": "fmg-clients-2026:dai-jew:10:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 12000,
+      "transactionDate": "2026-04-21",
+      "category": "Shoot",
+      "description": "Élevé Shop Stories Shoot",
+      "sourceKey": "fmg-clients-2026:eleve:27:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "payment",
+      "amount": 15000,
+      "transactionDate": "2026-04-22",
+      "category": "Paid",
+      "description": "Stories ( Paid )",
+      "sourceKey": "fmg-clients-2026:dai-jew:11:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-04-22",
+      "category": "Paid",
+      "description": "Monthly Payment - April ( Paid )",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:19:credit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-04-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - May",
+      "sourceKey": "fmg-clients-2026:alyans:17:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "charge",
+      "amount": 50000,
+      "transactionDate": "2026-04-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - May",
+      "sourceKey": "fmg-clients-2026:dai-jew:12:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-04-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - May",
+      "sourceKey": "fmg-clients-2026:eleve:28:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-04-25",
+      "category": "Paid",
+      "description": "Monthly Payment - May ( Paid )",
+      "sourceKey": "fmg-clients-2026:eleve:29:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 22000,
+      "transactionDate": "2026-04-25",
+      "category": "Paid",
+      "description": "Élevé Shop Stories Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:eleve:30:credit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-04-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - May",
+      "sourceKey": "fmg-clients-2026:ft-gold:12:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-04-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - May",
+      "sourceKey": "fmg-clients-2026:milad-raouf:15:debit"
+    },
+    {
+      "clientName": "Time Zone",
+      "type": "charge",
+      "amount": 50000,
+      "transactionDate": "2026-04-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - May",
+      "sourceKey": "fmg-clients-2026:time-zone:9:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "payment",
+      "amount": 50000,
+      "transactionDate": "2026-04-27",
+      "category": "Paid",
+      "description": "Monthly Payment - May ( Paid )",
+      "sourceKey": "fmg-clients-2026:dai-jew:13:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 15000,
+      "transactionDate": "2026-04-27",
+      "category": "Shoot",
+      "description": "Stories Shoot",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:20:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-04-27",
+      "category": "Paid",
+      "description": "Monthly Payment - May ( Paid )",
+      "sourceKey": "fmg-clients-2026:milad-raouf:16:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "payment",
+      "amount": 15000,
+      "transactionDate": "2026-04-30",
+      "category": "Paid",
+      "description": "Stories Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:21:credit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-05-04",
+      "category": "Paid",
+      "description": "Monthly Payment - May ( Paid )",
+      "sourceKey": "fmg-clients-2026:alyans:18:credit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "payment",
+      "amount": 20000,
+      "transactionDate": "2026-05-04",
+      "category": "Paid",
+      "description": "Stories Shoot 8/4 ( Paid )",
+      "sourceKey": "fmg-clients-2026:alyans:19:credit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-05-04",
+      "category": "Paid",
+      "description": "Monthly Payment - May ( Paid )",
+      "sourceKey": "fmg-clients-2026:ft-gold:13:credit"
+    },
+    {
+      "clientName": "Time Zone",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-05-04",
+      "category": "Paid",
+      "description": "Monthly Payment - May ( Paid ) Remain 20,000",
+      "sourceKey": "fmg-clients-2026:time-zone:10:credit"
+    },
+    {
+      "clientName": "Time Zone",
+      "type": "payment",
+      "amount": 20000,
+      "transactionDate": "2026-05-06",
+      "category": "Paid",
+      "description": "Monthly Payment - May ( Paid ) Outstanding Payment",
+      "sourceKey": "fmg-clients-2026:time-zone:11:credit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "charge",
+      "amount": 20000,
+      "transactionDate": "2026-05-09",
+      "category": "Shoot",
+      "description": "UGC",
+      "sourceKey": "fmg-clients-2026:dai-jew:14:debit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-05-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - May",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:22:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-05-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - May",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:17:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-05-10",
+      "category": "Paid",
+      "description": "Monthly Payment - May ( Paid )",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:18:credit"
+    },
+    {
+      "clientName": "Silver Gate",
+      "type": "payment",
+      "amount": 32000,
+      "transactionDate": "2026-05-10",
+      "category": "",
+      "description": "Outstanding shoot fees",
+      "sourceKey": "fmg-clients-2026:silver-gate:9:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 15000,
+      "transactionDate": "2026-05-12",
+      "category": "Shoot",
+      "description": "Élevé Office Stories Shoot",
+      "sourceKey": "fmg-clients-2026:eleve:31:debit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-05-15",
+      "category": "Monthly",
+      "description": "Monthly Payment - May",
+      "sourceKey": "fmg-clients-2026:nova:17:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "charge",
+      "amount": 15000,
+      "transactionDate": "2026-05-16",
+      "category": "Shoot",
+      "description": "Stories",
+      "sourceKey": "fmg-clients-2026:dai-jew:15:debit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-05-16",
+      "category": "Paid",
+      "description": "Monthly Payment - May ( Paid )",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:23:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 15000,
+      "transactionDate": "2026-05-16",
+      "category": "Paid",
+      "description": "Élevé Office Stories Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:eleve:32:credit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "payment",
+      "amount": 20000,
+      "transactionDate": "2026-05-16",
+      "category": "Paid",
+      "description": "G1 Bundle Shoot Deposit",
+      "sourceKey": "fmg-clients-2026:milad-raouf:17:credit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "payment",
+      "amount": 35000,
+      "transactionDate": "2026-05-18",
+      "category": "Paid",
+      "description": "UGC & Stories Shoots ( Paid )",
+      "sourceKey": "fmg-clients-2026:dai-jew:16:credit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "charge",
+      "amount": 52000,
+      "transactionDate": "2026-05-19",
+      "category": "Shoot",
+      "description": "G1 Bundle",
+      "sourceKey": "fmg-clients-2026:milad-raouf:18:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "payment",
+      "amount": 32000,
+      "transactionDate": "2026-05-19",
+      "category": "Paid",
+      "description": "G1 Bundle Outstanding Payment ( Paid )",
+      "sourceKey": "fmg-clients-2026:milad-raouf:19:credit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-05-19",
+      "category": "Paid",
+      "description": "Monthly Payment - May ( Paid )",
+      "sourceKey": "fmg-clients-2026:nova:18:credit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "charge",
+      "amount": 20000,
+      "transactionDate": "2026-05-23",
+      "category": "Shoot",
+      "description": "Stories ( Video & Photo )",
+      "sourceKey": "fmg-clients-2026:nova:19:debit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-05-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - June",
+      "sourceKey": "fmg-clients-2026:alyans:20:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "charge",
+      "amount": 50000,
+      "transactionDate": "2026-05-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - June",
+      "sourceKey": "fmg-clients-2026:dai-jew:17:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "payment",
+      "amount": 50000,
+      "transactionDate": "2026-05-25",
+      "category": "Paid",
+      "description": "Monthly Payment - June ( Paid )",
+      "sourceKey": "fmg-clients-2026:dai-jew:18:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-05-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - June",
+      "sourceKey": "fmg-clients-2026:eleve:33:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-05-25",
+      "category": "Paid",
+      "description": "Monthly Payment - June ( Paid )",
+      "sourceKey": "fmg-clients-2026:eleve:34:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 12000,
+      "transactionDate": "2026-05-25",
+      "category": "Bulk SMS",
+      "description": "Bulk SMS ( 10,000 message )",
+      "sourceKey": "fmg-clients-2026:eleve:35:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 12000,
+      "transactionDate": "2026-05-25",
+      "category": "Paid",
+      "description": "Bulk SMS ( 10,000 message ) Paid",
+      "sourceKey": "fmg-clients-2026:eleve:36:credit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-05-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - June",
+      "sourceKey": "fmg-clients-2026:ft-gold:14:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-05-25",
+      "category": "monthly",
+      "description": "Monthly Payment - June",
+      "sourceKey": "fmg-clients-2026:milad-raouf:20:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-05-25",
+      "category": "Paid",
+      "description": "Monthly Payment - June ( Paid )",
+      "sourceKey": "fmg-clients-2026:milad-raouf:21:credit"
+    },
+    {
+      "clientName": "Time Zone",
+      "type": "charge",
+      "amount": 50000,
+      "transactionDate": "2026-05-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - June",
+      "sourceKey": "fmg-clients-2026:time-zone:13:debit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-06-07",
+      "category": "Paid",
+      "description": "Monthly Payment - June ( Paid )",
+      "sourceKey": "fmg-clients-2026:alyans:21:credit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-06-07",
+      "category": "Paid",
+      "description": "Monthly Payment - June ( Paid )",
+      "sourceKey": "fmg-clients-2026:ft-gold:15:credit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "payment",
+      "amount": 20000,
+      "transactionDate": "2026-06-07",
+      "category": "Paid",
+      "description": "Stories ( Video & Photo ) Paid",
+      "sourceKey": "fmg-clients-2026:nova:20:credit"
+    },
+    {
+      "clientName": "Time Zone",
+      "type": "payment",
+      "amount": 50000,
+      "transactionDate": "2026-06-07",
+      "category": "Paid",
+      "description": "Monthly Payment - June ( Paid )",
+      "sourceKey": "fmg-clients-2026:time-zone:14:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-06-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - June",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:24:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-06-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - June",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:19:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-06-10",
+      "category": "Paid",
+      "description": "Monthly Payment - June ( Paid )",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:20:credit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-06-11",
+      "category": "Shoot",
+      "description": "Product photography With Model",
+      "sourceKey": "fmg-clients-2026:dai-jew:19:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-06-13",
+      "category": "Paid",
+      "description": "Product photography With Model ( Paid )",
+      "sourceKey": "fmg-clients-2026:dai-jew:20:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-06-13",
+      "category": "Paid",
+      "description": "Monthly Payment - June ( Paid )",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:25:credit"
+    },
+    {
+      "clientName": "Glo Jew",
+      "type": "charge",
+      "amount": 60000,
+      "transactionDate": "2026-06-15",
+      "category": "Monthly",
+      "description": "Monthly Payment - June",
+      "sourceKey": "fmg-clients-2026:glo-jew:5:debit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-06-15",
+      "category": "Monthly",
+      "description": "Monthly Payment - June",
+      "sourceKey": "fmg-clients-2026:nova:21:debit"
+    },
+    {
+      "clientName": "Glo Jew",
+      "type": "payment",
+      "amount": 60000,
+      "transactionDate": "2026-06-16",
+      "category": "Paid",
+      "description": "Monthly Payment - June ( Paid )",
+      "sourceKey": "fmg-clients-2026:glo-jew:6:credit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-06-16",
+      "category": "Paid",
+      "description": "Monthly Payment - June ( Paid )",
+      "sourceKey": "fmg-clients-2026:nova:22:credit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "charge",
+      "amount": 35000,
+      "transactionDate": "2026-06-23",
+      "category": "Shoot",
+      "description": "Product photography With Model",
+      "sourceKey": "fmg-clients-2026:dai-jew:21:debit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 20000,
+      "transactionDate": "2026-06-23",
+      "category": "Shoot",
+      "description": "Stories Shoot",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:26:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "payment",
+      "amount": 35000,
+      "transactionDate": "2026-06-24",
+      "category": "Paid",
+      "description": "Product photography With Model ( Paid )",
+      "sourceKey": "fmg-clients-2026:dai-jew:22:credit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "payment",
+      "amount": 50000,
+      "transactionDate": "2026-06-24",
+      "category": "Monthly",
+      "description": "Monthly Payment - July ( Paid )",
+      "sourceKey": "fmg-clients-2026:dai-jew:23:credit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-06-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - July",
+      "sourceKey": "fmg-clients-2026:alyans:22:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "charge",
+      "amount": 50000,
+      "transactionDate": "2026-06-25",
+      "category": "Paid",
+      "description": "Monthly Payment - July",
+      "sourceKey": "fmg-clients-2026:dai-jew:24:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-06-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - July",
+      "sourceKey": "fmg-clients-2026:eleve:39:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-06-25",
+      "category": "Paid",
+      "description": "Monthly Payment - July ( Paid)",
+      "sourceKey": "fmg-clients-2026:eleve:40:credit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-06-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - July",
+      "sourceKey": "fmg-clients-2026:ft-gold:16:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-06-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - July",
+      "sourceKey": "fmg-clients-2026:milad-raouf:22:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-06-25",
+      "category": "Paid",
+      "description": "Monthly Payment - July ( Paid )",
+      "sourceKey": "fmg-clients-2026:milad-raouf:23:credit"
+    },
+    {
+      "clientName": "Prima",
+      "type": "charge",
+      "amount": 50000,
+      "transactionDate": "2026-06-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - July",
+      "sourceKey": "fmg-clients-2026:prima:5:debit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "payment",
+      "amount": 15000,
+      "transactionDate": "2026-06-27",
+      "category": "Paid",
+      "description": "Partial Payment - Stories Shoot",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:27:credit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "charge",
+      "amount": 10000,
+      "transactionDate": "2026-06-29",
+      "category": "Shoot",
+      "description": "Stories Shoot",
+      "sourceKey": "fmg-clients-2026:ft-gold:17:debit"
+    },
+    {
+      "clientName": "Hassan Haiba",
+      "type": "charge",
+      "amount": 50000,
+      "transactionDate": "2026-07-01",
+      "category": "Monthly",
+      "description": "Monthly Payment - July",
+      "sourceKey": "fmg-clients-2026:hassan-haiba:5:debit"
+    },
+    {
+      "clientName": "Prima",
+      "type": "charge",
+      "amount": 15000,
+      "transactionDate": "2026-07-01",
+      "category": "Shoot",
+      "description": "Stories",
+      "sourceKey": "fmg-clients-2026:prima:6:debit"
+    },
+    {
+      "clientName": "Prima",
+      "type": "payment",
+      "amount": 50000,
+      "transactionDate": "2026-07-01",
+      "category": "",
+      "description": "Imported payment",
+      "sourceKey": "fmg-clients-2026:prima:7:credit"
+    },
+    {
+      "clientName": "Hassan Haiba",
+      "type": "payment",
+      "amount": 50000,
+      "transactionDate": "2026-07-02",
+      "category": "Paid",
+      "description": "Monthly Payment - July ( Paid )",
+      "sourceKey": "fmg-clients-2026:hassan-haiba:6:credit"
+    },
+    {
+      "clientName": "Hassan Haiba",
+      "type": "payment",
+      "amount": 45000,
+      "transactionDate": "2026-07-02",
+      "category": "Paid",
+      "description": "Advance for Stories & Product Photography",
+      "sourceKey": "fmg-clients-2026:hassan-haiba:7:credit"
+    },
+    {
+      "clientName": "Glo Jew",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-07-04",
+      "category": "Shoot",
+      "description": "Product Shoot",
+      "sourceKey": "fmg-clients-2026:glo-jew:9:debit"
+    },
+    {
+      "clientName": "Hassan Haiba",
+      "type": "charge",
+      "amount": 15000,
+      "transactionDate": "2026-07-04",
+      "category": "Shoot",
+      "description": "Stories",
+      "sourceKey": "fmg-clients-2026:hassan-haiba:8:debit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-07-05",
+      "category": "Paid",
+      "description": "Monthly Payment - July ( Paid )",
+      "sourceKey": "fmg-clients-2026:alyans:23:credit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-07-05",
+      "category": "",
+      "description": "Imported account charge",
+      "sourceKey": "fmg-clients-2026:alyans:25:debit"
+    },
+    {
+      "clientName": "Alyans",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-07-05",
+      "category": "",
+      "description": "Imported payment",
+      "sourceKey": "fmg-clients-2026:alyans:26:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 7000,
+      "transactionDate": "2026-07-05",
+      "category": "Suplies",
+      "description": "25 Box ( Big ) + 45 Box ( Small ) + Printed Logo + Transportation",
+      "sourceKey": "fmg-clients-2026:eleve:41:debit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-07-05",
+      "category": "Paid",
+      "description": "Monthly Payment - July ( Paid )",
+      "sourceKey": "fmg-clients-2026:ft-gold:18:credit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "payment",
+      "amount": 10000,
+      "transactionDate": "2026-07-05",
+      "category": "Paid",
+      "description": "Stories Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:ft-gold:19:credit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-07-05",
+      "category": "",
+      "description": "Imported account charge",
+      "sourceKey": "fmg-clients-2026:ft-gold:20:debit"
+    },
+    {
+      "clientName": "FT Gold",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-07-05",
+      "category": "",
+      "description": "Imported payment",
+      "sourceKey": "fmg-clients-2026:ft-gold:21:credit"
+    },
+    {
+      "clientName": "Hassan Haiba",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-07-06",
+      "category": "Shoot",
+      "description": "Product Photography",
+      "sourceKey": "fmg-clients-2026:hassan-haiba:9:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 28500,
+      "transactionDate": "2026-07-08",
+      "category": "Shoot",
+      "description": "Videography Photography Shoot",
+      "sourceKey": "fmg-clients-2026:eleve:42:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 35500,
+      "transactionDate": "2026-07-09",
+      "category": "Paid",
+      "description": "Boxes & Videography Photography Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:eleve:43:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 10000,
+      "transactionDate": "2026-07-09",
+      "category": "Shoot",
+      "description": "Élevé Shop Stories Shoot ( The Model: Eleve Paid  )",
+      "sourceKey": "fmg-clients-2026:eleve:44:debit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-07-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - July",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:28:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-07-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - July",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:21:debit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-07-11",
+      "category": "Paid",
+      "description": "Monthly Payment - July ( Paid )",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:29:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "payment",
+      "amount": 5000,
+      "transactionDate": "2026-07-11",
+      "category": "Paid",
+      "description": "Balance Payment - Stories Shoot",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:30:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 4000,
+      "transactionDate": "2026-07-11",
+      "category": "Shoot",
+      "description": "UGC",
+      "sourceKey": "fmg-clients-2026:eleve:45:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-07-11",
+      "category": "Paid",
+      "description": "Monthly Payment - July ( Paid )",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:22:credit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "charge",
+      "amount": 20000,
+      "transactionDate": "2026-07-11",
+      "category": "",
+      "description": "Imported account charge",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:23:debit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "payment",
+      "amount": 20000,
+      "transactionDate": "2026-07-11",
+      "category": "",
+      "description": "Imported payment",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:24:credit"
+    },
+    {
+      "clientName": "House Of Adwar",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-07-11",
+      "category": "",
+      "description": "Imported account charge",
+      "sourceKey": "fmg-clients-2026:house-of-adwar:25:debit"
+    },
+    {
+      "clientName": "Glo Jew",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-07-12",
+      "category": "Shoot",
+      "description": "Product Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:glo-jew:10:credit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "charge",
+      "amount": 12000,
+      "transactionDate": "2026-07-14",
+      "category": "Shoot",
+      "description": "Stories Shoot",
+      "sourceKey": "fmg-clients-2026:milad-raouf:24:debit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-07-15",
+      "category": "Monthly",
+      "description": "Monthly Payment - July",
+      "sourceKey": "fmg-clients-2026:nova:23:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "payment",
+      "amount": 12000,
+      "transactionDate": "2026-07-16",
+      "category": "Paid",
+      "description": "Stories Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:milad-raouf:25:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 14000,
+      "transactionDate": "2026-07-18",
+      "category": "Paid",
+      "description": "Stories Shoot + UGC ( Paid)",
+      "sourceKey": "fmg-clients-2026:eleve:46:credit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "payment",
+      "amount": 50000,
+      "transactionDate": "2026-07-19",
+      "category": "Paid",
+      "description": "Balance Payment",
+      "sourceKey": "fmg-clients-2026:eleve:47:credit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-07-20",
+      "category": "Paid",
+      "description": "Monthly Payment - July ( Paid )",
+      "sourceKey": "fmg-clients-2026:nova:24:credit"
+    },
+    {
+      "clientName": "Le Prince - Shams",
+      "type": "payment",
+      "amount": 70000,
+      "transactionDate": "2026-07-23",
+      "category": "Paid",
+      "description": "Le Prince-Shams Monthly Payment - August (Paid )",
+      "sourceKey": "fmg-clients-2026:le-prince-shams:5:credit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "charge",
+      "amount": 60000,
+      "transactionDate": "2026-07-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - August",
+      "sourceKey": "fmg-clients-2026:dai-jew:26:debit"
+    },
+    {
+      "clientName": "Élevé",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-07-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - August",
+      "sourceKey": "fmg-clients-2026:eleve:48:debit"
+    },
+    {
+      "clientName": "Le Prince - Shams",
+      "type": "charge",
+      "amount": 35000,
+      "transactionDate": "2026-07-25",
+      "category": "Monthly",
+      "description": "Le Prince Monthly Payment - August",
+      "sourceKey": "fmg-clients-2026:le-prince-shams:6:debit"
+    },
+    {
+      "clientName": "Le Prince - Shams",
+      "type": "charge",
+      "amount": 35000,
+      "transactionDate": "2026-07-25",
+      "category": "Monthly",
+      "description": "Shams Monthly Payment - August",
+      "sourceKey": "fmg-clients-2026:le-prince-shams:7:debit"
+    },
+    {
+      "clientName": "Le Prince - Shams",
+      "type": "charge",
+      "amount": 45000,
+      "transactionDate": "2026-07-25",
+      "category": "Shoot",
+      "description": "Stories & Product Shoot",
+      "sourceKey": "fmg-clients-2026:le-prince-shams:8:debit"
+    },
+    {
+      "clientName": "Le Prince - Shams",
+      "type": "payment",
+      "amount": 45000,
+      "transactionDate": "2026-07-25",
+      "category": "Paid",
+      "description": "Stories & Product Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:le-prince-shams:9:credit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-07-25",
+      "category": "Monthly",
+      "description": "Monthly Payment - August",
+      "sourceKey": "fmg-clients-2026:milad-raouf:26:debit"
+    },
+    {
+      "clientName": "Milad Raouf",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-07-29",
+      "category": "Paid",
+      "description": "Monthly Payment - August ( Paid )",
+      "sourceKey": "fmg-clients-2026:milad-raouf:27:credit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "charge",
+      "amount": 2500,
+      "transactionDate": "2026-07-29",
+      "category": "Prints",
+      "description": "Invoices Print",
+      "sourceKey": "fmg-clients-2026:nova:25:debit"
+    },
+    {
+      "clientName": "Nova",
+      "type": "payment",
+      "amount": 2500,
+      "transactionDate": "2026-07-29",
+      "category": "Paid",
+      "description": "Invoices Print ( Paid )",
+      "sourceKey": "fmg-clients-2026:nova:26:credit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "payment",
+      "amount": 50000,
+      "transactionDate": "2026-07-30",
+      "category": "Paid",
+      "description": "Monthly Payment - August ( Paid )",
+      "sourceKey": "fmg-clients-2026:dai-jew:27:credit"
+    },
+    {
+      "clientName": "Hassan Haiba",
+      "type": "charge",
+      "amount": 50000,
+      "transactionDate": "2026-08-01",
+      "category": "Monthly",
+      "description": "Monthly Payment - August",
+      "sourceKey": "fmg-clients-2026:hassan-haiba:10:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-08-03",
+      "category": "",
+      "description": "Shoot",
+      "sourceKey": "fmg-clients-2026:dai-jew:28:debit"
+    },
+    {
+      "clientName": "Pearlé",
+      "type": "charge",
+      "amount": 30000,
+      "transactionDate": "2026-08-04",
+      "category": "",
+      "description": "Imported account charge",
+      "sourceKey": "fmg-clients-2026:pearle:5:debit"
+    },
+    {
+      "clientName": "Dai Jew",
+      "type": "payment",
+      "amount": 40000,
+      "transactionDate": "2026-08-05",
+      "category": "",
+      "description": "Imported payment",
+      "sourceKey": "fmg-clients-2026:dai-jew:29:credit"
+    },
+    {
+      "clientName": "Le Prince - Shams",
+      "type": "charge",
+      "amount": 15000,
+      "transactionDate": "2026-08-05",
+      "category": "Shoot",
+      "description": "Stories Shoot",
+      "sourceKey": "fmg-clients-2026:le-prince-shams:10:debit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 850,
+      "transactionDate": "2026-08-06",
+      "category": "Prints",
+      "description": "Cards",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:31:debit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 15000,
+      "transactionDate": "2026-08-09",
+      "category": "Shoot",
+      "description": "Stories Shoot",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:32:debit"
+    },
+    {
+      "clientName": "Hassan Haiba",
+      "type": "payment",
+      "amount": 50000,
+      "transactionDate": "2026-08-09",
+      "category": "Paid",
+      "description": "Monthly Payment - August ( Paid )",
+      "sourceKey": "fmg-clients-2026:hassan-haiba:11:credit"
+    },
+    {
+      "clientName": "Hassan Haiba",
+      "type": "payment",
+      "amount": 30000,
+      "transactionDate": "2026-08-09",
+      "category": "",
+      "description": "Advance for 2 Stories Shoots",
+      "sourceKey": "fmg-clients-2026:hassan-haiba:12:credit"
+    },
+    {
+      "clientName": "Hassan Haiba",
+      "type": "charge",
+      "amount": 15000,
+      "transactionDate": "2026-08-09",
+      "category": "",
+      "description": "Imported account charge",
+      "sourceKey": "fmg-clients-2026:hassan-haiba:13:debit"
+    },
+    {
+      "clientName": "Le Prince - Shams",
+      "type": "payment",
+      "amount": 15000,
+      "transactionDate": "2026-08-09",
+      "category": "Paid",
+      "description": "Stories Shoot ( Paid )",
+      "sourceKey": "fmg-clients-2026:le-prince-shams:11:credit"
+    },
+    {
+      "clientName": "El Medany Jew",
+      "type": "charge",
+      "amount": 40000,
+      "transactionDate": "2026-08-10",
+      "category": "Monthly",
+      "description": "Monthly Payment - August",
+      "sourceKey": "fmg-clients-2026:el-medany-jew:33:debit"
+    }
+  ]
+}
+

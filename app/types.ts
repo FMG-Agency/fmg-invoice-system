@@ -1,5 +1,7 @@
 import type { AccessPermission } from "./lib/permissions";
 
+export type CompanyKey = "fmg" | "digital_empire";
+
 export type Client = {
   id: number;
   name: string;
@@ -9,6 +11,14 @@ export type Client = {
   email: string;
   address: string;
   notes: string;
+  agencyKey: CompanyKey;
+  lifecycleStatus: "active" | "inactive" | "shoot" | "prospect";
+  activity: string;
+  startDate: string;
+  paymentSchedule: string;
+  monthlyFee: number;
+  contractStatus: "contract" | "no_contract" | "not_set";
+  relationshipStage: "new" | "old" | "";
   createdAt: string;
   updatedAt: string;
 };
@@ -31,11 +41,35 @@ export type LineItem = {
   qty: number;
   unit: string;
   unitPrice: number;
+  kind: "package" | "addon" | "custom";
+  catalogId: number | null;
+  includedServices: string[];
+  inputs: string[];
+  outputs: string[];
+  appliesTo: string;
+  bundleTotal: number | null;
+};
+
+export type QuotationCatalogItem = {
+  id: number;
+  kind: "package" | "addon";
+  name: string;
+  price: number;
+  includedServices: string[];
+  inputs: string[];
+  outputs: string[];
+  appliesTo: string;
+  bundleTotal: number | null;
+  active: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type DocumentRecord = {
   id: number;
   type: "invoice" | "quotation";
+  companyKey: CompanyKey;
   generatedCode: string;
   clientId: number;
   categoryId: number;
@@ -84,7 +118,102 @@ export type AppState = {
   clients: Client[];
   categories: Category[];
   documents: DocumentRecord[];
+  quotationCatalog: QuotationCatalogItem[];
   settings: Settings;
+};
+
+export type ClientFinancialTransactionType = "charge" | "payment" | "credit" | "refund";
+
+export type ClientFinancialTransaction = {
+  id: number;
+  clientId: number;
+  documentId: number | null;
+  documentCode: string;
+  type: ClientFinancialTransactionType;
+  amount: number;
+  currency: string;
+  transactionDate: string;
+  paymentMethod: string;
+  reference: string;
+  notes: string;
+  sourceKey: string;
+  createdBy: number | null;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ClientAccountDocument = {
+  id: number;
+  type: "invoice" | "quotation";
+  companyKey: CompanyKey;
+  generatedCode: string;
+  date: string;
+  validUntil: string;
+  project: string;
+  status: string;
+  total: number;
+  currency: string;
+  paid: number;
+  credited: number;
+  refunded: number;
+  remaining: number;
+  inferredPaid: number;
+};
+
+export type ClientAccountCurrencySummary = {
+  currency: string;
+  totalInvoiced: number;
+  totalCharges: number;
+  draftValue: number;
+  totalPaid: number;
+  totalCredited: number;
+  totalRefunded: number;
+  outstanding: number;
+  clientCredit: number;
+};
+
+export type ClientAccountState = {
+  client: Client;
+  invoices: ClientAccountDocument[];
+  quotations: ClientAccountDocument[];
+  transactions: ClientFinancialTransaction[];
+  summaries: ClientAccountCurrencySummary[];
+};
+
+export type ClientMonthlyRetainerStatus = "planned" | "confirmed" | "paused";
+
+export type ClientMonthlyRetainer = {
+  id: number;
+  clientId: number;
+  year: number;
+  month: number;
+  amount: number;
+  status: ClientMonthlyRetainerStatus;
+  notes: string;
+  sourceKey: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ClientFinanceSummary = {
+  clientId: number;
+  totalInvoiced: number;
+  totalCharges: number;
+  totalPaid: number;
+  totalCredited: number;
+  totalRefunded: number;
+  balance: number;
+  plannedYear: number;
+  currentMonthPlan: number;
+};
+
+export type ClientFinanceState = {
+  year: number;
+  clients: Client[];
+  retainers: ClientMonthlyRetainer[];
+  summaries: ClientFinanceSummary[];
+  importedWorkbook: boolean;
 };
 
 export type Employee = {
@@ -107,23 +236,36 @@ export type Employee = {
 
 export type HrPolicy = {
   id: number;
+  policyVersion: number;
   currency: string;
   salaryDivisor: number;
   workdayMinutes: number;
+  workdayStartsAt: string;
   freeArrivalUntil: string;
   minorLateUntil: string;
   quarterDayUntil: string;
+  workdayEndsAt: string;
   overtimeStartsAt: string;
+  overtimeApprovalAfter: string;
   overtimeArrivalCutoff: string;
   minutePenaltyMultiplier: number;
   overtimeMultiplier: number;
+  earlyOvertimeMultiplier: number;
   fridayMultiplier: number;
+  earlyLeaveDayMultiplier: number;
+  unpaidLeaveDayMultiplier: number;
+  urgentLeaveDeadline: string;
+  urgentLeaveYearLimit: number;
+  sickReportAfterDays: number;
+  resortLeaveDays: number;
+  resortNoticeDays: number;
+  normalLeaveNoticeDays: number;
   absenceDeductionEnabled: boolean;
   absenceDayMultiplier: number;
   updatedAt: string;
 };
 
-export type AttendanceStatus = "present" | "incomplete" | "absent" | "friday" | "vacation" | "sick_leave" | "urgent_leave" | "normal_leave" | "assignment";
+export type AttendanceStatus = "present" | "incomplete" | "absent" | "friday" | "vacation" | "occasional_leave" | "resort_leave" | "sick_leave" | "urgent_leave" | "normal_leave" | "assignment";
 
 export type AttendanceRecord = {
   id: number;
@@ -137,13 +279,20 @@ export type AttendanceRecord = {
   punches: string[];
   status: AttendanceStatus;
   lateExcused: boolean;
+  earlyLeaveExcused: boolean;
+  leavePaid: boolean;
   overtimeApproved: boolean;
+  earlyOvertimeApproved: boolean;
   notes: string;
   lateMinutes: number;
   penaltyMinutes: number;
+  earlyLeaveMinutes: number;
   overtimeMinutes: number;
+  earlyOvertimeMinutes: number;
   missionOvertimeMinutes: number;
   lateDeduction: number;
+  earlyLeaveDeduction: number;
+  leaveDeduction: number;
   overtimePay: number;
   fridayPay: number;
   createdAt: string;
@@ -183,6 +332,9 @@ export type PayrollSummary = {
   manualAdditions: number;
   manualDeductions: number;
   lateDeduction: number;
+  earlyLeaveDeduction: number;
+  leaveDeduction: number;
+  attendanceDeduction: number;
   overtimePay: number;
   fridayPay: number;
   netSalary: number;
@@ -190,6 +342,8 @@ export type PayrollSummary = {
   absentDays: number;
   incompleteDays: number;
   lateDays: number;
+  earlyLeaveDays: number;
+  unpaidLeaveDays: number;
   lateMinutes: number;
   overtimeMinutes: number;
   missionOvertimeMinutes: number;
@@ -219,9 +373,9 @@ export type ManagedUser = {
   updatedAt: string;
 };
 
-export type EmployeeRequestType = "leave" | "early_leave" | "mission";
+export type EmployeeRequestType = "leave" | "early_leave" | "mission" | "overtime" | "early_arrival";
 export type EmployeeRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
-export type EmployeeLeaveKind = "vacation" | "sick_leave" | "urgent_leave" | "normal_leave";
+export type EmployeeLeaveKind = "vacation" | "occasional_leave" | "resort_leave" | "sick_leave" | "urgent_leave" | "normal_leave";
 
 export type EmployeeRequest = {
   id: number;
@@ -237,7 +391,11 @@ export type EmployeeRequest = {
   startTime: string;
   endTime: string;
   durationMinutes: number;
+  leavePaid: boolean | null;
   details: string;
+  attachmentName: string;
+  attachmentType: string;
+  hasAttachment: boolean;
   status: EmployeeRequestStatus;
   assignedReviewerId: number | null;
   assignedReviewerName: string;
@@ -258,6 +416,16 @@ export type RequestReviewer = {
 export type RequestsState = {
   requests: EmployeeRequest[];
   reviewers: RequestReviewer[];
+  overtimeStartsAt: string;
+  workdayStartsAt: string;
+  overtimeApprovalAfter: string;
+  earlyOvertimeMultiplier: number;
+  urgentLeaveDeadline: string;
+  urgentLeaveYearLimit: number;
+  sickReportAfterDays: number;
+  resortLeaveDays: number;
+  resortNoticeDays: number;
+  normalLeaveNoticeDays: number;
   employeeId: number | null;
   employeeName: string;
   isAdmin: boolean;
@@ -269,6 +437,7 @@ export type DocumentDraft = {
   id?: number;
   generatedCode?: string;
   type: "invoice" | "quotation";
+  companyKey: CompanyKey;
   clientId: number;
   categoryId: number;
   date: string;

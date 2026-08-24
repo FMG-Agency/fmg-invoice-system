@@ -1,0 +1,1 @@
+ALTER TABLE `documents` ADD `company_key` text DEFAULT 'fmg' NOT NULL;

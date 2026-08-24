@@ -2,7 +2,7 @@ export const ACCESS_PERMISSIONS = [
   { key: "dashboard", label: "Dashboard", description: "Agency overview, activity, and headline totals." },
   { key: "invoices", label: "Invoices", description: "Create and edit invoices." },
   { key: "quotations", label: "Quotations", description: "Create and edit quotations." },
-  { key: "clients", label: "Clients", description: "Create, edit, and remove client records." },
+  { key: "clients", label: "Clients & accounts", description: "Client profiles, invoices, balances, payments, credits, and refunds." },
   { key: "employees", label: "Employees", description: "Employee profiles, salaries, commissions, and deductions." },
   { key: "attendance", label: "Attendance & payroll", description: "Biometric imports, attendance reviews, payroll, and Excel exports." },
   { key: "requests", label: "Employee Requests", description: "Submit leave, early-leave excuse, and work-mission requests or review assigned requests." },

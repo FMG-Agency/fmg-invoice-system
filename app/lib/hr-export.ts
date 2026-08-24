@@ -21,6 +21,8 @@ const STATUS_LABELS: Record<AttendanceRecord["status"], string> = {
   absent: "Absent",
   friday: "Friday work",
   vacation: "Vacation",
+  occasional_leave: "Religious / occasional holiday",
+  resort_leave: "Resort leave",
   sick_leave: "Sick leave",
   urgent_leave: "Urgent leave",
   normal_leave: "Normal leave",
@@ -148,7 +150,7 @@ function setSummaryWidths(sheet: ExcelJS.Worksheet) {
 }
 
 function setEmployeeWidths(sheet: ExcelJS.Worksheet) {
-  const widths = [22, 17, 11, 11, 25, 16, 12, 14, 14, 18, 18, 25, 15, 14, 14, 32];
+  const widths = [22, 17, 11, 11, 25, 16, 12, 14, 14, 14, 18, 18, 18, 18, 15, 15, 14, 16, 12, 14, 32];
   widths.forEach((width, index) => { sheet.getColumn(index + 1).width = width; });
 }
 
@@ -183,7 +185,7 @@ function addEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, payroll: P
   const attendanceTotalRow = attendanceEnd + 1;
   const currencyFormat = moneyFormat(state.policy.currency);
 
-  styleTitle(sheet, `FMG EMPLOYEE PAYROLL | ${payroll.employeeName}`, `Payroll month: ${state.month}  |  Currency: ${safeCurrency(state.policy.currency)}  |  Salary statement and attendance detail`, "P");
+  styleTitle(sheet, `FMG EMPLOYEE PAYROLL | ${payroll.employeeName}`, `Payroll month: ${state.month}  |  Currency: ${safeCurrency(state.policy.currency)}  |  Salary statement and attendance detail`, "U");
   sheet.views = [{ state: "frozen", ySplit: attendanceHeaderRow, xSplit: 2, activeCell: `C${attendanceStart}`, showGridLines: false }];
 
   const identity = [
@@ -219,13 +221,13 @@ function addEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, payroll: P
   sheet.getCell("B8").value = payroll.baseSalary;
   sheet.getCell("B9").value = payroll.monthlyCommission;
   sheet.getCell("B10").value = formula(`SUMIF(H${adjustmentStart}:H${adjustmentEnd},\"<>Deduction\",J${adjustmentStart}:J${adjustmentEnd})`, payroll.manualAdditions);
-  sheet.getCell("B11").value = formula(`SUM(L${attendanceStart}:L${attendanceEnd})`, payroll.overtimePay);
-  sheet.getCell("B12").value = formula(`SUM(M${attendanceStart}:M${attendanceEnd})`, payroll.fridayPay);
+  sheet.getCell("B11").value = formula(`SUM(O${attendanceStart}:O${attendanceEnd})`, payroll.overtimePay);
+  sheet.getCell("B12").value = formula(`SUM(P${attendanceStart}:P${attendanceEnd})`, payroll.fridayPay);
   sheet.getCell("B13").value = formula("SUM(B9:B12)", payroll.monthlyCommission + payroll.manualAdditions + payroll.overtimePay + payroll.fridayPay);
-  sheet.getCell("B14").value = formula(`SUM(K${attendanceStart}:K${attendanceEnd})`, payroll.lateDeduction);
+  sheet.getCell("B14").value = formula(`SUM(L${attendanceStart}:N${attendanceEnd})`, payroll.attendanceDeduction);
   sheet.getCell("B15").value = payroll.monthlyDeduction;
   sheet.getCell("B16").value = formula(`SUMIF(H${adjustmentStart}:H${adjustmentEnd},\"Deduction\",J${adjustmentStart}:J${adjustmentEnd})`, payroll.manualDeductions);
-  sheet.getCell("B17").value = formula("SUM(B14:B16)", payroll.lateDeduction + payroll.monthlyDeduction + payroll.manualDeductions);
+  sheet.getCell("B17").value = formula("SUM(B14:B16)", payroll.attendanceDeduction + payroll.monthlyDeduction + payroll.manualDeductions);
   sheet.getCell("B18").value = formula("B8+B13-B17", payroll.netSalary);
   for (let row = 8; row <= 18; row += 1) sheet.getCell(`B${row}`).numFmt = currencyFormat;
   for (const row of [13, 17, 18]) {
@@ -242,7 +244,7 @@ function addEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, payroll: P
   sheet.getRow(7).getCell(5).value = "Metric";
   sheet.getRow(7).getCell(6).value = "Total";
   styleHeader(sheet.getRow(7), 5, 6);
-  const metrics = ["Present days", "Absent days", "Incomplete days", "Late days", "Late minutes", "Overtime minutes", "Mission OT minutes"];
+  const metrics = ["Present days", "Absent days", "Incomplete days", "Late days", "Late minutes", "Early-leave days", "Unpaid-leave days", "Overtime minutes", "Mission OT minutes"];
   metrics.forEach((label, index) => {
     const row = sheet.getRow(8 + index);
     row.getCell(5).value = label;
@@ -253,8 +255,10 @@ function addEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, payroll: P
   sheet.getCell("F10").value = formula(`COUNTIF(F${attendanceStart}:F${attendanceEnd},\"Incomplete\")`, payroll.incompleteDays);
   sheet.getCell("F11").value = formula(`COUNTIF(G${attendanceStart}:G${attendanceEnd},\">0\")`, payroll.lateDays);
   sheet.getCell("F12").value = formula(`SUM(G${attendanceStart}:G${attendanceEnd})`, payroll.lateMinutes);
-  sheet.getCell("F13").value = formula(`SUM(I${attendanceStart}:I${attendanceEnd})`, payroll.overtimeMinutes);
-  sheet.getCell("F14").value = formula(`SUM(J${attendanceStart}:J${attendanceEnd})`, payroll.missionOvertimeMinutes);
+  sheet.getCell("F13").value = payroll.earlyLeaveDays;
+  sheet.getCell("F14").value = payroll.unpaidLeaveDays;
+  sheet.getCell("F15").value = formula(`SUM(J${attendanceStart}:J${attendanceEnd})`, payroll.overtimeMinutes);
+  sheet.getCell("F16").value = formula(`SUM(K${attendanceStart}:K${attendanceEnd})`, payroll.missionOvertimeMinutes);
   sheet.getColumn(6).numFmt = "#,##0;[Red](#,##0);-";
 
   styleSection(sheet, "H6:K6", "MONTHLY ADJUSTMENTS");
@@ -280,26 +284,26 @@ function addEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, payroll: P
     row.getCell(10).numFmt = currencyFormat;
   }
 
-  styleSection(sheet, `A${attendanceSectionRow}:P${attendanceSectionRow}`, "DAILY ATTENDANCE & PAYROLL IMPACT");
-  const attendanceHeaders = ["Date", "Day", "First in", "Last out", "All punches", "Status", "Late min", "Penalty min", "OT min", "Mission OT min", "Late deduction", "OT pay", "Friday pay", "Late excused", "OT approved", "Manager note"];
+  styleSection(sheet, `A${attendanceSectionRow}:U${attendanceSectionRow}`, "DAILY ATTENDANCE & PAYROLL IMPACT");
+  const attendanceHeaders = ["Date", "Day", "First in", "Last out", "All punches", "Status", "Late min", "Penalty min", "Early min", "OT min", "Mission OT min", "Late deduction", "Early-leave deduction", "Unpaid-leave deduction", "OT pay", "Friday pay", "Late excused", "Early leave excused", "Leave paid", "OT approved", "Manager note"];
   attendanceHeaders.forEach((label, index) => { sheet.getRow(attendanceHeaderRow).getCell(index + 1).value = label; });
-  styleHeader(sheet.getRow(attendanceHeaderRow), 1, 16);
+  styleHeader(sheet.getRow(attendanceHeaderRow), 1, 21);
 
   if (attendance.length) {
     attendance.forEach((record, index) => {
       const row = sheet.getRow(attendanceStart + index);
-      row.values = [dateValue(record.workDate), dayLabel(record.workDate), record.firstIn || "", record.lastOut || "", record.punches.join(" | "), STATUS_LABELS[record.status], record.lateMinutes, record.penaltyMinutes, record.overtimeMinutes, record.missionOvertimeMinutes, record.lateDeduction, record.overtimePay, record.fridayPay, record.lateExcused ? "Yes" : "No", record.overtimeApproved ? "Yes" : "No", record.notes || "—"];
-      styleDataRow(row, 1, 16);
+      row.values = [dateValue(record.workDate), dayLabel(record.workDate), record.firstIn || "", record.lastOut || "", record.punches.join(" | "), STATUS_LABELS[record.status], record.lateMinutes, record.penaltyMinutes, record.earlyLeaveMinutes, record.overtimeMinutes, record.missionOvertimeMinutes, record.lateDeduction, record.earlyLeaveDeduction, record.leaveDeduction, record.overtimePay, record.fridayPay, record.lateExcused ? "Yes" : "No", record.earlyLeaveExcused ? "Yes" : "No", record.leavePaid ? "Yes" : "No", record.overtimeApproved ? "Yes" : "No", record.notes || "—"];
+      styleDataRow(row, 1, 21);
       row.getCell(1).numFmt = "yyyy-mm-dd";
-      for (let column = 7; column <= 10; column += 1) row.getCell(column).numFmt = "#,##0;[Red](#,##0);-";
-      for (let column = 11; column <= 13; column += 1) row.getCell(column).numFmt = currencyFormat;
+      for (let column = 7; column <= 11; column += 1) row.getCell(column).numFmt = "#,##0;[Red](#,##0);-";
+      for (let column = 12; column <= 16; column += 1) row.getCell(column).numFmt = currencyFormat;
     });
   } else {
     const row = sheet.getRow(attendanceStart);
     row.getCell(1).value = "";
     row.getCell(5).value = "No attendance records for this month";
-    for (let column = 7; column <= 13; column += 1) row.getCell(column).value = 0;
-    styleDataRow(row, 1, 16);
+    for (let column = 7; column <= 16; column += 1) row.getCell(column).value = 0;
+    styleDataRow(row, 1, 21);
   }
 
   sheet.mergeCells(`A${attendanceTotalRow}:F${attendanceTotalRow}`);
@@ -307,25 +311,28 @@ function addEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, payroll: P
   const totalValues: Array<[number, string, number]> = [
     [7, `SUM(G${attendanceStart}:G${attendanceEnd})`, payroll.lateMinutes],
     [8, `SUM(H${attendanceStart}:H${attendanceEnd})`, attendance.reduce((sum, record) => sum + record.penaltyMinutes, 0)],
-    [9, `SUM(I${attendanceStart}:I${attendanceEnd})`, payroll.overtimeMinutes],
-    [10, `SUM(J${attendanceStart}:J${attendanceEnd})`, payroll.missionOvertimeMinutes],
-    [11, `SUM(K${attendanceStart}:K${attendanceEnd})`, payroll.lateDeduction],
-    [12, `SUM(L${attendanceStart}:L${attendanceEnd})`, payroll.overtimePay],
-    [13, `SUM(M${attendanceStart}:M${attendanceEnd})`, payroll.fridayPay],
+    [9, `SUM(I${attendanceStart}:I${attendanceEnd})`, attendance.reduce((sum, record) => sum + record.earlyLeaveMinutes, 0)],
+    [10, `SUM(J${attendanceStart}:J${attendanceEnd})`, payroll.overtimeMinutes],
+    [11, `SUM(K${attendanceStart}:K${attendanceEnd})`, payroll.missionOvertimeMinutes],
+    [12, `SUM(L${attendanceStart}:L${attendanceEnd})`, payroll.lateDeduction],
+    [13, `SUM(M${attendanceStart}:M${attendanceEnd})`, payroll.earlyLeaveDeduction],
+    [14, `SUM(N${attendanceStart}:N${attendanceEnd})`, payroll.leaveDeduction],
+    [15, `SUM(O${attendanceStart}:O${attendanceEnd})`, payroll.overtimePay],
+    [16, `SUM(P${attendanceStart}:P${attendanceEnd})`, payroll.fridayPay],
   ];
   totalValues.forEach(([column, formulaValue, result]) => { sheet.getRow(attendanceTotalRow).getCell(column).value = formula(formulaValue, result); });
-  styleTotalRow(sheet.getRow(attendanceTotalRow), 1, 16);
-  for (let column = 7; column <= 10; column += 1) sheet.getRow(attendanceTotalRow).getCell(column).numFmt = "#,##0;[Red](#,##0);-";
-  for (let column = 11; column <= 13; column += 1) sheet.getRow(attendanceTotalRow).getCell(column).numFmt = currencyFormat;
+  styleTotalRow(sheet.getRow(attendanceTotalRow), 1, 21);
+  for (let column = 7; column <= 11; column += 1) sheet.getRow(attendanceTotalRow).getCell(column).numFmt = "#,##0;[Red](#,##0);-";
+  for (let column = 12; column <= 16; column += 1) sheet.getRow(attendanceTotalRow).getCell(column).numFmt = currencyFormat;
   const noteRow = attendanceTotalRow + 2;
-  sheet.mergeCells(`A${noteRow}:P${noteRow + 1}`);
+  sheet.mergeCells(`A${noteRow}:U${noteRow + 1}`);
   const noteCell = sheet.getCell(`A${noteRow}`);
-  noteCell.value = `Policy: free arrival through ${state.policy.freeArrivalUntil}; overtime after ${state.policy.overtimeStartsAt} when arrival is by ${state.policy.overtimeArrivalCutoff}; late minute ×${state.policy.minutePenaltyMultiplier}; OT ×${state.policy.overtimeMultiplier}; Friday ×${state.policy.fridayMultiplier}; salary divisor ${state.policy.salaryDivisor}.`;
+  noteCell.value = `Policy v${state.policy.policyVersion}: free arrival through ${state.policy.freeArrivalUntil}; workday ends ${state.policy.workdayEndsAt}; overtime after ${state.policy.overtimeStartsAt} when arrival is by ${state.policy.overtimeArrivalCutoff}; time after ${state.policy.overtimeApprovalAfter} requires written manager approval; approved early arrival ×${state.policy.earlyOvertimeMultiplier}; late minute ×${state.policy.minutePenaltyMultiplier}; early leave ×${state.policy.earlyLeaveDayMultiplier} day; unpaid leave ×${state.policy.unpaidLeaveDayMultiplier} day; OT ×${state.policy.overtimeMultiplier}; Friday counts as ${state.policy.fridayMultiplier} days; salary divisor ${state.policy.salaryDivisor}.`;
   noteCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.yellowSoft } };
   noteCell.font = { name: "Aptos", size: 10, italic: true, color: { argb: COLORS.ink } };
   noteCell.alignment = { wrapText: true, vertical: "middle" };
   noteCell.border = { top: { style: "thin", color: { argb: COLORS.yellow } }, bottom: { style: "thin", color: { argb: COLORS.yellow } } };
-  sheet.pageSetup.printArea = `A1:P${noteRow + 1}`;
+  sheet.pageSetup.printArea = `A1:U${noteRow + 1}`;
 
   return { payroll, sheetName };
 }
@@ -360,7 +367,7 @@ export async function buildPayrollWorkbook(state: HrState) {
   const currencyFormat = moneyFormat(state.policy.currency);
   const totalNet = state.payroll.reduce((sum, record) => sum + record.netSalary, 0);
   const totalAdditions = state.payroll.reduce((sum, record) => sum + record.monthlyCommission + record.manualAdditions + record.overtimePay + record.fridayPay, 0);
-  const totalDeductions = state.payroll.reduce((sum, record) => sum + record.lateDeduction + record.monthlyDeduction + record.manualDeductions, 0);
+  const totalDeductions = state.payroll.reduce((sum, record) => sum + record.attendanceDeduction + record.monthlyDeduction + record.manualDeductions, 0);
   const totalBase = state.payroll.reduce((sum, record) => sum + record.baseSalary, 0);
 
   const cards = [
@@ -409,12 +416,12 @@ export async function buildPayrollWorkbook(state: HrState) {
       const quoted = quoteSheetName(sheetName);
       const references: Array<[number, string, number]> = [
         [5, `${quoted}!B8`, payroll.baseSalary], [6, `${quoted}!B9`, payroll.monthlyCommission], [7, `${quoted}!B10`, payroll.manualAdditions],
-        [8, `${quoted}!B11`, payroll.overtimePay], [9, `${quoted}!B12`, payroll.fridayPay], [10, `${quoted}!B14`, payroll.lateDeduction],
+        [8, `${quoted}!B11`, payroll.overtimePay], [9, `${quoted}!B12`, payroll.fridayPay], [10, `${quoted}!B14`, payroll.attendanceDeduction],
         [11, `${quoted}!B15`, payroll.monthlyDeduction], [12, `${quoted}!B16`, payroll.manualDeductions],
         [13, `${quoted}!B13`, payroll.monthlyCommission + payroll.manualAdditions + payroll.overtimePay + payroll.fridayPay],
-        [14, `${quoted}!B17`, payroll.lateDeduction + payroll.monthlyDeduction + payroll.manualDeductions], [15, `${quoted}!B18`, payroll.netSalary],
+        [14, `${quoted}!B17`, payroll.attendanceDeduction + payroll.monthlyDeduction + payroll.manualDeductions], [15, `${quoted}!B18`, payroll.netSalary],
         [16, `${quoted}!F8`, payroll.presentDays], [17, `${quoted}!F9`, payroll.absentDays], [18, `${quoted}!F10`, payroll.incompleteDays],
-        [19, `${quoted}!F12`, payroll.lateMinutes], [20, `${quoted}!F13`, payroll.overtimeMinutes],
+        [19, `${quoted}!F12`, payroll.lateMinutes], [20, `${quoted}!F15`, payroll.overtimeMinutes],
       ];
       references.forEach(([column, formulaValue, result]) => { row.getCell(column).value = formula(formulaValue, result); });
       styleDataRow(row, 1, 20);
@@ -437,7 +444,7 @@ export async function buildPayrollWorkbook(state: HrState) {
         : column === 14 ? totalDeductions
           : column === 15 ? totalNet
             : state.payroll.reduce((sum, record) => {
-              const values = [record.monthlyCommission, record.manualAdditions, record.overtimePay, record.fridayPay, record.lateDeduction, record.monthlyDeduction, record.manualDeductions, 0, 0, 0, record.presentDays, record.absentDays, record.incompleteDays, record.lateMinutes, record.overtimeMinutes];
+              const values = [record.monthlyCommission, record.manualAdditions, record.overtimePay, record.fridayPay, record.attendanceDeduction, record.monthlyDeduction, record.manualDeductions, 0, 0, 0, record.presentDays, record.absentDays, record.incompleteDays, record.lateMinutes, record.overtimeMinutes];
               return sum + (values[column - 6] ?? 0);
             }, 0);
     summary.getRow(totalRow).getCell(column).value = formula(`SUM(${letter}${dataStart}:${letter}${dataEnd})`, result);
@@ -461,7 +468,7 @@ export async function buildPayrollWorkbook(state: HrState) {
   const sourceRow = checkRow + 2;
   summary.mergeCells(`A${sourceRow}:T${sourceRow}`);
   summary.mergeCells(`A${sourceRow + 1}:T${sourceRow + 1}`);
-  summary.getCell(`A${sourceRow}`).value = `Policy: free arrival through ${state.policy.freeArrivalUntil}; overtime after ${state.policy.overtimeStartsAt} when arrival is by ${state.policy.overtimeArrivalCutoff}; late minute ×${state.policy.minutePenaltyMultiplier}; OT ×${state.policy.overtimeMultiplier}; Friday ×${state.policy.fridayMultiplier}; salary divisor ${state.policy.salaryDivisor}.`;
+  summary.getCell(`A${sourceRow}`).value = `Policy: free arrival through ${state.policy.freeArrivalUntil}; workday ends ${state.policy.workdayEndsAt}; overtime after ${state.policy.overtimeStartsAt} when arrival is by ${state.policy.overtimeArrivalCutoff}; late minute ×${state.policy.minutePenaltyMultiplier}; early leave ×${state.policy.earlyLeaveDayMultiplier} day; unpaid leave ×${state.policy.unpaidLeaveDayMultiplier} day; OT ×${state.policy.overtimeMultiplier}; Friday counts as ${state.policy.fridayMultiplier} days; salary divisor ${state.policy.salaryDivisor}.`;
   summary.getCell(`A${sourceRow + 1}`).value = state.imports.length
     ? `Biometric source: ${state.imports.map((item) => item.fileName).join(", ")}`
     : "Biometric source: no Excel import recorded for this month.";

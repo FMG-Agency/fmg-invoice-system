@@ -168,30 +168,31 @@ export async function POST(request: Request) {
 
     for (const parsedEmployee of parsed.employees) {
       let employee = parsedEmployee.biometricCode
-        ? await database.prepare("SELECT id, biometric_code AS biometricCode FROM employees WHERE biometric_code = ?").bind(parsedEmployee.biometricCode).first<{ id: number; biometricCode: string }>()
+        ? await database.prepare("SELECT id, biometric_code AS biometricCode, hire_date AS hireDate FROM employees WHERE biometric_code = ?").bind(parsedEmployee.biometricCode).first<{ id: number; biometricCode: string; hireDate: string }>()
         : null;
       if (!employee) {
-        employee = await database.prepare("SELECT id, biometric_code AS biometricCode FROM employees WHERE lower(trim(name)) = lower(trim(?)) ORDER BY active DESC LIMIT 1").bind(parsedEmployee.name).first<{ id: number; biometricCode: string }>();
+        employee = await database.prepare("SELECT id, biometric_code AS biometricCode, hire_date AS hireDate FROM employees WHERE lower(trim(name)) = lower(trim(?)) ORDER BY active DESC LIMIT 1").bind(parsedEmployee.name).first<{ id: number; biometricCode: string; hireDate: string }>();
       }
       if (!employee) {
         const inserted = await database.prepare(`INSERT INTO employees (biometric_code, name, department)
           VALUES (?, ?, ?)`).bind(parsedEmployee.biometricCode, parsedEmployee.name, parsedEmployee.department).run();
-        employee = { id: Number(inserted.meta.last_row_id ?? 0), biometricCode: parsedEmployee.biometricCode };
+        employee = { id: Number(inserted.meta.last_row_id ?? 0), biometricCode: parsedEmployee.biometricCode, hireDate: "" };
         createdEmployees += 1;
       } else if (parsedEmployee.biometricCode && !employee.biometricCode) {
         await database.prepare("UPDATE employees SET biometric_code = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(parsedEmployee.biometricCode, employee.id).run();
       }
 
       for (const day of parsedEmployee.days) {
+        if (employee.hireDate && day.date < employee.hireDate) continue;
         attendanceStatements.push(database.prepare(`INSERT INTO attendance_records
-          (import_id, employee_id, work_date, first_in, last_out, punches_json, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          (import_id, employee_id, work_date, first_in, last_out, punches_json, status, overtime_approved, early_overtime_approved)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
           ON CONFLICT(employee_id, work_date) DO UPDATE SET
             import_id = excluded.import_id,
             first_in = excluded.first_in,
             last_out = excluded.last_out,
             punches_json = excluded.punches_json,
-            status = CASE WHEN attendance_records.status IN ('vacation','sick_leave','urgent_leave','normal_leave','assignment')
+            status = CASE WHEN attendance_records.status IN ('vacation','occasional_leave','resort_leave','sick_leave','urgent_leave','normal_leave','assignment')
               THEN attendance_records.status ELSE excluded.status END,
             updated_at = CURRENT_TIMESTAMP`).bind(
               importId, employee.id, day.date, day.firstIn, day.lastOut, JSON.stringify(day.punches), day.status,
