@@ -19,6 +19,8 @@ export type Client = {
   monthlyFee: number;
   contractStatus: "contract" | "no_contract" | "not_set";
   relationshipStage: "new" | "old" | "";
+  portalLogoAvailable?: boolean;
+  portalLogoUpdatedAt?: string;
   createdAt: string;
   updatedAt: string;
 };

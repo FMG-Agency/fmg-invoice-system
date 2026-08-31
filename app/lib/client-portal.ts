@@ -24,6 +24,21 @@ const portalSchema = [
 
 export async function ensureClientPortalDatabase() {
   await database.batch(portalSchema.map((statement) => database.prepare(statement)));
+  const columns = await database.prepare("PRAGMA table_info(clients)").all<Record<string, unknown>>();
+  const existing = new Set(columns.results.map((column) => String(column.name)));
+  const additions = [
+    ["portal_logo_key", "ALTER TABLE clients ADD COLUMN portal_logo_key TEXT NOT NULL DEFAULT ''"],
+    ["portal_logo_type", "ALTER TABLE clients ADD COLUMN portal_logo_type TEXT NOT NULL DEFAULT ''"],
+    ["portal_logo_updated_at", "ALTER TABLE clients ADD COLUMN portal_logo_updated_at TEXT NOT NULL DEFAULT ''"],
+  ] as const;
+  for (const [name, statement] of additions) {
+    if (existing.has(name)) continue;
+    try {
+      await database.prepare(statement).run();
+    } catch (error) {
+      if (!/duplicate column name/i.test(error instanceof Error ? error.message : String(error))) throw error;
+    }
+  }
 }
 
 function numberValue(value: unknown) {
@@ -53,6 +68,8 @@ async function listClients(): Promise<Array<Client & { portalUsername: string }>
       c.phone, c.email, c.address, c.notes, c.agency_key AS agencyKey, c.lifecycle_status AS lifecycleStatus,
       c.activity, c.start_date AS startDate, c.payment_schedule AS paymentSchedule, c.monthly_fee AS monthlyFee,
       c.contract_status AS contractStatus, c.relationship_stage AS relationshipStage,
+      CASE WHEN c.portal_logo_key <> '' THEN 1 ELSE 0 END AS portalLogoAvailable,
+      c.portal_logo_updated_at AS portalLogoUpdatedAt,
       c.created_at AS createdAt, c.updated_at AS updatedAt, COALESCE(u.username, '') AS portalUsername
     FROM clients c LEFT JOIN auth_users u ON u.client_id = c.id AND u.active = 1
     ORDER BY c.company_name COLLATE NOCASE, c.name COLLATE NOCASE`).all<Record<string, unknown>>();
@@ -73,6 +90,8 @@ async function listClients(): Promise<Array<Client & { portalUsername: string }>
     monthlyFee: numberValue(row.monthlyFee),
     contractStatus: (["contract", "no_contract", "not_set"].includes(String(row.contractStatus)) ? String(row.contractStatus) : "not_set") as Client["contractStatus"],
     relationshipStage: (["new", "old"].includes(String(row.relationshipStage)) ? String(row.relationshipStage) : "") as Client["relationshipStage"],
+    portalLogoAvailable: numberValue(row.portalLogoAvailable) === 1,
+    portalLogoUpdatedAt: String(row.portalLogoUpdatedAt || ""),
     createdAt: String(row.createdAt || ""),
     updatedAt: String(row.updatedAt || ""),
     portalUsername: String(row.portalUsername || ""),
@@ -90,7 +109,7 @@ export async function getClientPortalState(session: AuthSession, requestedClient
 
   const account = await getClientAccount(clientId);
   if (!account) return { viewerMode: session.clientId === null ? "staff" : "client", client: null, clients, year, years: [currentYear], invoices: [], summaries: [], plans: [] };
-  const [plansResult, yearsResult] = await Promise.all([
+  const [plansResult, yearsResult, logoResult] = await Promise.all([
     database.prepare(`SELECT p.id, p.client_id AS clientId, p.year, p.month, p.part, p.title, p.url, p.notes,
         p.published, p.created_by AS createdBy, COALESCE(u.display_name, u.username, '') AS createdByName,
         p.created_at AS createdAt, p.updated_at AS updatedAt
@@ -101,11 +120,17 @@ export async function getClientPortalState(session: AuthSession, requestedClient
         SELECT CAST(substr(date, 1, 4) AS INTEGER) AS year FROM documents WHERE client_id = ? AND type = 'invoice'
         UNION SELECT year FROM client_portal_plans WHERE client_id = ?
       ) WHERE year BETWEEN 2020 AND 2100 ORDER BY year DESC`).bind(clientId, clientId).all<Record<string, unknown>>(),
+    database.prepare(`SELECT CASE WHEN portal_logo_key <> '' THEN 1 ELSE 0 END AS portalLogoAvailable,
+      portal_logo_updated_at AS portalLogoUpdatedAt FROM clients WHERE id = ?`).bind(clientId).first<Record<string, unknown>>(),
   ]);
   const years = [...new Set([currentYear, year, ...yearsResult.results.map((row) => numberValue(row.year)).filter(Boolean)])].sort((left, right) => right - left);
   return {
     viewerMode: session.clientId === null ? "staff" : "client",
-    client: account.client,
+    client: {
+      ...account.client,
+      portalLogoAvailable: numberValue(logoResult?.portalLogoAvailable) === 1,
+      portalLogoUpdatedAt: String(logoResult?.portalLogoUpdatedAt || ""),
+    },
     clients,
     year,
     years,

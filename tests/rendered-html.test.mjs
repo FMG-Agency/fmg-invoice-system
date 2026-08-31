@@ -378,13 +378,16 @@ test("ships the smart 2026 client workbook import and finance menu", async () =>
   assert.match(accountsLib, /type TEXT NOT NULL CHECK\(type IN \('charge','payment','credit','refund'\)\)/);
 });
 
-test("ships a private client invoice portal with publishable monthly Canva plans", async () => {
-  const [component, portalComponent, portalStyles, portalApi, portalLib, authApi, authServer, usersApi, accessComponent, permissions, pdfApi, migration] = await Promise.all([
+test("ships a private client invoice portal with publishable monthly Canva plans and client branding", async () => {
+  const [component, portalComponent, portalStyles, portalApi, logoApi, portalLib, fileStorage, worker, authApi, authServer, usersApi, accessComponent, permissions, pdfApi, migration, logoMigration] = await Promise.all([
     readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
     readFile(new URL("app/components/ClientPortalPanel.tsx", root), "utf8"),
     readFile(new URL("app/components/ClientPortalPanel.module.css", root), "utf8"),
     readFile(new URL("app/api/client-portal/route.ts", root), "utf8"),
+    readFile(new URL("app/api/client-portal/logo/[clientId]/route.ts", root), "utf8"),
     readFile(new URL("app/lib/client-portal.ts", root), "utf8"),
+    readFile(new URL("app/lib/file-storage.ts", root), "utf8"),
+    readFile(new URL("worker/index.ts", root), "utf8"),
     readFile(new URL("app/api/auth/route.ts", root), "utf8"),
     readFile(new URL("app/lib/auth-server.ts", root), "utf8"),
     readFile(new URL("app/api/users/route.ts", root), "utf8"),
@@ -392,6 +395,7 @@ test("ships a private client invoice portal with publishable monthly Canva plans
     readFile(new URL("app/lib/permissions.ts", root), "utf8"),
     readFile(new URL("app/api/pdf/[id]/route.ts", root), "utf8"),
     readFile(new URL("drizzle/0014_youthful_mephistopheles.sql", root), "utf8"),
+    readFile(new URL("drizzle/0015_fresh_garia.sql", root), "utf8"),
   ]);
   assert.match(component, /client-portal-admin/);
   assert.match(component, /auth\.clientId !== null/);
@@ -401,6 +405,12 @@ test("ships a private client invoice portal with publishable monthly Canva plans
   assert.match(portalComponent, /Part 1 covers days 1–15/);
   assert.match(portalComponent, /16–\$\{String\(finalDay\)/);
   assert.match(portalComponent, /Canva or external link/);
+  assert.match(portalComponent, /ClientBrandMark/);
+  assert.match(portalComponent, /Upload logo/);
+  assert.match(portalComponent, /Replace logo/);
+  assert.match(portalComponent, /image\/png,image\/jpeg,image\/webp/);
+  assert.match(portalComponent, /2 \* 1024 \* 1024/);
+  assert.match(portalComponent, /api\/client-portal\/logo/);
   assert.match(portalComponent, /target="_blank" rel="noopener noreferrer"/);
   assert.match(portalStyles, /grid-template-columns: repeat\(3/);
   assert.match(portalStyles, /@media \(max-width: 760px\)/);
@@ -409,6 +419,18 @@ test("ships a private client invoice portal with publishable monthly Canva plans
   assert.match(portalApi, /ON CONFLICT\(client_id, year, month, part\)/);
   assert.match(portalLib, /p\.published = 1/);
   assert.match(portalLib, /!\["Draft", "Rejected"\]\.includes/);
+  assert.match(portalLib, /portalLogoAvailable/);
+  assert.match(logoApi, /requirePermission\(request, "client_portal"\)/);
+  assert.match(logoApi, /session\.clientId !== null && session\.clientId !== numericClientId/);
+  assert.match(logoApi, /MAX_LOGO_BYTES = 2 \* 1024 \* 1024/);
+  assert.match(logoApi, /image\/png/);
+  assert.match(logoApi, /image\/jpeg/);
+  assert.match(logoApi, /image\/webp/);
+  assert.match(logoApi, /putPrivateFile/);
+  assert.match(logoApi, /deletePrivateFile/);
+  assert.match(fileStorage, /__FMG_FILES_BUCKET__/);
+  assert.match(fileStorage, /@vercel\/blob/);
+  assert.match(worker, /__FMG_FILES_BUCKET__ = env\.FILES/);
   assert.match(component, /Client Portal/);
   assert.match(await readFile(new URL("app/api/state/route.ts", root), "utf8"), /if \(session\.clientId !== null\) return accessDenied\(\)/);
   assert.match(authApi, /clientId: session\.clientId/);
@@ -420,6 +442,9 @@ test("ships a private client invoice portal with publishable monthly Canva plans
   assert.match(pdfApi, /row\.type !== "invoice" \|\| Number\(row\.clientId\) !== session\.clientId/);
   assert.match(migration, /CREATE TABLE `client_portal_plans`/);
   assert.match(migration, /ALTER TABLE `auth_users` ADD `client_id`/);
+  assert.match(logoMigration, /portal_logo_key/);
+  assert.match(logoMigration, /portal_logo_type/);
+  assert.match(logoMigration, /portal_logo_updated_at/);
 
   const db = createClient({ url: "file::memory:" });
   await db.executeMultiple(`
@@ -429,8 +454,11 @@ test("ships a private client invoice portal with publishable monthly Canva plans
     INSERT INTO clients (id, name) VALUES (1, 'Portal Client');
   `);
   await db.executeMultiple(migration);
+  await db.executeMultiple(logoMigration);
   const authColumns = await db.execute("PRAGMA table_info(auth_users)");
   assert.ok(authColumns.rows.some((column) => column.name === "client_id"));
+  const clientColumns = await db.execute("PRAGMA table_info(clients)");
+  assert.ok(clientColumns.rows.some((column) => column.name === "portal_logo_key"));
   await db.execute({ sql: "INSERT INTO client_portal_plans (client_id, year, month, part, title, url) VALUES (?, ?, ?, ?, ?, ?)", args: [1, 2026, 8, 1, "August Part 1", "https://www.canva.com/design/example"] });
   await assert.rejects(() => db.execute({ sql: "INSERT INTO client_portal_plans (client_id, year, month, part, title, url) VALUES (?, ?, ?, ?, ?, ?)", args: [1, 2026, 8, 1, "Duplicate", "https://example.com"] }), /UNIQUE constraint failed/i);
   db.close();

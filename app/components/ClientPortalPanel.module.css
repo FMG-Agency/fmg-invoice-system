@@ -12,8 +12,11 @@
 .portalUser { justify-self: end; display: flex; align-items: center; gap: 9px; }
 .portalUser > button { width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); display: grid; place-items: center; cursor: pointer; }
 .portalUser > span { padding: 4px 12px 4px 4px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); display: flex; align-items: center; gap: 10px; }
-.portalUser i { width: 34px; height: 34px; border-radius: 8px; background: var(--portal-accent); color: #111; display: grid; place-items: center; font-size: 10px; font-style: normal; font-weight: 900; }
-.portalUser > span > span { display: flex; flex-direction: column; }
+.clientBrandMark { position: relative; overflow: hidden; display: grid; place-items: center; }
+.clientBrandMark img { object-fit: contain; padding: 11%; }
+.clientBrandMark[data-has-logo="true"] { background: linear-gradient(145deg, #fff, #f1f1f1); color: transparent; box-shadow: inset 0 0 0 1px rgba(17,17,17,.08); }
+.portalUserMark { width: 34px; height: 34px; border-radius: 8px; background: var(--portal-accent); color: #111; font-size: 10px; font-weight: 900; }
+.portalUser > span > span:last-child { display: flex; flex-direction: column; }
 .portalUser strong { max-width: 150px; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .portalUser small { color: var(--muted); font-size: 8px; }
 .portalMain { width: min(1360px, calc(100% - 40px)); margin: 0 auto; padding: 36px 0 70px; }
@@ -25,6 +28,7 @@
 .clientWelcome h1 { margin: 17px 0 14px; font-size: clamp(38px, 5.7vw, 76px); line-height: .98; letter-spacing: -3.8px; }
 .clientWelcome p { max-width: 590px; margin: 0; color: #aaa; font-size: 13px; line-height: 1.7; }
 .welcomeMark { flex: 0 0 auto; width: 116px; height: 116px; border: 1px solid rgba(255,255,255,.18); border-radius: 28px; background: rgba(255,255,255,.08); display: grid; place-items: center; color: #fff; font-size: 30px; font-weight: 950; backdrop-filter: blur(10px); }
+.welcomeMark[data-has-logo="true"] { background: rgba(255,255,255,.96); box-shadow: 0 18px 45px rgba(0,0,0,.28), inset 0 0 0 1px rgba(255,255,255,.5); }
 .portalMetrics { margin: 18px 0 28px; display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 14px; }
 .portalMetrics article { min-height: 132px; padding: 22px; border: 1px solid var(--line); border-radius: 17px; background: var(--surface); display: flex; flex-direction: column; justify-content: center; }
 .portalMetrics article > span { color: var(--muted); display: flex; align-items: center; gap: 7px; font-size: 9px; font-weight: 900; letter-spacing: 1px; }
@@ -95,6 +99,8 @@
 .adminHeroBadge { position: relative; z-index: 1; flex: 0 0 auto; width: 132px; height: 132px; border: 1px solid #444; border-radius: 26px; background: rgba(255,255,255,.08); display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(10px); }
 .adminHeroBadge span { font-size: 29px; font-weight: 950; }
 .adminHeroBadge small { margin-top: 5px; color: var(--portal-accent); font-size: 7px; font-weight: 900; letter-spacing: .8px; }
+.adminHeroMark { width: 82px; height: 82px; border-radius: 18px; color: #fff; }
+.adminHeroMark[data-has-logo="true"] { background: #fff; }
 .adminControls { min-height: 85px; margin-bottom: 15px; padding: 13px 15px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); display: grid; grid-template-columns: minmax(240px, 1fr) 140px minmax(260px, 1fr); align-items: end; gap: 12px; }
 .adminControls label:first-child select { width: 100%; }
 .clientAccessStatus { height: 43px; padding: 0 13px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); display: flex; align-items: center; gap: 10px; }
@@ -102,6 +108,16 @@
 .clientAccessStatus span { min-width: 0; display: flex; flex-direction: column; }
 .clientAccessStatus strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .clientAccessStatus small { color: var(--muted); font-size: 8px; }
+.logoManager { min-height: 116px; margin-bottom: 15px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: linear-gradient(120deg, color-mix(in srgb, var(--portal-accent) 8%, var(--surface)), var(--surface) 58%); display: grid; grid-template-columns: 82px minmax(220px, 1fr) auto; align-items: center; gap: 17px; }
+.logoManagerPreview { width: 82px; height: 82px; border: 1px solid var(--line); border-radius: 18px; background: #111; color: var(--portal-accent); font-size: 20px; font-weight: 950; box-shadow: var(--shadow); }
+.logoManagerCopy > span { color: var(--portal-accent-ink); font-size: 8px; font-weight: 950; letter-spacing: 1.2px; }
+.logoManagerCopy h3 { margin: 4px 0; font-size: 17px; }
+.logoManagerCopy p { max-width: 570px; margin: 0; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.logoManagerActions { display: flex; align-items: center; gap: 7px; }
+.logoManagerActions input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+.logoManagerActions button { min-height: 41px; padding: 0 13px; border: 1px solid #111; border-radius: 9px; background: #111; color: #fff; display: inline-flex; align-items: center; gap: 7px; font-size: 9px; font-weight: 850; cursor: pointer; }
+.logoManagerActions button:disabled { opacity: .55; cursor: wait; }
+.logoManagerActions .removeLogo { border-color: #efd1ce; background: #fff2f0; color: #b3372d; }
 .adminMonthHeading { margin: 25px 0 14px; display: flex; align-items: end; justify-content: space-between; }
 .adminMonthHeading > div:last-child { min-width: 92px; padding: 12px; border-radius: 11px; background: color-mix(in srgb, var(--portal-accent) 16%, var(--surface)); display: flex; align-items: baseline; justify-content: center; gap: 5px; }
 .adminMonthHeading > div:last-child strong { font-size: 22px; }
@@ -135,7 +151,7 @@
 @media (max-width: 1050px) {
   .portalHeader { grid-template-columns: 1fr auto; }
   .portalHeader nav { order: 3; grid-column: 1 / -1; height: 49px; justify-content: center; border-top: 1px solid var(--line); }
-  .portalUser > span > span { display: none; }
+  .portalUser > span > span:last-child { display: none; }
   .invoiceGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .monthPicker { grid-template-columns: repeat(12, 80px); }
 }
@@ -150,7 +166,7 @@
   .clientWelcome { min-height: 255px; padding: 27px 23px; }
   .clientWelcome h1 { font-size: 40px; letter-spacing: -2.2px; }
   .clientWelcome::before { right: 9%; opacity: .6; }
-  .welcomeMark { display: none; }
+  .welcomeMark { position: absolute; right: 18px; bottom: 18px; width: 68px; height: 68px; border-radius: 17px; font-size: 18px; }
   .portalMetrics { grid-template-columns: 1fr 1fr; }
   .portalMetrics .dueMetric { grid-column: 1 / -1; }
   .invoiceGrid, .partGrid, .editorGrid { grid-template-columns: 1fr; }
@@ -159,6 +175,9 @@
   .adminHeroBadge { display: none; }
   .adminControls { grid-template-columns: 1fr 110px; }
   .clientAccessStatus { grid-column: 1 / -1; }
+  .logoManager { grid-template-columns: 68px 1fr; }
+  .logoManagerPreview { width: 68px; height: 68px; border-radius: 15px; }
+  .logoManagerActions { grid-column: 1 / -1; }
   .portalFooter { align-items: flex-start; flex-direction: column; justify-content: center; gap: 4px; }
 }
 @media (max-width: 480px) {
@@ -169,6 +188,9 @@
   .invoiceGrid article { min-height: 300px; }
   .adminControls { grid-template-columns: 1fr; }
   .clientAccessStatus { grid-column: auto; }
+  .logoManager { grid-template-columns: 58px 1fr; gap: 12px; }
+  .logoManagerPreview { width: 58px; height: 58px; border-radius: 13px; }
+  .logoManagerActions { flex-wrap: wrap; }
   .editorCard footer { flex-wrap: wrap; }
   .editorCard footer > span { display: none; }
 }

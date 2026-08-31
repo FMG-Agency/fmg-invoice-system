@@ -7,6 +7,7 @@ import {
   Download,
   ExternalLink,
   FileText,
+  ImageUp,
   Link2,
   LogOut,
   Moon,
@@ -19,8 +20,8 @@ import {
   WalletCards,
 } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
-import type { ClientPortalPlanPart, ClientPortalState } from "../types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Client, ClientPortalPlanPart, ClientPortalState } from "../types";
 import styles from "./ClientPortalPanel.module.css";
 
 const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -49,6 +50,16 @@ function partRange(year: number, month: number, part: 1 | 2) {
 
 function initials(value: string) {
   return value.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "CL";
+}
+
+function ClientBrandMark({ client, title, className }: { client: Client | null | undefined; title: string; className: string }) {
+  const [failed, setFailed] = useState(false);
+  const logoUrl = client?.portalLogoAvailable ? `/api/client-portal/logo/${client.id}?v=${encodeURIComponent(client.portalLogoUpdatedAt || "1")}` : "";
+  return <span className={`${styles.clientBrandMark} ${className}`} data-has-logo={logoUrl && !failed ? "true" : "false"}>
+    {logoUrl && !failed
+      ? <Image src={logoUrl} alt={`${title} logo`} fill sizes="160px" unoptimized onError={() => setFailed(true)} />
+      : initials(title)}
+  </span>;
 }
 
 async function portalJson(response: Response) {
@@ -97,14 +108,14 @@ export function ClientPortalShell({ displayName, dark, onToggleTheme, onLogout }
     <header className={styles.portalHeader}>
       <div className={styles.portalBrand}><Image src="/fmg-logo-light.png" alt="FMG Agency" width={380} height={130} unoptimized /><span>CLIENT PORTAL</span></div>
       <nav aria-label="Client portal navigation"><button className={tab === "invoices" ? styles.activeTab : ""} onClick={() => setTab("invoices")}><ReceiptText size={17} /> Invoices</button><button className={tab === "plans" ? styles.activeTab : ""} onClick={() => setTab("plans")}><CalendarDays size={17} /> Monthly plans</button></nav>
-      <div className={styles.portalUser}><button onClick={onToggleTheme} aria-label="Toggle theme">{dark ? <Sun size={17} /> : <Moon size={17} />}</button><span><i>{initials(title)}</i><span><strong>{title}</strong><small>{displayName}</small></span></span><button onClick={() => void onLogout()} aria-label="Sign out"><LogOut size={17} /></button></div>
+      <div className={styles.portalUser}><button onClick={onToggleTheme} aria-label="Toggle theme">{dark ? <Sun size={17} /> : <Moon size={17} />}</button><span><ClientBrandMark key={`header-${state?.client?.id}-${state?.client?.portalLogoUpdatedAt}`} client={state?.client} title={title} className={styles.portalUserMark} /><span><strong>{title}</strong><small>{displayName}</small></span></span><button onClick={() => void onLogout()} aria-label="Sign out"><LogOut size={17} /></button></div>
     </header>
 
     <main className={styles.portalMain}>
       {loading && !state ? <div className={styles.portalLoading}><span /><strong>Preparing your private workspace…</strong></div> : error ? <div className={styles.portalError}><FileText size={24} /><h2>Portal unavailable</h2><p>{error}</p></div> : state?.client ? <>
         <section className={styles.clientWelcome}>
           <div><span><Sparkles size={14} /> FMG × {title}</span><h1>{tab === "invoices" ? "Your account, made clear." : "Every plan. Every month. One place."}</h1><p>{tab === "invoices" ? "Review issued invoices, see what has been paid, and open the document whenever you need it." : "Choose a month, then open Part 1 or Part 2 for the exact content period you need."}</p></div>
-          <div className={styles.welcomeMark}>{initials(title)}</div>
+          <ClientBrandMark key={`hero-${state.client.id}-${state.client.portalLogoUpdatedAt}`} client={state.client} title={title} className={styles.welcomeMark} />
         </section>
 
         {tab === "invoices" ? <>
@@ -177,7 +188,7 @@ export function ClientPortalAdmin({ showToast }: { showToast: (message: string) 
   return <section className={styles.admin}>
     <section className={styles.adminHero}>
       <div><span><Sparkles size={15} /> CLIENT EXPERIENCE LAB</span><h2>Build each client’s private content library.</h2><p>Select a client and month, then publish two clear Canva plan parts. Their invoices appear automatically in the same portal.</p></div>
-      <div className={styles.adminHeroBadge}><span>{selectedClient ? initials(selectedClient.companyName || selectedClient.name) : "FMG"}</span><small>{portalUsername ? "PORTAL ACTIVE" : "LOGIN NOT CREATED"}</small></div>
+      <div className={styles.adminHeroBadge}><ClientBrandMark key={`admin-${selectedClient?.id}-${selectedClient?.portalLogoUpdatedAt}`} client={selectedClient} title={selectedClient ? selectedClient.companyName || selectedClient.name : "FMG"} className={styles.adminHeroMark} /><small>{portalUsername ? "PORTAL ACTIVE" : "LOGIN NOT CREATED"}</small></div>
     </section>
 
     <section className={styles.adminControls}>
@@ -187,10 +198,75 @@ export function ClientPortalAdmin({ showToast }: { showToast: (message: string) 
     </section>
 
     {loading && !state ? <div className={styles.adminLoading}>Loading portal workspace…</div> : state?.client ? <>
+      <ClientLogoManager key={`${state.client.id}-${state.client.portalLogoUpdatedAt || "no-logo"}`} client={state.client} year={year} onUpdate={updateState} showToast={showToast} />
       <MonthPicker year={year} selected={month} plans={state.plans} onSelect={setMonth} />
       <div className={styles.adminMonthHeading}><div><span>{monthNames[month - 1].toUpperCase()} {year}</span><h2>Publish monthly plan parts</h2><p>Each link is private to {state.client.companyName || state.client.name} after sign-in.</p></div><div><strong>{monthPlans.filter((plan) => plan.published).length}/2</strong><small>parts live</small></div></div>
       <div className={styles.editorGrid}>{([1, 2] as const).map((part) => <PlanPartEditor key={`${clientId}-${year}-${month}-${part}-${monthPlans.find((plan) => plan.part === part)?.updatedAt || "new"}`} part={part} year={year} month={month} clientId={clientId} plan={monthPlans.find((item) => item.part === part)} onUpdate={updateState} />)}</div>
     </> : <PortalEmpty icon={UserRound} title="Choose a client" body="Select a client to start building their private monthly plan library." />}
+  </section>;
+}
+
+function ClientLogoManager({ client, year, onUpdate, showToast }: { client: Client; year: number; onUpdate: (request: Promise<Response>, success: string) => Promise<void>; showToast: (message: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const title = client.companyName || client.name;
+
+  async function upload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      event.target.value = "";
+      showToast("Choose a PNG, JPG, or WebP logo.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      event.target.value = "";
+      showToast("Logo must be 2 MB or smaller.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const imageBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Could not read this logo."));
+        reader.readAsDataURL(file);
+      });
+      await onUpdate(fetch(`/api/client-portal/logo/${client.id}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ imageBase64, year }),
+      }), client.portalLogoAvailable ? "Client logo replaced." : "Client logo added.");
+    } catch (error) {
+      if (error instanceof Error && error.message === "Could not read this logo.") showToast(error.message);
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  async function remove() {
+    if (!client.portalLogoAvailable || !window.confirm(`Remove ${title}'s logo from the portal?`)) return;
+    setBusy(true);
+    try {
+      await onUpdate(fetch(`/api/client-portal/logo/${client.id}`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ year }),
+      }), "Client logo removed.");
+    } catch {
+      // updateState already reports the API error through the app toast.
+    } finally { setBusy(false); }
+  }
+
+  return <section className={styles.logoManager}>
+    <ClientBrandMark client={client} title={title} className={styles.logoManagerPreview} />
+    <div className={styles.logoManagerCopy}><span>CLIENT BRANDING</span><h3>{client.portalLogoAvailable ? "Brand logo is live" : "Add the client’s logo"}</h3><p>It appears inside their private portal instead of the letter mark. PNG, JPG or WebP · up to 2 MB.</p></div>
+    <div className={styles.logoManagerActions}>
+      <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void upload(event)} disabled={busy} />
+      <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}><ImageUp size={16} /> {busy ? "Uploading…" : client.portalLogoAvailable ? "Replace logo" : "Upload logo"}</button>
+      {client.portalLogoAvailable && <button type="button" className={styles.removeLogo} onClick={() => void remove()} disabled={busy}><Trash2 size={15} /> Remove</button>}
+    </div>
   </section>;
 }
 

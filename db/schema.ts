@@ -10,6 +10,9 @@ export const clients = sqliteTable("clients", {
   email: text("email").notNull().default(""),
   address: text("address").notNull().default(""),
   notes: text("notes").notNull().default(""),
+  portalLogoKey: text("portal_logo_key").notNull().default(""),
+  portalLogoType: text("portal_logo_type").notNull().default(""),
+  portalLogoUpdatedAt: text("portal_logo_updated_at").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
