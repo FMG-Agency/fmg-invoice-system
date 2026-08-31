@@ -180,7 +180,8 @@ function itemRow(doc: jsPDF, draft: DocumentDraft, item: DocumentDraft["items"][
 
 function totals(doc: jsPDF, draft: DocumentDraft, y: number, theme: PdfTheme) {
   const subtotal = draft.items.reduce((sum, item) => sum + item.qty * item.unitPrice, 0);
-  const grand = Math.max(0, subtotal - draft.discount + draft.tax);
+  const rawTotal = subtotal - draft.discount + draft.tax;
+  const grand = draft.type === "invoice" ? rawTotal : Math.max(0, rawTotal);
   const rows: Array<[string, string, boolean]> = [
     ["SUBTOTAL", formatMoney(subtotal, draft.currency), false],
     ["DISCOUNT", formatMoney(draft.discount, draft.currency), false],
@@ -322,27 +323,30 @@ export async function generateDocumentPdf(draft: DocumentDraft, client: Client, 
   }
 
   y = totals(doc, draft, y + 3, theme) + 6;
-  if (y > 205) {
-    footer(doc, category, theme, digitalEmpire);
-    doc.addPage();
-    drawHeader(true);
-    y = 42;
+  const showPaymentNotes = draft.type !== "invoice" || Boolean(draft.paymentTerms.trim() || draft.notesExclusions.trim());
+  if (showPaymentNotes) {
+    if (y > 205) {
+      footer(doc, category, theme, digitalEmpire);
+      doc.addPage();
+      drawHeader(true);
+      y = 42;
+    }
+    band(doc, "PAYMENT & NOTES  /", y, theme);
+    y += 10;
+    doc.setFillColor(theme.light);
+    doc.rect(14, y, 42, 10, "F");
+    text(doc, "PAYMENT TERMS", 17, y + 6.2, { fontSize: 7, bold: true });
+    doc.setDrawColor("#d8d8d8");
+    doc.rect(56, y, 140, 10);
+    text(doc, draft.paymentTerms.trim() || (draft.type === "invoice" ? "—" : "50% advance payment • 50% upon completion"), 59, y + 6.2, { fontSize: 7, maxWidth: 134 });
+    y += 10;
+    doc.setFillColor(theme.light);
+    doc.rect(14, y, 42, 18, "F");
+    text(doc, "NOTES / EXCLUSIONS", 17, y + 6.2, { fontSize: 7, bold: true });
+    doc.rect(56, y, 140, 18);
+    text(doc, draft.notesExclusions.trim() || "—", 59, y + 6.2, { fontSize: 7, maxWidth: 134 });
+    y += 24;
   }
-  band(doc, "PAYMENT & NOTES  /", y, theme);
-  y += 10;
-  doc.setFillColor(theme.light);
-  doc.rect(14, y, 42, 10, "F");
-  text(doc, "PAYMENT TERMS", 17, y + 6.2, { fontSize: 7, bold: true });
-  doc.setDrawColor("#d8d8d8");
-  doc.rect(56, y, 140, 10);
-  text(doc, draft.paymentTerms || "50% advance payment • 50% upon completion", 59, y + 6.2, { fontSize: 7, maxWidth: 134 });
-  y += 10;
-  doc.setFillColor(theme.light);
-  doc.rect(14, y, 42, 18, "F");
-  text(doc, "NOTES / EXCLUSIONS", 17, y + 6.2, { fontSize: 7, bold: true });
-  doc.rect(56, y, 140, 18);
-  text(doc, draft.notesExclusions || "—", 59, y + 6.2, { fontSize: 7, maxWidth: 134 });
-  y += 24;
   if (draft.type === "quotation") {
     band(doc, "TERMS & ACCEPTANCE  /", y, theme);
     y += 11;

@@ -15,6 +15,7 @@ export type AuthSession = {
   isAdmin: boolean;
   permissions: AccessPermission[];
   employeeId: number | null;
+  clientId: number | null;
 };
 
 const authSchema = [
@@ -46,6 +47,7 @@ const authSchema = [
     active INTEGER NOT NULL DEFAULT 1,
     permissions_json TEXT NOT NULL DEFAULT '[]',
     employee_id INTEGER,
+    client_id INTEGER,
     created_by INTEGER,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -121,7 +123,11 @@ async function initializeAuthDatabase() {
   if (!authUserColumns.results.some((column) => String(column.name) === "employee_id")) {
     await database.prepare("ALTER TABLE auth_users ADD COLUMN employee_id INTEGER").run();
   }
+  if (!authUserColumns.results.some((column) => String(column.name) === "client_id")) {
+    await database.prepare("ALTER TABLE auth_users ADD COLUMN client_id INTEGER").run();
+  }
   await database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_users_employee_id ON auth_users(employee_id) WHERE employee_id IS NOT NULL").run();
+  await database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_users_client_id ON auth_users(client_id) WHERE client_id IS NOT NULL").run();
   await database.batch([
     database.prepare(`INSERT OR IGNORE INTO auth_users
       (id, username, display_name, role_label, password_hash, password_salt, password_iterations,
@@ -191,12 +197,12 @@ export async function getSession(request: Request): Promise<AuthSession | null> 
   if (!token) return null;
   const row = await database.prepare(`SELECT u.id AS userId, u.username, u.display_name AS displayName,
       u.role_label AS roleLabel, u.is_admin AS isAdmin, u.permissions_json AS permissionsJson,
-      u.employee_id AS employeeId
+      u.employee_id AS employeeId, u.client_id AS clientId
     FROM auth_user_sessions s
     JOIN auth_users u ON u.id = s.user_id
     WHERE s.token_hash = ? AND s.expires_at > ? AND u.active = 1`)
     .bind(await sha256(token), Math.floor(Date.now() / 1000))
-    .first<{ userId: number; username: string; displayName: string; roleLabel: string; isAdmin: number; permissionsJson: string; employeeId: number | null }>();
+    .first<{ userId: number; username: string; displayName: string; roleLabel: string; isAdmin: number; permissionsJson: string; employeeId: number | null; clientId: number | null }>();
   if (!row) return null;
   const isAdmin = Number(row.isAdmin) === 1;
   return {
@@ -207,6 +213,7 @@ export async function getSession(request: Request): Promise<AuthSession | null> 
     isAdmin,
     permissions: isAdmin ? ALL_ACCESS_PERMISSIONS : parsePermissions(row.permissionsJson),
     employeeId: row.employeeId === null || row.employeeId === undefined ? null : Number(row.employeeId),
+    clientId: row.clientId === null || row.clientId === undefined ? null : Number(row.clientId),
   };
 }
 

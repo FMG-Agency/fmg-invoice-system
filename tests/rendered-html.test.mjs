@@ -19,7 +19,7 @@ test("builds the FMG production entrypoint", async () => {
 });
 
 test("ships the complete product, protected access, HR payroll, and Vercel storage adapters", async () => {
-  const [component, clientAccountComponent, accessComponent, requestsComponent, hrComponent, api, clientAccountsApi, clientAccountsLib, usersApi, requestsApi, requestAttachmentApi, hrApi, hrImportApi, hrExportApi, hrExport, pdf, pdfApi, authApi, authServer, permissions, database, vercel, migration, authMigration, hrMigration, multiUserMigration, requestsMigration, payrollRulesMigration, quotationCatalogMigration, catalogIoMigration, companyMigration, clientAccountsMigration, policyV2Migration] = await Promise.all([
+  const [component, clientAccountComponent, accessComponent, requestsComponent, hrComponent, api, clientAccountsApi, clientAccountsLib, usersApi, requestsApi, requestAttachmentApi, hrApi, hrImportApi, hrExportApi, hrExport, hrLib, pdf, pdfApi, authApi, authServer, permissions, database, vercel, migration, authMigration, hrMigration, multiUserMigration, requestsMigration, payrollRulesMigration, quotationCatalogMigration, catalogIoMigration, companyMigration, clientAccountsMigration, policyV2Migration] = await Promise.all([
     readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
     readFile(new URL("app/components/ClientAccountPanel.tsx", root), "utf8"),
     readFile(new URL("app/components/AccessPanel.tsx", root), "utf8"),
@@ -35,6 +35,7 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
     readFile(new URL("app/api/hr/import/route.ts", root), "utf8"),
     readFile(new URL("app/api/hr/export/route.ts", root), "utf8"),
     readFile(new URL("app/lib/hr-export.ts", root), "utf8"),
+    readFile(new URL("app/lib/hr.ts", root), "utf8"),
     readFile(new URL("app/lib/pdf.ts", root), "utf8"),
     readFile(new URL("app/api/pdf/[id]/route.ts", root), "utf8"),
     readFile(new URL("app/api/auth/route.ts", root), "utf8"),
@@ -77,7 +78,44 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(hrExport, /Payroll Summary/);
   assert.match(hrExport, /buildPayrollWorkbook/);
   assert.match(hrExport, /NET SALARY/);
-  assert.match(hrExport, /one sheet per employee|addEmployeeSheet/i);
+  assert.match(hrExport, /one sheet per employee|addCompactEmployeeSheet/i);
+  assert.match(hrExport, /DAILY ATTENDANCE & TIME DETAIL/);
+  assert.match(hrExport, /DAILY PAYROLL IMPACT & APPROVALS/);
+  assert.match(hrExport, /Penalty Time \(min\)\\nLate Time ×\$\{state\.policy\.minutePenaltyMultiplier\}/);
+  assert.match(hrExport, /Normal Mission Time \(min\)\\nNormal OT ×\$\{state\.policy\.overtimeMultiplier\}/);
+  assert.match(hrExport, /Early Mission Time \(min\)\\nEarly OT ×\$\{state\.policy\.earlyOvertimeMultiplier\}/);
+  assert.match(hrExport, /Total Mission Time \(min\)/);
+  assert.match(hrExport, /G\$\{row\.number\}\*\$\{state\.policy\.minutePenaltyMultiplier\}/);
+  assert.match(hrExport, /J\$\{row\.number\}\*\$\{state\.policy\.overtimeMultiplier\}/);
+  assert.match(hrExport, /L\$\{row\.number\}\*\$\{state\.policy\.earlyOvertimeMultiplier\}/);
+  assert.match(hrExport, /K\$\{row\.number\}\+M\$\{row\.number\}/);
+  assert.match(hrExport, /only days explicitly allowed with a written reason/i);
+  assert.match(hrExport, /days 1–16.*arrival cutoff/i);
+  assert.match(hrApi, /action: z\.literal\("allowOvertimeDay"\)/);
+  assert.match(hrApi, /Normal overtime allowed/);
+  assert.match(hrApi, /Early overtime allowed/);
+  assert.match(hrApi, /overtimeArrivalCutoff/);
+  assert.match(hrLib, /workDay <= 16/);
+  assert.match(hrLib, /overtimeArrivalEligible/);
+  assert.match(hrLib, /writtenOvertimeApproval/);
+  assert.match(hrLib, /normalMissionMinutes/);
+  assert.match(hrLib, /earlyMissionMinutes/);
+  assert.match(hrLib, /totalMissionMinutes/);
+  assert.match(hrComponent, /Days 1–16/);
+  assert.match(hrComponent, /Allow overtime for a specific employee and day/);
+  assert.match(hrComponent, /Only allowed days count/);
+  assert.match(requestsComponent, /from day 17 arrival must be no later than 11:30 AM/);
+  assert.match(hrExport, /Early OT allowed/);
+  assert.match(hrExport, /Email not provided/);
+  assert.match(hrExport, /Phone not provided/);
+  assert.match(hrExport, /Hire date not provided/);
+  assert.match(hrExport, /No punches recorded/);
+  assert.match(hrExport, /No manager note/);
+  assert.match(hrExport, /DATA CHECK — Employee profile is incomplete/);
+  assert.match(hrExport, /Update Employees before relying on payroll amounts/);
+  assert.match(hrExport, /sheet\.pageSetup\.printArea = `A1:O/);
+  assert.doesNotMatch(hrExport, /sheet\.views = \[\{ state: "frozen", ySplit: timeHeaderRow/);
+  assert.doesNotMatch(hrExport, /Mission Time[^\n`]*×4/);
   for (const action of ["setup", "login", "logout", "change"]) {
     assert.match(authApi, new RegExp(`action: z\\.literal\\(\\"${action}\\"\\)`));
   }
@@ -85,7 +123,10 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(authServer, /JOIN auth_users/);
   assert.match(usersApi, /requireAdmin/);
   assert.match(usersApi, /permissions_json/);
-  assert.match(accessComponent, /Operation Manager preset/);
+  assert.match(accessComponent, /Ready-made access presets/);
+  assert.match(accessComponent, /Account Manager/);
+  assert.match(accessComponent, /Production Manager/);
+  assert.match(accessComponent, /Operation Manager/);
   assert.match(accessComponent, /Linked employee/);
   assert.match(requestsComponent, /Leave request/);
   assert.match(requestsComponent, /Early-leave excuse/);
@@ -100,6 +141,10 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(requestsApi, /urgentLeaveYearLimit/);
   assert.match(requestsApi, /resortNoticeDays/);
   assert.match(requestsApi, /attachment_key/);
+  assert.match(requestsApi, /action: z\.literal\("delete"\)/);
+  assert.match(requestsApi, /Only an administrator can delete employee requests/);
+  assert.match(requestsApi, /DELETE FROM employee_requests WHERE id = \? RETURNING id/);
+  assert.match(requestsComponent, /Delete employee request/);
   assert.match(requestAttachmentApi, /get\(row\.attachmentKey, \{ access: "private" \}\)/);
   assert.match(requestAttachmentApi, /row\.employeeId !== session\.employeeId/);
   assert.match(permissions, /OPERATION_MANAGER_PERMISSIONS/);
@@ -131,7 +176,7 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(policyV2Migration, /sick_report_after_days/);
   assert.match(policyV2Migration, /resort_notice_days/);
   assert.match(hrComponent, /Policy v2/);
-  assert.match(hrComponent, /Approved urgent early-arrival task/);
+  assert.match(hrComponent, /Allow this day’s early overtime/);
   assert.match(hrComponent, /First audit issue/);
   assert.match(hrExport, /Early-leave deduction/);
   assert.match(hrExport, /Unpaid-leave deduction/);
@@ -171,13 +216,25 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(component, /mediaGuideSelected \? <div className="item-io-grid">/);
   assert.match(component, /document-notes"><Field label="Payment terms">/);
   assert.match(component, /Optional notes shown on the \$\{type\}/);
+  assert.match(component, /use a negative unit price to apply previous client credit/);
+  assert.match(component, /min=\{type === "invoice" \? undefined : 0\}/);
+  assert.match(component, /const total = type === "invoice" \? rawTotal : Math\.max\(0, rawTotal\)/);
   assert.match(component, /paper-payment-notes/);
+  assert.match(component, /const showPaymentNotes = draft\.type !== "invoice" \|\| Boolean\(draft\.paymentTerms\.trim\(\) \|\| draft\.notesExclusions\.trim\(\)\)/);
+  assert.match(component, /\{showPaymentNotes && <section className="paper-payment-notes">/);
   assert.match(component, /selectCategory\(Number\(event\.target\.value\)\)/);
   assert.match(pdf, /category\.name\.trim\(\)\.toLowerCase\(\) === "media guide"/);
   assert.match(pdf, /const mediaGuideDocument = category\.name/);
   assert.doesNotMatch(pdf, /const mediaGuideQuotation = draft\.type === "quotation"/);
   assert.match(pdf, /\["DATE", addonGroup \? "ADD-ON NAME" : "BUNDLE NAME", "INPUTS", "OUTPUTS"/);
   assert.match(pdf, /band\(doc, "PAYMENT & NOTES  \/", y, theme\)/);
+  assert.match(pdf, /const showPaymentNotes = draft\.type !== "invoice" \|\| Boolean\(draft\.paymentTerms\.trim\(\) \|\| draft\.notesExclusions\.trim\(\)\)/);
+  assert.match(pdf, /if \(showPaymentNotes\)/);
+  assert.match(pdf, /draft\.type === "invoice" \? "—" : "50% advance payment • 50% upon completion"/);
+  assert.match(pdf, /const grand = draft\.type === "invoice" \? rawTotal : Math\.max\(0, rawTotal\)/);
+  assert.match(api, /unitPrice: z\.number\(\)\.finite\(\),/);
+  assert.match(api, /Quotation item prices cannot be negative/);
+  assert.match(api, /const total = data\.type === "invoice" \? rawTotal : Math\.max\(0, rawTotal\)/);
   assert.doesNotMatch(pdf, /FOR \$\{theme\.brandName\}/);
   assert.doesNotMatch(pdf, /CLIENT APPROVAL/);
   assert.match(pdf, /draft\.type !== "quotation"/);
@@ -205,6 +262,85 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(companyMigration, /ADD `company_key` text DEFAULT 'fmg' NOT NULL/);
 });
 
+test("ships the locked Media Guide production workflow", async () => {
+  const [component, workOrder, workOrderStyles, productionApi, permissions, migration, finalApprovalMigration, costingMigration] = await Promise.all([
+    readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
+    readFile(new URL("app/components/WorkOrderPanel.tsx", root), "utf8"),
+    readFile(new URL("app/components/WorkOrderPanel.module.css", root), "utf8"),
+    readFile(new URL("app/api/production/route.ts", root), "utf8"),
+    readFile(new URL("app/lib/permissions.ts", root), "utf8"),
+    readFile(new URL("drizzle/0011_stormy_nightshade.sql", root), "utf8"),
+    readFile(new URL("drizzle/0012_demonic_gunslinger.sql", root), "utf8"),
+    readFile(new URL("drizzle/0013_third_mimic.sql", root), "utf8"),
+  ]);
+  assert.match(permissions, /key: "production"/);
+  assert.match(component, /label: "Production"/);
+  assert.match(component, /permission: "production"/);
+  assert.match(workOrder, /Approve & send to Production/);
+  assert.match(workOrder, /Approve & send to Operations/);
+  assert.match(workOrder, /Final approve & lock/);
+  assert.match(workOrder, /cannot edit or cancel/i);
+  assert.match(workOrder, /Account Manager note/);
+  assert.match(workOrder, /Production Manager note/);
+  assert.match(workOrder, /Operation Manager note/);
+  assert.match(workOrder, /Add option/);
+  assert.match(workOrder, /Photographer/);
+  assert.match(workOrder, /Videographer/);
+  assert.match(workOrder, /Blogger/);
+  assert.match(workOrder, /Hair Stylist/);
+  assert.match(workOrder, /Makeup Stylist/);
+  assert.match(workOrder, /INPUTS/);
+  assert.match(workOrder, /OUTPUTS/);
+  assert.match(workOrder, /PRICE · EGP/);
+  assert.match(workOrder, /Draft invoice/);
+  assert.match(workOrder, /FINAL APPROVED/);
+  assert.match(workOrder, /Included in bundle/);
+  assert.match(workOrder, /Extra cost/);
+  assert.match(workOrder, /Only production options marked Extra cost are added above the bundle price/);
+  assert.match(productionApi, /role !== "account_manager"/);
+  assert.match(productionApi, /role !== "production_manager"/);
+  assert.match(productionApi, /role !== "operation_manager"/);
+  assert.match(productionApi, /action: z\.literal\("finalApprove"\)/);
+  assert.match(productionApi, /WHERE id = \? AND status = 'pending_production'/);
+  assert.match(productionApi, /WHERE id = \? AND status = 'ready_for_operations' AND final_approved_at = ''/);
+  assert.match(productionApi, /production_options_json/);
+  assert.match(productionApi, /billingMode: z\.enum\(\["included", "extra"\]\)\.default\("included"\)/);
+  assert.match(productionApi, /option\.billingMode === "extra" \? option\.price : 0/);
+  assert.match(productionApi, /input\.options\.filter\(\(option\) => option\.billingMode === "extra"\)/);
+  assert.match(productionApi, /Only an administrator can delete production work orders/);
+  assert.match(productionApi, /DELETE FROM production_work_orders WHERE id = \?/);
+  assert.match(productionApi, /INSERT OR IGNORE INTO documents/);
+  assert.match(productionApi, /'Draft'/);
+  assert.doesNotMatch(productionApi, /action: z\.literal\("(?:update|cancel)"\)/);
+  assert.match(migration, /CREATE TABLE `production_work_orders`/);
+  assert.match(migration, /CREATE TABLE `production_work_order_events`/);
+  assert.match(finalApprovalMigration, /operation_manager_user_id/);
+  assert.match(finalApprovalMigration, /final_approved_at/);
+  assert.match(costingMigration, /production_options_json/);
+  assert.match(costingMigration, /production_work_order_id/);
+  assert.match(costingMigration, /draft_invoice_id/);
+  assert.match(workOrderStyles, /size: A4 landscape/);
+});
+
+test("upgrades existing production orders for Operations final approval", async () => {
+  const db = createClient({ url: "file::memory:" });
+  await db.execute("CREATE TABLE documents (id INTEGER PRIMARY KEY)");
+  await db.executeMultiple(await readFile(new URL("drizzle/0011_stormy_nightshade.sql", root), "utf8"));
+  await db.executeMultiple(await readFile(new URL("drizzle/0012_demonic_gunslinger.sql", root), "utf8"));
+  await db.executeMultiple(await readFile(new URL("drizzle/0013_third_mimic.sql", root), "utf8"));
+  const columns = await db.execute("PRAGMA table_info(production_work_orders)");
+  const names = columns.rows.map((column) => column.name);
+  assert.ok(names.includes("operation_note"));
+  assert.ok(names.includes("operation_manager_user_id"));
+  assert.ok(names.includes("operation_manager_name"));
+  assert.ok(names.includes("final_approved_at"));
+  assert.ok(names.includes("production_options_json"));
+  assert.ok(names.includes("draft_invoice_id"));
+  const documentColumns = await db.execute("PRAGMA table_info(documents)");
+  assert.ok(documentColumns.rows.some((column) => column.name === "production_work_order_id"));
+  db.close();
+});
+
 test("ships the smart 2026 client workbook import and finance menu", async () => {
   const [component, financeComponent, financeApi, financeLib, accountsLib, seedText] = await Promise.all([
     readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
@@ -225,7 +361,7 @@ test("ships the smart 2026 client workbook import and finance menu", async () =>
   assert.equal(seed.ledger.filter((entry) => entry.type === "charge").reduce((sum, entry) => sum + entry.amount, 0), 4_172_150);
   assert.equal(seed.ledger.filter((entry) => entry.type === "payment").reduce((sum, entry) => sum + entry.amount, 0), 4_037_300);
 
-  for (const expected of ["Client Directory", "Client Accounts", "Monthly Plans", "navSections", "nav-submenu", "aria-expanded"])
+  for (const expected of ["Client Directory", "Client Accounts", "Retainers", "Client Portal", "navSections", "nav-submenu", "aria-expanded"])
     assert.match(component, new RegExp(expected));
   assert.match(component, /<ClientFinancePanel mode="accounts"/);
   assert.match(component, /<ClientFinancePanel mode="monthly"/);
@@ -240,6 +376,64 @@ test("ships the smart 2026 client workbook import and finance menu", async () =>
   assert.match(financeLib, /INSERT OR IGNORE INTO client_financial_transactions/);
   assert.match(accountsLib, /source_key/);
   assert.match(accountsLib, /type TEXT NOT NULL CHECK\(type IN \('charge','payment','credit','refund'\)\)/);
+});
+
+test("ships a private client invoice portal with publishable monthly Canva plans", async () => {
+  const [component, portalComponent, portalStyles, portalApi, portalLib, authApi, authServer, usersApi, accessComponent, permissions, pdfApi, migration] = await Promise.all([
+    readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
+    readFile(new URL("app/components/ClientPortalPanel.tsx", root), "utf8"),
+    readFile(new URL("app/components/ClientPortalPanel.module.css", root), "utf8"),
+    readFile(new URL("app/api/client-portal/route.ts", root), "utf8"),
+    readFile(new URL("app/lib/client-portal.ts", root), "utf8"),
+    readFile(new URL("app/api/auth/route.ts", root), "utf8"),
+    readFile(new URL("app/lib/auth-server.ts", root), "utf8"),
+    readFile(new URL("app/api/users/route.ts", root), "utf8"),
+    readFile(new URL("app/components/AccessPanel.tsx", root), "utf8"),
+    readFile(new URL("app/lib/permissions.ts", root), "utf8"),
+    readFile(new URL("app/api/pdf/[id]/route.ts", root), "utf8"),
+    readFile(new URL("drizzle/0014_youthful_mephistopheles.sql", root), "utf8"),
+  ]);
+  assert.match(component, /client-portal-admin/);
+  assert.match(component, /auth\.clientId !== null/);
+  assert.match(component, /<ClientPortalShell/);
+  assert.match(portalComponent, /Your account, made clear/);
+  assert.match(portalComponent, /Every plan\. Every month\. One place/);
+  assert.match(portalComponent, /Part 1 covers days 1–15/);
+  assert.match(portalComponent, /16–\$\{String\(finalDay\)/);
+  assert.match(portalComponent, /Canva or external link/);
+  assert.match(portalComponent, /target="_blank" rel="noopener noreferrer"/);
+  assert.match(portalStyles, /grid-template-columns: repeat\(3/);
+  assert.match(portalStyles, /@media \(max-width: 760px\)/);
+  assert.match(portalApi, /requirePermission\(request, "client_portal"\)/);
+  assert.match(portalApi, /Client accounts are read-only/);
+  assert.match(portalApi, /ON CONFLICT\(client_id, year, month, part\)/);
+  assert.match(portalLib, /p\.published = 1/);
+  assert.match(portalLib, /!\["Draft", "Rejected"\]\.includes/);
+  assert.match(component, /Client Portal/);
+  assert.match(await readFile(new URL("app/api/state/route.ts", root), "utf8"), /if \(session\.clientId !== null\) return accessDenied\(\)/);
+  assert.match(authApi, /clientId: session\.clientId/);
+  assert.match(authServer, /u\.client_id AS clientId/);
+  assert.match(usersApi, /Client users can only access their own Client Portal/);
+  assert.match(accessComponent, /Client Portal/);
+  assert.match(accessComponent, /Linked client/);
+  assert.match(permissions, /key: "client_portal"/);
+  assert.match(pdfApi, /row\.type !== "invoice" \|\| Number\(row\.clientId\) !== session\.clientId/);
+  assert.match(migration, /CREATE TABLE `client_portal_plans`/);
+  assert.match(migration, /ALTER TABLE `auth_users` ADD `client_id`/);
+
+  const db = createClient({ url: "file::memory:" });
+  await db.executeMultiple(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE clients (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+    CREATE TABLE auth_users (id INTEGER PRIMARY KEY, username TEXT NOT NULL);
+    INSERT INTO clients (id, name) VALUES (1, 'Portal Client');
+  `);
+  await db.executeMultiple(migration);
+  const authColumns = await db.execute("PRAGMA table_info(auth_users)");
+  assert.ok(authColumns.rows.some((column) => column.name === "client_id"));
+  await db.execute({ sql: "INSERT INTO client_portal_plans (client_id, year, month, part, title, url) VALUES (?, ?, ?, ?, ?, ?)", args: [1, 2026, 8, 1, "August Part 1", "https://www.canva.com/design/example"] });
+  await assert.rejects(() => db.execute({ sql: "INSERT INTO client_portal_plans (client_id, year, month, part, title, url) VALUES (?, ?, ?, ?, ?, ?)", args: [1, 2026, 8, 1, "Duplicate", "https://example.com"] }), /UNIQUE constraint failed/i);
+  db.close();
 });
 
 test("creates a durable client ledger with invoice links and all financial movement types", async () => {

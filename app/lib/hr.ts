@@ -265,9 +265,15 @@ function isFriday(value: string) {
   return new Date(`${value}T12:00:00Z`).getUTCDay() === 5;
 }
 
+function dayOfMonth(value: string) {
+  const match = /^\d{4}-\d{2}-(\d{2})$/.exec(value);
+  const day = match ? Number(match[1]) : Number.NaN;
+  return Number.isInteger(day) && day >= 1 && day <= 31 ? day : null;
+}
+
 const leaveStatuses: AttendanceRecord["status"][] = ["vacation", "occasional_leave", "resort_leave", "sick_leave", "urgent_leave", "normal_leave"];
 
-type AttendanceSource = Omit<AttendanceRecord, "lateMinutes" | "penaltyMinutes" | "earlyLeaveMinutes" | "overtimeMinutes" | "earlyOvertimeMinutes" | "lateDeduction" | "earlyLeaveDeduction" | "leaveDeduction" | "overtimePay" | "fridayPay">;
+type AttendanceSource = Omit<AttendanceRecord, "lateMinutes" | "penaltyMinutes" | "earlyLeaveMinutes" | "normalOvertimeMinutes" | "overtimeMinutes" | "earlyOvertimeMinutes" | "normalMissionMinutes" | "earlyMissionMinutes" | "totalMissionMinutes" | "lateDeduction" | "earlyLeaveDeduction" | "leaveDeduction" | "overtimePay" | "fridayPay">;
 
 export function attendanceMath(record: AttendanceSource, employee: Employee, policy: HrPolicy) {
   const dailyRate = employee.baseSalary / Math.max(1, policy.salaryDivisor);
@@ -283,6 +289,8 @@ export function attendanceMath(record: AttendanceSource, employee: Employee, pol
   const overtimeApprovalAfter = minutesFromTime(policy.overtimeApprovalAfter) ?? 1320;
   const overtimeCutoff = minutesFromTime(policy.overtimeArrivalCutoff) ?? 690;
   const friday = isFriday(record.workDate);
+  const workDay = dayOfMonth(record.workDate);
+  const overtimeArrivalEligible = (workDay !== null && workDay <= 16) || (arrival !== null && arrival <= overtimeCutoff);
 
   let lateMinutes = 0;
   let penaltyMinutes = 0;
@@ -290,6 +298,7 @@ export function attendanceMath(record: AttendanceSource, employee: Employee, pol
   let earlyLeaveMinutes = 0;
   let earlyLeaveDeduction = 0;
   let leaveDeduction = 0;
+  let normalOvertimeMinutes = 0;
   let overtimeMinutes = 0;
   let earlyOvertimeMinutes = 0;
   let overtimePay = 0;
@@ -315,11 +324,13 @@ export function attendanceMath(record: AttendanceSource, employee: Employee, pol
       }
     }
 
-    if (record.missionOvertimeMinutes <= 0 && departure !== null && arrival <= overtimeCutoff && departure > overtimeStart) {
+    const writtenOvertimeApproval = record.overtimeApproved && record.notes.trim().length > 0;
+    if (record.missionOvertimeMinutes <= 0 && departure !== null && writtenOvertimeApproval && overtimeArrivalEligible && departure > overtimeStart) {
       const approvedPastTen = record.overtimeApproved && record.notes.trim().length > 0;
       const eligibleDeparture = approvedPastTen ? departure : Math.min(departure, overtimeApprovalAfter);
-      overtimeMinutes = Math.max(0, eligibleDeparture - overtimeStart);
-      overtimePay = overtimeMinutes * minuteRate * policy.overtimeMultiplier;
+      normalOvertimeMinutes = Math.max(0, eligibleDeparture - overtimeStart);
+      overtimeMinutes += normalOvertimeMinutes;
+      overtimePay = normalOvertimeMinutes * minuteRate * policy.overtimeMultiplier;
     }
 
     if (record.earlyOvertimeApproved && record.notes.trim().length > 0 && arrival < workdayStart) {
@@ -335,16 +346,25 @@ export function attendanceMath(record: AttendanceSource, employee: Employee, pol
   }
 
   if (record.missionOvertimeMinutes > 0) {
+    normalOvertimeMinutes += record.missionOvertimeMinutes;
     overtimeMinutes += record.missionOvertimeMinutes;
     overtimePay += record.missionOvertimeMinutes * minuteRate * policy.overtimeMultiplier;
   }
+
+  const normalMissionMinutes = Math.round(normalOvertimeMinutes * policy.overtimeMultiplier * 100) / 100;
+  const earlyMissionMinutes = Math.round(earlyOvertimeMinutes * policy.earlyOvertimeMultiplier * 100) / 100;
+  const totalMissionMinutes = normalMissionMinutes + earlyMissionMinutes;
 
   return {
     lateMinutes,
     penaltyMinutes: Math.round(penaltyMinutes),
     earlyLeaveMinutes,
+    normalOvertimeMinutes,
     overtimeMinutes,
     earlyOvertimeMinutes,
+    normalMissionMinutes,
+    earlyMissionMinutes,
+    totalMissionMinutes,
     lateDeduction: moneyValue(lateDeduction),
     earlyLeaveDeduction: moneyValue(earlyLeaveDeduction),
     leaveDeduction: moneyValue(leaveDeduction),
@@ -468,8 +488,13 @@ function payrollForEmployee(employee: Employee, attendance: AttendanceRecord[], 
     earlyLeaveDays: employeeAttendance.filter((record) => record.earlyLeaveMinutes > 0 && !record.earlyLeaveExcused).length,
     unpaidLeaveDays: employeeAttendance.filter((record) => leaveStatuses.includes(record.status) && !record.leavePaid).length,
     lateMinutes: employeeAttendance.reduce((sum, record) => sum + record.lateMinutes, 0),
+    normalOvertimeMinutes: employeeAttendance.reduce((sum, record) => sum + record.normalOvertimeMinutes, 0),
     overtimeMinutes: employeeAttendance.reduce((sum, record) => sum + record.overtimeMinutes, 0),
+    earlyOvertimeMinutes: employeeAttendance.reduce((sum, record) => sum + record.earlyOvertimeMinutes, 0),
     missionOvertimeMinutes: employeeAttendance.reduce((sum, record) => sum + record.missionOvertimeMinutes, 0),
+    normalMissionMinutes: employeeAttendance.reduce((sum, record) => sum + record.normalMissionMinutes, 0),
+    earlyMissionMinutes: employeeAttendance.reduce((sum, record) => sum + record.earlyMissionMinutes, 0),
+    totalMissionMinutes: employeeAttendance.reduce((sum, record) => sum + record.totalMissionMinutes, 0),
   };
 }
 

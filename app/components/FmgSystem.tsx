@@ -51,11 +51,12 @@ import type { AppState, Category, Client, CompanyKey, DocumentDraft, DocumentRec
 import { AccessPanel } from "./AccessPanel";
 import { ClientAccountPanel } from "./ClientAccountPanel";
 import { ClientFinancePanel } from "./ClientFinancePanel";
+import { ClientPortalAdmin, ClientPortalShell } from "./ClientPortalPanel";
 import { AttendancePanel, EmployeesPanel, type HrMutation } from "./HrPanels";
 import { RequestsPanel } from "./RequestsPanel";
 import { WorkOrderPanel } from "./WorkOrderPanel";
 
-type View = "dashboard" | "invoice" | "quotation" | "media-guide" | "work-order" | "clients" | "client-accounts" | "monthly-clients" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
+type View = "dashboard" | "invoice" | "quotation" | "media-guide" | "work-order" | "clients" | "client-accounts" | "monthly-clients" | "client-portal-admin" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
 type Mutation = (body: Record<string, unknown>) => Promise<AppState>;
 const companyNames: Record<CompanyKey, string> = { fmg: "FMG Agency", digital_empire: "The Digital Empire" };
 type AuthState = {
@@ -69,6 +70,7 @@ type AuthState = {
   isAdmin: boolean;
   permissions: AccessPermission[];
   employeeId: number | null;
+  clientId: number | null;
 };
 
 const signedOutAuth: AuthState = {
@@ -82,6 +84,7 @@ const signedOutAuth: AuthState = {
   isAdmin: false,
   permissions: [],
   employeeId: null,
+  clientId: null,
 };
 
 type AuthPayload = Partial<Omit<AuthState, "checking">> & { error?: string };
@@ -98,6 +101,7 @@ function authFromPayload(payload: AuthPayload): AuthState {
     isAdmin: Boolean(payload.isAdmin),
     permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
     employeeId: payload.employeeId === null || payload.employeeId === undefined ? null : Number(payload.employeeId),
+    clientId: payload.clientId === null || payload.clientId === undefined ? null : Number(payload.clientId),
   };
 }
 
@@ -176,10 +180,11 @@ const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof L
   { id: "invoice", label: "New Invoice", eyebrow: "Create", icon: ReceiptText, permission: "invoices" },
   { id: "quotation", label: "New Quotation", eyebrow: "Create", icon: FilePlus2, permission: "quotations" },
   { id: "media-guide", label: "Media Guide Catalog", eyebrow: "Bundles & add-ons", icon: Sparkles, permission: "quotations" },
-  { id: "work-order", label: "Media Guide Work Order", eyebrow: "Landscape form", icon: FilePenLine, permission: "quotations" },
+  { id: "work-order", label: "Production", eyebrow: "Work-order pipeline", icon: FilePenLine, permission: "production" },
   { id: "clients", label: "Client Directory", eyebrow: "Profiles & contacts", icon: UsersRound, permission: "clients" },
   { id: "client-accounts", label: "Client Accounts", eyebrow: "Balances & ledger", icon: CircleDollarSign, permission: "clients" },
-  { id: "monthly-clients", label: "Monthly Plans", eyebrow: "Retainers & forecasts", icon: CalendarRange, permission: "clients" },
+  { id: "monthly-clients", label: "Retainers", eyebrow: "Monthly finance", icon: CalendarRange, permission: "clients" },
+  { id: "client-portal-admin", label: "Client Portal", eyebrow: "Invoices & content plans", icon: Sparkles, permission: "client_portal" },
   { id: "employees", label: "Employees", eyebrow: "People & salaries", icon: UserRound, permission: "employees" },
   { id: "attendance", label: "Attendance", eyebrow: "Payroll & biometric", icon: Clock3, permission: "attendance" },
   { id: "requests", label: "Employee Requests", eyebrow: "Leave, excuses & missions", icon: ClipboardList, permission: "requests" },
@@ -191,14 +196,15 @@ const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof L
 
 type NavGroupId = "documents" | "clients" | "services" | "people" | "administration";
 type NavSection =
-  | { id: "dashboard"; item: View }
+  | { id: "dashboard" | "production"; item: View }
   | { id: NavGroupId; label: string; eyebrow: string; icon: typeof LayoutDashboard; items: View[] };
 
 const navSections: NavSection[] = [
   { id: "dashboard", item: "dashboard" },
+  { id: "production", item: "work-order" },
   { id: "documents", label: "Documents", eyebrow: "Create & archive", icon: FileText, items: ["invoice", "quotation", "data"] },
-  { id: "clients", label: "Clients", eyebrow: "Directory & finance", icon: UsersRound, items: ["clients", "client-accounts", "monthly-clients"] },
-  { id: "services", label: "Services", eyebrow: "Catalog & categories", icon: Sparkles, items: ["media-guide", "work-order", "categories"] },
+  { id: "clients", label: "Clients", eyebrow: "Directory & experience", icon: UsersRound, items: ["clients", "client-accounts", "monthly-clients", "client-portal-admin"] },
+  { id: "services", label: "Services", eyebrow: "Catalog & categories", icon: Sparkles, items: ["media-guide", "categories"] },
   { id: "people", label: "Employees", eyebrow: "Team & payroll", icon: UserRound, items: ["employees", "attendance", "requests"] },
   { id: "administration", label: "Administration", eyebrow: "Settings & access", icon: Settings2, items: ["settings", "users"] },
 ];
@@ -213,10 +219,11 @@ const viewCopy: Record<View, { eyebrow: string; title: string; description: stri
   invoice: { eyebrow: "CREATE DOCUMENT", title: "New invoice", description: "Select a client and category, then add the billable work." },
   quotation: { eyebrow: "CREATE DOCUMENT", title: "New quotation", description: "Turn a scoped project into a polished client proposal." },
   "media-guide": { eyebrow: "MEDIA GUIDE SERVICES", title: "Bundles and add-ons", description: "Manage every reusable Media Guide bundle, included service, add-on, and EGP price." },
-  "work-order": { eyebrow: "MEDIA GUIDE PRODUCTION", title: "Work order", description: "Prepare a branded landscape work order for the production team, then print it or save it as a PDF." },
+  "work-order": { eyebrow: "PRODUCTION WORKFLOW", title: "Production", description: "Create, complete, lock, route, and print Media Guide production work orders." },
   clients: { eyebrow: "CLIENT DIRECTORY", title: "Clients", description: "Profiles, invoices, payments, outstanding balances, and complete account history." },
   "client-accounts": { eyebrow: "CLIENT FINANCE", title: "Client accounts", description: "See every client's charges, payments, credit, and live balance in one clear overview." },
-  "monthly-clients": { eyebrow: "MONTHLY CLIENTS", title: "Monthly plans", description: "Plan retainers by month, apply one amount across a period, and forecast annual client revenue." },
+  "monthly-clients": { eyebrow: "MONTHLY CLIENTS", title: "Retainers", description: "Plan retainers by month, apply one amount across a period, and forecast annual client revenue." },
+  "client-portal-admin": { eyebrow: "CLIENT EXPERIENCE", title: "Client Portal", description: "Publish each client's monthly content-plan links and prepare their private invoice dashboard." },
   employees: { eyebrow: "PEOPLE OPERATIONS", title: "Employees", description: "Titles, salaries, commissions, deductions, and biometric identities in one private directory." },
   attendance: { eyebrow: "ATTENDANCE & PAYROLL", title: "Attendance and payroll", description: "Import biometric Excel files, review every punch, and calculate payroll from the FMG Office Policy." },
   requests: { eyebrow: "EMPLOYEE SELF-SERVICE", title: "Employee requests", description: "Send, route, approve, and track leave, early-leave excuses, and work missions with automatic payroll impact." },
@@ -403,7 +410,9 @@ export function FmgSystem() {
       if (!response.ok) throw new Error(result.error || "Could not check access.");
       const nextAuth = authFromPayload(result);
       setAuth(nextAuth);
-      if (nextAuth.authenticated) await loadWorkspace(nextAuth); else setLoading(false);
+      if (nextAuth.authenticated && nextAuth.clientId !== null) setLoading(false);
+      else if (nextAuth.authenticated) await loadWorkspace(nextAuth);
+      else setLoading(false);
     }).catch((error: Error) => {
       setAuth(signedOutAuth);
       setLoading(false);
@@ -485,7 +494,8 @@ export function FmgSystem() {
     if (!response.ok || !result.authenticated) throw new Error(result.error || "Could not load account access.");
     const nextAuth = authFromPayload(result);
     setAuth(nextAuth);
-    await loadWorkspace(nextAuth);
+    if (nextAuth.clientId !== null) setLoading(false);
+    else await loadWorkspace(nextAuth);
   }
 
   async function logout() {
@@ -564,6 +574,7 @@ export function FmgSystem() {
 
   if (auth.checking || (auth.authenticated && loading)) return <div className="app-loader"><Image src="/fmg-logo-light.png" alt="FMG Agency" width={380} height={130} unoptimized /><span /><p>Preparing your agency workspace…</p></div>;
   if (!auth.authenticated) return <AuthScreen setupRequired={auth.setupRequired} onAuthenticated={handleAuthenticated} />;
+  if (auth.clientId !== null) return <ClientPortalShell displayName={auth.displayName || auth.username} dark={dark} onToggleTheme={toggleTheme} onLogout={logout} />;
 
   return (
     <div className="app-shell" dir="ltr">
@@ -631,12 +642,20 @@ export function FmgSystem() {
           {view === "clients" && <ClientsPanel clients={state.clients} mutate={mutate} busy={busy} showToast={showToast} />}
           {view === "client-accounts" && <ClientFinancePanel mode="accounts" initialClients={state.clients} showToast={showToast} />}
           {view === "monthly-clients" && <ClientFinancePanel mode="monthly" initialClients={state.clients} showToast={showToast} />}
+          {view === "client-portal-admin" && <ClientPortalAdmin showToast={showToast} />}
           {view === "employees" && <EmployeesPanel state={hrState} mutate={mutateHr} busy={busy} showToast={showToast} />}
           {view === "attendance" && <AttendancePanel state={hrState} mutate={mutateHr} busy={busy} onMonthChange={loadHr} onStateChange={setHrState} showToast={showToast} />}
           {view === "requests" && <RequestsPanel showToast={showToast} />}
           {view === "categories" && <CategoriesPanel categories={state.categories} mutate={mutate} busy={busy} showToast={showToast} />}
           {view === "media-guide" && <section className="panel catalog-page-panel"><QuotationCatalog catalog={state.quotationCatalog} mutate={mutate} busy={busy} showToast={showToast} /></section>}
-          {view === "work-order" && <WorkOrderPanel clients={state.clients} catalog={state.quotationCatalog} />}
+          {view === "work-order" && <WorkOrderPanel showToast={showToast} onWorkspaceChanged={() => loadWorkspace(auth)} onOpenDraftInvoice={(invoiceId) => {
+            const invoice = state.documents.find((document) => document.id === invoiceId);
+            if (!invoice) return showToast("Reload the workspace to open this Draft invoice.");
+            if (!canOpenView("invoice")) return showToast("This account does not have access to invoices.");
+            setEditingDocument(invoice);
+            setCompanyKey(invoice.companyKey || "fmg");
+            setView("invoice");
+          }} />}
           {(view === "invoice" || view === "quotation") && <DocumentEditor key={`${view}-${editingDocument?.id ?? companyKey}`} type={view} companyKey={companyKey} state={state} mutate={mutate} busy={busy} editing={editingDocument} onDone={() => { setEditingDocument(null); chooseView("data"); }} showToast={showToast} />}
           {view === "data" && <DataPanel state={state} mutate={mutate} busy={busy} showToast={showToast} editDocument={(document) => {
             if (!canOpenView(document.type)) return showToast(`This account cannot edit ${document.type === "invoice" ? "invoices" : "quotations"}.`);
@@ -650,7 +669,7 @@ export function FmgSystem() {
       </main>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {accessibleNavItems.filter((item) => ["dashboard", "invoice", "quotation", "employees", "attendance", "requests"].includes(item.id)).slice(0, 5).map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => chooseView(item.id)}><Icon size={19} /><span>{item.label.replace("New ", "")}</span></button>; })}
+        {accessibleNavItems.filter((item) => ["dashboard", "invoice", "quotation", "work-order", "client-portal-admin", "employees", "attendance", "requests"].includes(item.id)).slice(0, 5).map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => chooseView(item.id)}><Icon size={19} /><span>{item.label.replace("New ", "")}</span></button>; })}
       </nav>
       {toast && <div className="toast"><Check size={17} /><span>{toast}</span></div>}
     </div>
@@ -857,7 +876,8 @@ function DocumentEditor({ type, companyKey, state, mutate, busy, editing, onDone
   const availableAddons = state.quotationCatalog.filter((item) => item.kind === "addon" && item.active && selectedBundle && (!item.appliesTo || item.appliesTo.toLowerCase() === selectedBundle.name.toLowerCase()));
   const selectedAddonLine = draft.items.find((item) => item.kind === "addon");
   const subtotal = draft.items.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.unitPrice || 0), 0);
-  const total = Math.max(0, subtotal - Number(draft.discount || 0) + Number(draft.tax || 0));
+  const rawTotal = subtotal - Number(draft.discount || 0) + Number(draft.tax || 0);
+  const total = type === "invoice" ? rawTotal : Math.max(0, rawTotal);
   const provisionalCode = editing?.generatedCode || (client && category ? `${(client.companyName || client.name).trim().replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, "-").replace(/^-|-$/g, "")}-${category.prefix}${String(category.counter + 1).padStart(4, "0")}` : "Select client + category");
   function patchDraft<Key extends keyof DocumentDraft>(key: Key, value: DocumentDraft[Key]) { setDraft((current) => ({ ...current, [key]: value })); }
   function patchItem<Key extends keyof LineItem>(id: string, key: Key, value: LineItem[Key]) { setDraft((current) => ({ ...current, items: current.items.map((item) => item.id === id ? { ...item, [key]: value } : item) })); }
@@ -941,8 +961,8 @@ function DocumentEditor({ type, companyKey, state, mutate, busy, editing, onDone
       <div className="step-heading"><span>02</span><div><h2>Document details</h2><p>Fields follow the uploaded FMG {type} template.</p></div></div>
       <div className="form-grid editor-grid"><Field label="Date"><input type="date" value={draft.date} onChange={(event) => { patchDraft("date", event.target.value); setDraft((current) => ({ ...current, items: current.items.map((item) => item.date ? item : { ...item, date: event.target.value }) })); }} /></Field><Field label="Valid until"><input type="date" value={draft.validUntil} onChange={(event) => patchDraft("validUntil", event.target.value)} /></Field><Field label="Prepared by"><input value={draft.preparedBy} onChange={(event) => patchDraft("preparedBy", event.target.value)} /></Field><Field label="Currency"><select value={draft.currency} onChange={(event) => patchDraft("currency", event.target.value)}><option>EGP</option><option>USD</option><option>EUR</option><option>SAR</option><option>AED</option></select></Field>{type === "quotation" && <Field label="Project" wide><input value={draft.project} onChange={(event) => patchDraft("project", event.target.value)} placeholder="Project or campaign name" /></Field>}</div>
       {mediaGuideSelected && <><div className="step-heading"><span>03</span><div><h2>Media Guide bundle</h2><p>Select the bundle first, then choose an available add-on for it.</p></div></div><section className="media-guide-selector"><div className="bundle-select-grid"><Field label="Bundle"><select value={selectedBundle?.id ?? 0} onChange={(event) => selectBundle(Number(event.target.value))}><option value={0}>Choose a bundle</option>{activeBundles.map((item) => <option key={item.id} value={item.id}>{item.name} · {money(item.price, "EGP")}</option>)}</select></Field><Field label="Add-on"><select value={selectedAddonLine?.catalogId ?? 0} onChange={(event) => selectAddon(Number(event.target.value))} disabled={!selectedBundle || !availableAddons.length}><option value={0}>{selectedBundle && !availableAddons.length ? "No add-ons available for this bundle" : "No add-on"}</option>{availableAddons.map((item) => <option key={item.id} value={item.id}>{item.name} · {money(item.price, "EGP")}</option>)}</select></Field></div>{selectedBundle && <div className="bundle-selection-summary"><div><span>Selected bundle</span><strong>{selectedBundle.name}</strong><small>Inputs: {selectedBundle.inputs.join(" · ")}{selectedBundle.outputs.length ? ` · Outputs: ${selectedBundle.outputs.join(" · ")}` : ""}</small></div><strong>{money(selectedBundle.price, "EGP")}</strong></div>}</section></>}
-      <div className="step-heading items-heading"><span>{mediaGuideSelected ? "04" : "03"}</span><div><h2>Scope & pricing</h2><p>Add or remove line items. Totals update automatically.</p></div><button className="secondary-button" onClick={() => patchDraft("items", [...draft.items, emptyItem(draft.date)])}><Plus size={16} /> Add item</button></div>
-      <div className="items-table-wrap"><table className="items-table"><thead><tr><th>#</th>{type === "invoice" && <th>Date</th>}<th>Service / deliverable</th><th>Qty</th>{type === "quotation" && <th>Unit</th>}<th>Unit price</th><th>Total</th><th /></tr></thead><tbody>{draft.items.map((item, index) => <tr key={item.id} className={item.kind === "addon" ? "addon-line" : ""}><td><span className="item-number">{String(index + 1).padStart(2, "0")}</span></td>{type === "invoice" && <td><input type="date" value={item.date} onChange={(event) => patchItem(item.id, "date", event.target.value)} /></td>}<td><div className="item-service-cell"><input value={item.description} onChange={(event) => patchItem(item.id, "description", event.target.value)} placeholder="Describe the service" />{mediaGuideSelected ? <div className="item-io-grid"><textarea rows={Math.max(2, item.inputs.length)} value={item.inputs.join("\n")} onChange={(event) => patchItem(item.id, "inputs", event.target.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean))} placeholder="Inputs · one per line" /><textarea rows={Math.max(2, item.outputs.length)} value={item.outputs.join("\n")} onChange={(event) => patchItem(item.id, "outputs", event.target.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean))} placeholder="Outputs · one per line" /></div> : type === "quotation" ? <textarea rows={Math.max(2, item.includedServices.length)} value={item.includedServices.join("\n")} onChange={(event) => patchItem(item.id, "includedServices", event.target.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean))} placeholder="Included services · one per line" /> : null}{item.kind === "addon" && item.appliesTo && <small>Applies to {item.appliesTo}{item.bundleTotal !== null ? ` · total after add-on ${money(item.bundleTotal, "EGP")}` : ""}</small>}</div></td><td><input type="number" min="0" step="0.01" value={item.qty} onChange={(event) => patchItem(item.id, "qty", Number(event.target.value))} /></td>{type === "quotation" && <td><input value={item.unit} onChange={(event) => patchItem(item.id, "unit", event.target.value)} /></td>}<td><input type="number" min="0" step="0.01" value={item.unitPrice} onChange={(event) => patchItem(item.id, "unitPrice", Number(event.target.value))} /></td><td><strong>{money(item.qty * item.unitPrice, draft.currency)}</strong></td><td><button className="delete-item" aria-label="Remove item" onClick={() => patchDraft("items", draft.items.filter((record) => record.id !== item.id))} disabled={draft.items.length === 1}><Trash2 size={15} /></button></td></tr>)}</tbody></table></div>
+      <div className="step-heading items-heading"><span>{mediaGuideSelected ? "04" : "03"}</span><div><h2>Scope & pricing</h2><p>{type === "invoice" ? "Add line items; use a negative unit price to apply previous client credit." : "Add or remove line items. Totals update automatically."}</p></div><button className="secondary-button" onClick={() => patchDraft("items", [...draft.items, emptyItem(draft.date)])}><Plus size={16} /> Add item</button></div>
+      <div className="items-table-wrap"><table className="items-table"><thead><tr><th>#</th>{type === "invoice" && <th>Date</th>}<th>Service / deliverable</th><th>Qty</th>{type === "quotation" && <th>Unit</th>}<th>Unit price</th><th>Total</th><th /></tr></thead><tbody>{draft.items.map((item, index) => <tr key={item.id} className={item.kind === "addon" ? "addon-line" : ""}><td><span className="item-number">{String(index + 1).padStart(2, "0")}</span></td>{type === "invoice" && <td><input type="date" value={item.date} onChange={(event) => patchItem(item.id, "date", event.target.value)} /></td>}<td><div className="item-service-cell"><input value={item.description} onChange={(event) => patchItem(item.id, "description", event.target.value)} placeholder="Describe the service" />{mediaGuideSelected ? <div className="item-io-grid"><textarea rows={Math.max(2, item.inputs.length)} value={item.inputs.join("\n")} onChange={(event) => patchItem(item.id, "inputs", event.target.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean))} placeholder="Inputs · one per line" /><textarea rows={Math.max(2, item.outputs.length)} value={item.outputs.join("\n")} onChange={(event) => patchItem(item.id, "outputs", event.target.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean))} placeholder="Outputs · one per line" /></div> : type === "quotation" ? <textarea rows={Math.max(2, item.includedServices.length)} value={item.includedServices.join("\n")} onChange={(event) => patchItem(item.id, "includedServices", event.target.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean))} placeholder="Included services · one per line" /> : null}{item.kind === "addon" && item.appliesTo && <small>Applies to {item.appliesTo}{item.bundleTotal !== null ? ` · total after add-on ${money(item.bundleTotal, "EGP")}` : ""}</small>}</div></td><td><input type="number" min="0" step="0.01" value={item.qty} onChange={(event) => patchItem(item.id, "qty", Number(event.target.value))} /></td>{type === "quotation" && <td><input value={item.unit} onChange={(event) => patchItem(item.id, "unit", event.target.value)} /></td>}<td><input type="number" min={type === "invoice" ? undefined : 0} step="0.01" value={item.unitPrice} onChange={(event) => patchItem(item.id, "unitPrice", Number(event.target.value))} placeholder={type === "invoice" ? "e.g. -5000" : undefined} /></td><td><strong>{money(item.qty * item.unitPrice, draft.currency)}</strong></td><td><button className="delete-item" aria-label="Remove item" onClick={() => patchDraft("items", draft.items.filter((record) => record.id !== item.id))} disabled={draft.items.length === 1}><Trash2 size={15} /></button></td></tr>)}</tbody></table></div>
       <div className="document-bottom"><div className="document-notes"><Field label="Payment terms"><input value={draft.paymentTerms} onChange={(event) => patchDraft("paymentTerms", event.target.value)} placeholder="e.g. 50% advance · 50% upon completion" /></Field><Field label="Notes / exclusions"><textarea value={draft.notesExclusions} onChange={(event) => patchDraft("notesExclusions", event.target.value)} rows={3} placeholder={`Optional notes shown on the ${type}`} /></Field></div><div className="totals-card"><div><span>Subtotal</span><strong>{money(subtotal, draft.currency)}</strong></div><div><span>Discount</span><input type="number" min="0" step="0.01" value={draft.discount} onChange={(event) => patchDraft("discount", Number(event.target.value))} /></div><div><span>Tax / VAT</span><input type="number" min="0" step="0.01" value={draft.tax} onChange={(event) => patchDraft("tax", Number(event.target.value))} /></div><div className="grand-total"><span>Grand total</span><strong>{money(total, draft.currency)}</strong></div></div></div>
       <div className="editor-actions"><span><Clock3 size={15} /> Code: <strong>{provisionalCode}</strong></span><button className="primary-button generate-button" onClick={submit} disabled={busy || generating}><Printer size={17} /> {generating ? "Generating PDF…" : editing ? "Update & download PDF" : `Generate ${type} PDF`}</button></div>
     </section>
@@ -955,6 +975,7 @@ function DocumentPreview({ draft, client, category, code }: { draft: DocumentDra
   const total = subtotal - draft.discount + draft.tax;
   const digitalEmpire = draft.companyKey === "digital_empire";
   const mediaGuideDocument = isMediaGuideCategory(category);
+  const showPaymentNotes = draft.type !== "invoice" || Boolean(draft.paymentTerms.trim() || draft.notesExclusions.trim());
   const packages = draft.items.filter((item) => item.kind !== "addon");
   const addons = draft.items.filter((item) => item.kind === "addon");
   const catalogTable = (items: LineItem[], nameLabel: string) => <table className={cx("paper-package-table", draft.type === "invoice" && "invoice")}><thead><tr>{draft.type === "invoice" && <th>DATE</th>}<th>{nameLabel}</th><th>INPUTS</th><th>OUTPUTS</th><th>PRICE · {draft.currency}</th></tr></thead><tbody>{items.map((item) => <tr key={item.id}>{draft.type === "invoice" && <td>{item.date || draft.date || "—"}</td>}<td><strong>{item.description || "—"}</strong>{item.kind === "addon" && item.appliesTo && <small>For {item.appliesTo}</small>}</td><td>{item.inputs.length ? item.inputs.join(" • ") : "—"}</td><td>{item.outputs.length ? item.outputs.join(" • ") : "—"}{item.kind === "addon" && item.bundleTotal !== null && <small>Bundle total: {item.bundleTotal.toLocaleString()} EGP</small>}</td><td>{(item.qty * item.unitPrice).toLocaleString()}</td></tr>)}</tbody></table>;
@@ -967,7 +988,7 @@ function DocumentPreview({ draft, client, category, code }: { draft: DocumentDra
     <div className="paper-grid"><b>CLIENT / COMPANY</b><span>{client?.companyName || client?.name || "Choose client"}</span><b>CONTACT PERSON</b><span>{client?.ownerName || "—"}</span><b>EMAIL</b><span>{client?.email || "—"}</span><b>PHONE</b><span>{client?.phone || "—"}</span></div>
     {mediaGuideDocument ? <><h4><i />JEWELRY PACKAGES · 2026 /</h4><p className="paper-marketing">Curated production packages for jewelry brands · prices in Egyptian pounds.</p>{catalogTable(packages, "BUNDLE NAME")}{addons.length > 0 && <section className="paper-addons"><h4><i />ADD-ONS /</h4>{catalogTable(addons, "ADD-ON NAME")}</section>}</> : <><h4><i />SCOPE & PRICING /</h4><table><thead><tr><th>#</th><th>SERVICE / DELIVERABLE</th><th>QTY</th><th>PRICE</th><th>TOTAL</th></tr></thead><tbody>{draft.items.slice(0, 5).map((item, index) => <tr key={item.id}><td>{index + 1}</td><td>{item.description || "—"}</td><td>{item.qty}</td><td>{item.unitPrice.toLocaleString()}</td><td>{(item.qty * item.unitPrice).toLocaleString()}</td></tr>)}</tbody></table></>}
     <div className="paper-totals"><span>SUBTOTAL <b>{subtotal.toLocaleString()} {draft.currency}</b></span><span>DISCOUNT <b>{draft.discount.toLocaleString()}</b></span><span>GRAND TOTAL <b>{total.toLocaleString()} {draft.currency}</b></span></div>
-    <section className="paper-payment-notes"><div><b>PAYMENT TERMS</b><span>{draft.paymentTerms || "—"}</span></div><div><b>NOTES / EXCLUSIONS</b><span>{draft.notesExclusions || "—"}</span></div></section>
+    {showPaymentNotes && <section className="paper-payment-notes"><div><b>PAYMENT TERMS</b><span>{draft.paymentTerms.trim() || "—"}</span></div><div><b>NOTES / EXCLUSIONS</b><span>{draft.notesExclusions.trim() || "—"}</span></div></section>}
     <footer><p>{category?.footerText1 || "Category footer line 1"}</p><p>{category?.footerText2 || "Category footer line 2"}</p><strong>{digitalEmpire ? "THE DIGITAL EMPIRE • POWERED BY FMG AGENCY" : "FMG AGENCY • SUPERHEROES WHO CREATE"}</strong></footer>
   </div>;
 }

@@ -46,9 +46,12 @@ export const documents = sqliteTable("documents", {
   paymentTerms: text("payment_terms").notNull().default(""),
   notesExclusions: text("notes_exclusions").notNull().default(""),
   pdfKey: text("pdf_key").notNull(),
+  productionWorkOrderId: integer("production_work_order_id"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-});
+}, (table) => [
+  uniqueIndex("idx_documents_production_work_order").on(table.productionWorkOrderId),
+]);
 
 export const clientFinancialTransactions = sqliteTable("client_financial_transactions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -67,6 +70,24 @@ export const clientFinancialTransactions = sqliteTable("client_financial_transac
 }, (table) => [
   index("idx_client_financial_transactions_client_date").on(table.clientId, table.transactionDate),
   index("idx_client_financial_transactions_document").on(table.documentId),
+]);
+
+export const clientPortalPlans = sqliteTable("client_portal_plans", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(),
+  part: integer("part").notNull(),
+  title: text("title").notNull().default("Content plan"),
+  url: text("url").notNull(),
+  notes: text("notes").notNull().default(""),
+  published: integer("published").notNull().default(1),
+  createdBy: integer("created_by"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("idx_client_portal_plans_period_part").on(table.clientId, table.year, table.month, table.part),
+  index("idx_client_portal_plans_client_year").on(table.clientId, table.year, table.month),
 ]);
 
 export const settings = sqliteTable("settings", {
@@ -130,12 +151,14 @@ export const authUsers = sqliteTable("auth_users", {
   active: integer("active").notNull().default(1),
   permissionsJson: text("permissions_json").notNull().default("[]"),
   employeeId: integer("employee_id"),
+  clientId: integer("client_id").references(() => clients.id, { onDelete: "set null" }),
   createdBy: integer("created_by"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
   index("idx_auth_users_active").on(table.active),
   uniqueIndex("idx_auth_users_employee_id").on(table.employeeId).where(sql`${table.employeeId} IS NOT NULL`),
+  uniqueIndex("idx_auth_users_client_id").on(table.clientId).where(sql`${table.clientId} IS NOT NULL`),
 ]);
 
 export const authUserSessions = sqliteTable("auth_user_sessions", {
@@ -144,6 +167,60 @@ export const authUserSessions = sqliteTable("auth_user_sessions", {
   expiresAt: integer("expires_at").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("idx_auth_user_sessions_expires_at").on(table.expiresAt)]);
+
+export const productionWorkOrders = sqliteTable("production_work_orders", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  documentType: text("document_type", { enum: ["media_guide"] }).notNull().default("media_guide"),
+  clientId: integer("client_id").notNull().references(() => clients.id),
+  clientName: text("client_name").notNull(),
+  bundleCatalogId: integer("bundle_catalog_id").notNull().references(() => quotationCatalog.id),
+  bundleName: text("bundle_name").notNull(),
+  bundlePrice: real("bundle_price").notNull().default(0),
+  bundleInputsJson: text("bundle_inputs_json").notNull().default("[]"),
+  bundleOutputsJson: text("bundle_outputs_json").notNull().default("[]"),
+  addonCatalogId: integer("addon_catalog_id").references(() => quotationCatalog.id),
+  addonName: text("addon_name").notNull().default(""),
+  addonPrice: real("addon_price").notNull().default(0),
+  addonInputsJson: text("addon_inputs_json").notNull().default("[]"),
+  addonOutputsJson: text("addon_outputs_json").notNull().default("[]"),
+  workDate: text("work_date").notNull(),
+  callTime: text("call_time").notNull().default(""),
+  location: text("location").notNull().default(""),
+  modelName: text("model_name").notNull().default(""),
+  photographerName: text("photographer_name").notNull().default(""),
+  accountNote: text("account_note").notNull().default(""),
+  productionNote: text("production_note").notNull().default(""),
+  operationNote: text("operation_note").notNull().default(""),
+  productionOptionsJson: text("production_options_json").notNull().default("[]"),
+  status: text("status", { enum: ["pending_production", "ready_for_operations"] }).notNull().default("pending_production"),
+  createdByUserId: integer("created_by_user_id").notNull().references(() => authUsers.id),
+  createdByName: text("created_by_name").notNull(),
+  createdByRole: text("created_by_role").notNull(),
+  productionManagerUserId: integer("production_manager_user_id").references(() => authUsers.id),
+  productionManagerName: text("production_manager_name").notNull().default(""),
+  operationManagerUserId: integer("operation_manager_user_id").references(() => authUsers.id),
+  operationManagerName: text("operation_manager_name").notNull().default(""),
+  accountSubmittedAt: text("account_submitted_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  productionSubmittedAt: text("production_submitted_at").notNull().default(""),
+  finalApprovedAt: text("final_approved_at").notNull().default(""),
+  draftInvoiceId: integer("draft_invoice_id").references(() => documents.id),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("idx_production_work_orders_status_date").on(table.status, table.workDate),
+  index("idx_production_work_orders_creator").on(table.createdByUserId, table.createdAt),
+]);
+
+export const productionWorkOrderEvents = sqliteTable("production_work_order_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  workOrderId: integer("work_order_id").notNull().references(() => productionWorkOrders.id, { onDelete: "cascade" }),
+  eventType: text("event_type", { enum: ["account_submitted", "production_submitted"] }).notNull(),
+  actorUserId: integer("actor_user_id").notNull().references(() => authUsers.id),
+  actorName: text("actor_name").notNull(),
+  actorRole: text("actor_role").notNull(),
+  note: text("note").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_production_work_order_events_order").on(table.workOrderId, table.createdAt)]);
 
 export const authAttempts = sqliteTable("auth_attempts", {
   attemptKey: text("attempt_key").primaryKey(),

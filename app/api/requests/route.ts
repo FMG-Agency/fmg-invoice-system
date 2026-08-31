@@ -48,6 +48,7 @@ const actionPayload = z.discriminatedUnion("action", [
   z.object({ action: z.literal("assign"), id: z.number().int().positive(), reviewerId: z.number().int().positive().nullable() }),
   z.object({ action: z.literal("decide"), id: z.number().int().positive(), decision: z.enum(["approved", "rejected"]), note: z.string().trim().max(2000).default(""), leavePaid: z.boolean().default(true) }),
   z.object({ action: z.literal("cancel"), id: z.number().int().positive() }),
+  z.object({ action: z.literal("delete"), id: z.number().int().positive() }),
 ]);
 
 function numberValue(value: unknown) {
@@ -342,6 +343,16 @@ export async function POST(request: Request) {
     if (access.error || !access.session) return access.error;
     const session = access.session;
     const payload = actionPayload.parse(await request.json());
+
+    if (payload.action === "delete") {
+      if (!session.isAdmin) return accessError(403, "Only an administrator can delete employee requests.");
+      const existing = await database.prepare("SELECT attachment_key AS attachmentKey FROM employee_requests WHERE id = ?")
+        .bind(payload.id).first<{ attachmentKey: string }>();
+      if (!existing) return accessError(404, "Request not found.");
+      const deleted = await database.prepare("DELETE FROM employee_requests WHERE id = ? RETURNING id").bind(payload.id).first<{ id: number }>();
+      if (!deleted) return accessError(404, "Request not found.");
+      if (existing.attachmentKey) await del(existing.attachmentKey).catch(() => undefined);
+    }
 
     if (payload.action === "create") {
       if (!session.employeeId) return accessError(400, "Ask the administrator to link your user account to your employee profile first.");

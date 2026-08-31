@@ -99,6 +99,7 @@ export type DocumentRecord = {
   pdfKey: string;
   createdAt: string;
   updatedAt: string;
+  productionWorkOrderId?: number | null;
 };
 
 export type Settings = {
@@ -216,6 +217,33 @@ export type ClientFinanceState = {
   importedWorkbook: boolean;
 };
 
+export type ClientPortalPlanPart = {
+  id: number;
+  clientId: number;
+  year: number;
+  month: number;
+  part: 1 | 2;
+  title: string;
+  url: string;
+  notes: string;
+  published: boolean;
+  createdBy: number | null;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ClientPortalState = {
+  viewerMode: "client" | "staff";
+  client: Client | null;
+  clients: Array<Client & { portalUsername: string }>;
+  year: number;
+  years: number[];
+  invoices: ClientAccountDocument[];
+  summaries: ClientAccountCurrencySummary[];
+  plans: ClientPortalPlanPart[];
+};
+
 export type Employee = {
   id: number;
   biometricCode: string;
@@ -287,9 +315,13 @@ export type AttendanceRecord = {
   lateMinutes: number;
   penaltyMinutes: number;
   earlyLeaveMinutes: number;
+  normalOvertimeMinutes: number;
   overtimeMinutes: number;
   earlyOvertimeMinutes: number;
   missionOvertimeMinutes: number;
+  normalMissionMinutes: number;
+  earlyMissionMinutes: number;
+  totalMissionMinutes: number;
   lateDeduction: number;
   earlyLeaveDeduction: number;
   leaveDeduction: number;
@@ -345,8 +377,13 @@ export type PayrollSummary = {
   earlyLeaveDays: number;
   unpaidLeaveDays: number;
   lateMinutes: number;
+  normalOvertimeMinutes: number;
   overtimeMinutes: number;
+  earlyOvertimeMinutes: number;
   missionOvertimeMinutes: number;
+  normalMissionMinutes: number;
+  earlyMissionMinutes: number;
+  totalMissionMinutes: number;
 };
 
 export type HrState = {
@@ -369,6 +406,8 @@ export type ManagedUser = {
   permissions: AccessPermission[];
   employeeId: number | null;
   employeeName: string;
+  clientId: number | null;
+  clientName: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -431,6 +470,89 @@ export type RequestsState = {
   isAdmin: boolean;
   userId: number;
   pendingCount: number;
+};
+
+export type ProductionWorkflowRole = "account_manager" | "production_manager" | "operation_manager" | "administrator" | "viewer";
+export type ProductionWorkOrderStatus = "pending_production" | "pending_operations" | "final_approved";
+
+export type ProductionClientOption = {
+  id: number;
+  name: string;
+};
+
+export type ProductionCatalogOption = {
+  id: number;
+  kind: "package" | "addon";
+  name: string;
+  price: number;
+  inputs: string[];
+  outputs: string[];
+  appliesTo: string;
+  bundleTotal: number | null;
+};
+
+export type ProductionOptionType = "photographer" | "videographer" | "model" | "blogger" | "location" | "studio" | "hair_stylist" | "makeup_stylist" | "stylist";
+
+export type ProductionCostOption = {
+  id: string;
+  type: ProductionOptionType;
+  name: string;
+  price: number;
+  billingMode: "included" | "extra";
+};
+
+export type ProductionWorkOrder = {
+  id: number;
+  code: string;
+  documentType: "media_guide";
+  clientId: number;
+  clientName: string;
+  bundleCatalogId: number;
+  bundleName: string;
+  bundlePrice: number;
+  bundleInputs: string[];
+  bundleOutputs: string[];
+  addonCatalogId: number | null;
+  addonName: string;
+  addonPrice: number;
+  addonInputs: string[];
+  addonOutputs: string[];
+  workDate: string;
+  callTime: string;
+  location: string;
+  modelName: string;
+  photographerName: string;
+  accountNote: string;
+  productionNote: string;
+  operationNote: string;
+  productionOptions: ProductionCostOption[];
+  productionOptionsTotal: number;
+  workOrderTotal: number;
+  status: ProductionWorkOrderStatus;
+  createdByUserId: number;
+  createdByName: string;
+  createdByRole: string;
+  productionManagerUserId: number | null;
+  productionManagerName: string;
+  operationManagerUserId: number | null;
+  operationManagerName: string;
+  accountSubmittedAt: string;
+  productionSubmittedAt: string;
+  finalApprovedAt: string;
+  draftInvoiceId: number | null;
+  draftInvoiceCode: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProductionState = {
+  role: ProductionWorkflowRole;
+  orders: ProductionWorkOrder[];
+  clients: ProductionClientOption[];
+  catalog: ProductionCatalogOption[];
+  pendingProductionCount: number;
+  pendingOperationsCount: number;
+  finalApprovedCount: number;
 };
 
 export type DocumentDraft = {

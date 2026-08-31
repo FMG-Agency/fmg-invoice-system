@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const monthValue = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+const dateValue = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const optionalText = z.string().trim().max(5000).default("");
 const timeValue = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const optionalTime = z.union([timeValue, z.literal("")]);
@@ -77,10 +78,18 @@ const adjustmentPayload = z.object({
   notes: optionalText,
 });
 
+const overtimeAllowancePayload = z.object({
+  employeeId: z.number().int().positive(),
+  workDate: dateValue,
+  kind: z.enum(["normal", "early"]),
+  note: z.string().trim().min(3, "Enter the reason or task for this overtime allowance.").max(5000),
+});
+
 const actionPayload = z.discriminatedUnion("action", [
   z.object({ action: z.literal("createEmployee"), month: monthValue, data: employeePayload }),
   z.object({ action: z.literal("updateEmployee"), month: monthValue, id: z.number().int().positive(), data: employeePayload }),
   z.object({ action: z.literal("deleteEmployee"), month: monthValue, id: z.number().int().positive() }),
+  z.object({ action: z.literal("allowOvertimeDay"), month: monthValue, data: overtimeAllowancePayload }),
   z.object({ action: z.literal("updatePolicy"), month: monthValue, data: policyPayload }),
   z.object({ action: z.literal("updateAttendance"), month: monthValue, id: z.number().int().positive(), data: attendancePayload }),
   z.object({ action: z.literal("createAdjustment"), month: monthValue, data: adjustmentPayload }),
@@ -130,7 +139,7 @@ export async function POST(request: Request) {
     if (authError) return authError;
     await ensureHrDatabase();
     const payload = actionPayload.parse(await request.json());
-    const requiredPermission = payload.action === "createEmployee" || payload.action === "updateEmployee" || payload.action === "deleteEmployee"
+    const requiredPermission = payload.action === "createEmployee" || payload.action === "updateEmployee" || payload.action === "deleteEmployee" || payload.action === "allowOvertimeDay"
       ? "employees"
       : "attendance";
     const permissionError = await requirePermission(request, requiredPermission);
@@ -163,6 +172,31 @@ export async function POST(request: Request) {
 
     if (payload.action === "deleteEmployee") {
       await database.prepare("UPDATE employees SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(payload.id).run();
+    }
+
+    if (payload.action === "allowOvertimeDay") {
+      const value = payload.data;
+      const employee = await database.prepare("SELECT id, name, hire_date AS hireDate, active FROM employees WHERE id = ?").bind(value.employeeId).first<{ id: number; name: string; hireDate: string; active: number }>();
+      if (!employee || Number(employee.active) !== 1) throw new Error("Choose an active employee.");
+      if (employee.hireDate && value.workDate < employee.hireDate) throw new Error("The overtime date cannot be before the employee hire date.");
+      const approvalColumn = value.kind === "normal" ? "overtime_approved" : "early_overtime_approved";
+      const normalApproved = value.kind === "normal" ? 1 : 0;
+      const earlyApproved = value.kind === "early" ? 1 : 0;
+      const approvalLabel = value.kind === "normal" ? "Normal overtime allowed" : "Early overtime allowed";
+      const approvalNote = `${approvalLabel}: ${value.note}`;
+      await database.prepare(`INSERT INTO attendance_records
+        (employee_id, work_date, status, leave_paid, overtime_approved, early_overtime_approved, notes)
+        VALUES (?, ?, 'present', 1, ?, ?, ?)
+        ON CONFLICT(employee_id, work_date) DO UPDATE SET
+          ${approvalColumn} = 1,
+          notes = CASE
+            WHEN trim(attendance_records.notes) = '' THEN excluded.notes
+            WHEN instr(attendance_records.notes, excluded.notes) > 0 THEN attendance_records.notes
+            ELSE attendance_records.notes || char(10) || excluded.notes
+          END,
+          updated_at = CURRENT_TIMESTAMP`).bind(
+        value.employeeId, value.workDate, normalApproved, earlyApproved, approvalNote,
+      ).run();
     }
 
     if (payload.action === "updatePolicy") {

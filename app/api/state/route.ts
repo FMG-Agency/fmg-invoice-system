@@ -40,7 +40,7 @@ const itemPayload = z.object({
   description: z.string().trim().min(1).max(500),
   qty: z.number().finite().min(0),
   unit: z.string().trim().max(40).default("Unit"),
-  unitPrice: z.number().finite().min(0),
+  unitPrice: z.number().finite(),
   kind: z.enum(["package", "addon", "custom"]).default("custom"),
   catalogId: z.number().int().positive().nullable().default(null),
   includedServices: z.array(z.string().trim().min(1).max(300)).max(30).default([]),
@@ -80,6 +80,16 @@ const documentPayload = z.object({
   paymentTerms: optionalText,
   notesExclusions: optionalText,
   pdfBase64: z.string().min(20),
+}).superRefine((data, context) => {
+  if (data.type !== "quotation") return;
+  data.items.forEach((item, index) => {
+    if (item.unitPrice >= 0) return;
+    context.addIssue({
+      code: "custom",
+      path: ["items", index, "unitPrice"],
+      message: "Quotation item prices cannot be negative.",
+    });
+  });
 });
 
 const settingsPayload = z.object({
@@ -160,6 +170,7 @@ const schemaStatements = [
     payment_terms TEXT NOT NULL DEFAULT '',
     notes_exclusions TEXT NOT NULL DEFAULT '',
     pdf_key TEXT NOT NULL,
+    production_work_order_id INTEGER,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
@@ -211,13 +222,23 @@ const defaultQuotationCatalog = [
 async function ensureDatabase() {
   await database.batch(schemaStatements.map((statement) => database.prepare(statement)));
   const documentColumns = await database.prepare("PRAGMA table_info(documents)").all<Record<string, unknown>>();
-  if (!documentColumns.results.some((column) => String(column.name) === "company_key")) {
+  const documentColumnNames = new Set(documentColumns.results.map((column) => String(column.name)));
+  if (!documentColumnNames.has("company_key")) {
     try {
       await database.prepare("ALTER TABLE documents ADD COLUMN company_key TEXT NOT NULL DEFAULT 'fmg'").run();
     } catch (error) {
       if (!/duplicate column name/i.test(error instanceof Error ? error.message : String(error))) throw error;
     }
   }
+  if (!documentColumnNames.has("production_work_order_id")) {
+    try {
+      await database.prepare("ALTER TABLE documents ADD COLUMN production_work_order_id INTEGER").run();
+      await database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_production_work_order ON documents(production_work_order_id)").run();
+    } catch (error) {
+      if (!/duplicate column name|already exists/i.test(error instanceof Error ? error.message : String(error))) throw error;
+    }
+  }
+  await database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_production_work_order ON documents(production_work_order_id)").run();
   const categoryCount = await database.prepare("SELECT COUNT(*) AS count FROM categories").first<{ count: number }>();
   if (!categoryCount?.count) {
     await database.batch([
@@ -279,7 +300,8 @@ async function getState() {
       d.category_id AS categoryId, d.date, d.valid_until AS validUntil, d.prepared_by AS preparedBy,
       d.currency, d.project, d.status, d.items_json AS itemsJson, d.subtotal, d.discount, d.tax,
       d.total, d.payment_terms AS paymentTerms, d.notes_exclusions AS notesExclusions,
-      d.pdf_key AS pdfKey, d.created_at AS createdAt, d.updated_at AS updatedAt,
+      d.pdf_key AS pdfKey, d.production_work_order_id AS productionWorkOrderId,
+      d.created_at AS createdAt, d.updated_at AS updatedAt,
       c.name AS clientName, c.company_name AS companyName, c.owner_name AS ownerName, c.phone,
       c.email, c.address, cat.name AS categoryName, cat.prefix AS categoryPrefix,
       cat.footer_text_1 AS footerText1, cat.footer_text_2 AS footerText2
@@ -386,7 +408,8 @@ function decodeBase64(input: string) {
 
 function documentMath(data: z.infer<typeof documentPayload>) {
   const subtotal = data.items.reduce((sum, item) => sum + item.qty * item.unitPrice, 0);
-  const total = Math.max(0, subtotal - data.discount + data.tax);
+  const rawTotal = subtotal - data.discount + data.tax;
+  const total = data.type === "invoice" ? rawTotal : Math.max(0, rawTotal);
   return { subtotal, total };
 }
 
@@ -396,6 +419,7 @@ export async function GET(request: Request) {
     if (authError) return authError;
     const session = await getSession(request);
     if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
+    if (session.clientId !== null) return accessDenied();
     await ensureDatabase();
     return Response.json(filterState(await getState(), session));
   } catch (error) {
@@ -409,6 +433,7 @@ export async function POST(request: Request) {
     if (authError) return authError;
     const session = await getSession(request);
     if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
+    if (session.clientId !== null) return accessDenied();
     await ensureDatabase();
     const payload = actionPayload.parse(await request.json());
     const allowed = (permission: AccessPermission) => canAccess(session.permissions, permission, session.isAdmin);
@@ -499,7 +524,7 @@ export async function POST(request: Request) {
         const existing = await database.prepare("SELECT generated_code AS generatedCode, pdf_key AS pdfKey FROM documents WHERE id = ?").bind(data.id).first<{ generatedCode: string; pdfKey: string }>();
         if (!existing) throw new Error("Document not found.");
         generatedCode = existing.generatedCode;
-        pdfKey = existing.pdfKey;
+        pdfKey = existing.pdfKey || `documents/${data.type}/${generatedCode}.pdf`;
       } else {
         const category = await database.prepare("UPDATE categories SET counter = counter + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? RETURNING prefix, counter")
           .bind(data.categoryId).first<{ prefix: string; counter: number }>();

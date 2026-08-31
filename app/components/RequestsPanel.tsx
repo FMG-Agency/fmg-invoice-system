@@ -13,6 +13,7 @@ import {
   Route,
   ShieldAlert,
   Sunrise,
+  Trash2,
   X,
   XCircle,
 } from "lucide-react";
@@ -137,8 +138,8 @@ function typeIcon(type: EmployeeRequestType, size: number) {
 
 function policyNote(draft: RequestDraft, state: RequestsState) {
   if (draft.type === "mission") return `Only mission time after ${timeLabel(state.overtimeStartsAt)} is added to overtime after approval.`;
-  if (draft.type === "overtime") return `Overtime starts at ${timeLabel(state.overtimeStartsAt)}. Time after ${timeLabel(state.overtimeApprovalAfter)} requires this written manager approval, and overtime is only eligible when arrival is no later than 11:30 AM.`;
-  if (draft.type === "early_arrival") return `Submit at least one day before the task. Approved time before ${timeLabel(state.workdayStartsAt)} is paid at ×${state.earlyOvertimeMultiplier}.`;
+  if (draft.type === "overtime") return `Only approved requests are counted. Overtime starts at ${timeLabel(state.overtimeStartsAt)}. On days 1–16 it is counted even when arrival is after 11:30 AM; from day 17 arrival must be no later than 11:30 AM. Time after ${timeLabel(state.overtimeApprovalAfter)} still requires written manager approval.`;
+  if (draft.type === "early_arrival") return `Submit at least one day before the task. Only approved time before ${timeLabel(state.workdayStartsAt)} is paid at ×${state.earlyOvertimeMultiplier} and shown separately as Early Mission Time.`;
   if (draft.type !== "leave") return "Approved early leave is recorded as excused and does not trigger the half-day deduction.";
   if (draft.leaveKind === "sick_leave") return `A medical report is required when sick leave exceeds ${state.sickReportAfterDays} days.`;
   if (draft.leaveKind === "urgent_leave") return `Submit by ${timeLabel(state.urgentLeaveDeadline)} on the day, with a maximum of ${state.urgentLeaveYearLimit} urgent requests per year.`;
@@ -247,6 +248,12 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
     if (saved) { setReviewing(null); setDecisionNote(""); }
   }
 
+  async function deleteRequest(request: EmployeeRequest) {
+    const appliedNote = request.status === "approved" ? " Attendance and payroll changes already applied by this approval will remain." : "";
+    if (!window.confirm(`Delete employee request #${request.id}? This cannot be undone.${appliedNote}`)) return;
+    await mutate({ action: "delete", id: request.id }, `Request #${request.id} deleted.`);
+  }
+
   const visibleRequests = useMemo(() => state.requests.filter((request) => {
     if (filter === "mine") return state.employeeId !== null && request.employeeId === state.employeeId;
     if (filter === "review") return request.status === "pending" && (state.isAdmin || request.assignedReviewerId === state.userId);
@@ -297,6 +304,7 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
             {state.isAdmin && request.status === "pending" && <label><span>Forward to</span><select value={request.assignedReviewerId ?? ""} disabled={saving} onChange={(event) => void mutate({ action: "assign", id: request.id, reviewerId: event.target.value ? Number(event.target.value) : null }, event.target.value ? "Request forwarded to the selected reviewer." : "Request returned to administrator review.")}><option value="">Administrator only</option>{state.reviewers.filter((reviewer) => reviewer.id !== request.requesterUserId).map((reviewer) => <option key={reviewer.id} value={reviewer.id}>{reviewer.displayName} · {reviewer.roleLabel}</option>)}</select></label>}
             {canReview && <button className="table-review" onClick={() => { setReviewing(request); setDecisionNote(""); setReviewLeavePaid(request.leavePaid ?? true); }}><FileCheck2 size={15} /> Review request</button>}
             {ownRequest && request.status === "pending" && <button className="request-cancel" disabled={saving} onClick={() => window.confirm("Cancel this pending request?") && void mutate({ action: "cancel", id: request.id }, "Request cancelled.")}><X size={15} /> Cancel</button>}
+            {state.isAdmin && <button className="request-cancel" disabled={saving} onClick={() => void deleteRequest(request)}><Trash2 size={15} /> Delete</button>}
           </div>
         </article>;
       })}</div> : <div className="empty-panel"><div className="empty-icon"><CalendarDays size={24} /></div><h3>No requests in this view</h3><p>{canCreate ? "Create a leave, excuse, mission, or overtime approval request." : "Requests assigned to you will appear here."}</p>{canCreate && <button className="small-primary" onClick={() => setCreateOpen(true)}><Plus size={15} /> New request</button>}</div>}
