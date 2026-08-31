@@ -408,6 +408,7 @@ test("ships a private client invoice portal with publishable monthly Canva plans
   assert.match(portalComponent, /ClientBrandMark/);
   assert.match(portalComponent, /Upload logo/);
   assert.match(portalComponent, /Replace logo/);
+  assert.doesNotMatch(portalComponent, /TOTAL RECEIVED/);
   assert.match(portalComponent, /image\/png,image\/jpeg,image\/webp/);
   assert.match(portalComponent, /2 \* 1024 \* 1024/);
   assert.match(portalComponent, /api\/client-portal\/logo/);

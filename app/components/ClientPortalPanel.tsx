@@ -122,7 +122,6 @@ export function ClientPortalShell({ displayName, dark, onToggleTheme, onLogout }
           <section className={styles.portalMetrics}>
             <article className={styles.dueMetric}><span><WalletCards size={16} /> CURRENT AMOUNT DUE</span><strong>{money(totalDue, currency)}</strong><small>{dueInvoices.length ? `${dueInvoices.length} invoice${dueInvoices.length === 1 ? "" : "s"} awaiting payment` : "Your account is currently settled"}</small></article>
             <article><span>TOTAL ISSUED</span><strong>{state.invoices.length}</strong><small>Visible invoices in your portal</small></article>
-            <article><span>TOTAL RECEIVED</span><strong>{money(summary?.totalPaid ?? 0, currency)}</strong><small>Recorded and confirmed payments</small></article>
           </section>
           <section className={styles.portalSection}>
             <div className={styles.sectionHeading}><div><span>INVOICE CENTER</span><h2>Your invoices</h2><p>Open any invoice to review the scope, amount, and payment terms.</p></div><span className={styles.securePill}><CheckCircle2 size={14} /> Private & secure</span></div>
