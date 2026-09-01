@@ -127,8 +127,19 @@ function quotationOutputsText(item: DocumentDraft["items"][number]) {
   return (Array.isArray(item.outputs) ? item.outputs : []).join("  •  ") || "—";
 }
 
+function quotationScopeText(item: DocumentDraft["items"][number]) {
+  const details = Array.isArray(item.includedServices) ? item.includedServices.filter(Boolean) : [];
+  return [item.description || "—", ...details.map((detail) => `• ${detail}`)].join("\n");
+}
+
 function itemRowHeight(doc: jsPDF, draft: DocumentDraft, item: DocumentDraft["items"][number], widths: number[], mediaGuideDocument: boolean) {
-  if (!mediaGuideDocument) return 10;
+  if (!mediaGuideDocument) {
+    if (draft.type !== "quotation" || !item.includedServices.length) return 10;
+    doc.setFont("FMGArial", "normal");
+    doc.setFontSize(7);
+    const detailLines = doc.splitTextToSize(arabicText(doc, quotationScopeText(item)), widths[1] - 5) as string[];
+    return Math.max(10, 5 + detailLines.length * 3.6);
+  }
   const invoice = draft.type === "invoice";
   const nameIndex = invoice ? 1 : 0;
   const inputIndex = invoice ? 2 : 1;
@@ -149,7 +160,7 @@ function itemRow(doc: jsPDF, draft: DocumentDraft, item: DocumentDraft["items"][
       : [quotationNameText(item), quotationInputsText(item), quotationOutputsText(item), formatMoney(item.qty * item.unitPrice, draft.currency)]
     : invoice
       ? [String(index + 1), item.date || draft.date, item.description, String(item.qty), formatMoney(item.unitPrice, ""), formatMoney(item.qty * item.unitPrice, "")]
-      : [String(index + 1), item.description, String(item.qty), item.unit, formatMoney(item.unitPrice, ""), formatMoney(item.qty * item.unitPrice, "")];
+      : [String(index + 1), quotationScopeText(item), String(item.qty), item.unit, formatMoney(item.unitPrice, ""), formatMoney(item.qty * item.unitPrice, "")];
   const rowHeight = itemRowHeight(doc, draft, item, widths, mediaGuideDocument);
   let x = 14;
   values.forEach((value, cell) => {
@@ -158,7 +169,8 @@ function itemRow(doc: jsPDF, draft: DocumentDraft, item: DocumentDraft["items"][
     doc.rect(x, y, widths[cell], rowHeight, "FD");
     const mediaTextCell = mediaGuideDocument && (invoice ? cell >= 1 && cell <= 3 : cell < 3);
     const mediaNameCell = mediaGuideDocument && cell === (invoice ? 1 : 0);
-    if (mediaTextCell) {
+    const scopeDetailsCell = !mediaGuideDocument && !invoice && cell === 1 && item.includedServices.length > 0;
+    if (mediaTextCell || scopeDetailsCell) {
       doc.setFont("FMGArial", mediaNameCell ? "bold" : "normal");
       doc.setFontSize(mediaNameCell ? 7.2 : 6.8);
       doc.setTextColor(BLACK);

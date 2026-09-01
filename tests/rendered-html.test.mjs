@@ -221,6 +221,9 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.doesNotMatch(component, /const mediaGuideSelected = type === "quotation"/);
   assert.match(component, /Media Guide invoices and quotations/);
   assert.match(component, /Choose a Media Guide bundle first/);
+  assert.match(component, /type === "quotation" && mediaGuideSelected && !selectedBundle/);
+  assert.match(component, /Manual bundle · no preset/);
+  assert.match(component, /Optional: choose a saved bundle or build the bundle manually/);
   assert.match(component, /No add-ons available for this bundle/);
   assert.match(component, /BUNDLE NAME/);
   assert.match(component, /INPUTS/);
@@ -237,6 +240,9 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(component, /selectCategory\(Number\(event\.target\.value\)\)/);
   assert.match(pdf, /category\.name\.trim\(\)\.toLowerCase\(\) === "media guide"/);
   assert.match(pdf, /const mediaGuideDocument = category\.name/);
+  assert.match(pdf, /function quotationScopeText/);
+  assert.match(pdf, /item\.includedServices\.length/);
+  assert.match(component, /paper-scope-name/);
   assert.doesNotMatch(pdf, /const mediaGuideQuotation = draft\.type === "quotation"/);
   assert.match(pdf, /\["DATE", addonGroup \? "ADD-ON NAME" : "BUNDLE NAME", "INPUTS", "OUTPUTS"/);
   assert.match(pdf, /band\(doc, "PAYMENT & NOTES  \/", y, theme\)/);
