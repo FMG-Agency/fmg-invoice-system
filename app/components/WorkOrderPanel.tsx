@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Clock3,
+  Download,
   Eye,
   FileCheck2,
   Inbox,
@@ -24,7 +25,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProductionCostOption, ProductionOptionType, ProductionState, ProductionWorkOrder } from "../types";
 import styles from "./WorkOrderPanel.module.css";
 
@@ -188,10 +189,14 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
   const [previewOrder, setPreviewOrder] = useState<ProductionWorkOrder | null>(null);
   const [filter, setFilter] = useState<"all" | ProductionWorkOrder["status"]>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [sortOrder, setSortOrder] = useState<"newest" | "production_date">("newest");
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [accountDraft, setAccountDraft] = useState<AccountDraft>(blankAccountDraft);
   const [productionDraft, setProductionDraft] = useState<ProductionDraft>(blankProductionDraft);
   const [operationDraft, setOperationDraft] = useState<OperationDraft | null>(null);
+  const sheetRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,6 +212,20 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!previewOrder) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !downloadingPdf) setPreviewOrder(null);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [downloadingPdf, previewOrder]);
+
   const bundles = useMemo(() => state.catalog.filter((item) => item.kind === "package"), [state.catalog]);
   const addons = useMemo(() => state.catalog.filter((item) => item.kind === "addon"), [state.catalog]);
   const selectedBundle = bundles.find((item) => item.id === accountDraft.bundleCatalogId);
@@ -219,6 +238,8 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
     const query = searchQuery.trim().toLowerCase();
     const matches = state.orders.filter((order) => {
       if (filter !== "all" && order.status !== filter) return false;
+      if (dateFrom && order.workDate < dateFrom) return false;
+      if (dateTo && order.workDate > dateTo) return false;
       if (!query) return true;
       return [order.code, order.clientName, order.bundleName, order.addonName, order.createdByName, order.productionManagerName, order.operationManagerName]
         .some((value) => value.toLowerCase().includes(query));
@@ -226,7 +247,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
     return [...matches].sort((left, right) => sortOrder === "production_date"
       ? left.workDate.localeCompare(right.workDate) || right.createdAt.localeCompare(left.createdAt)
       : right.createdAt.localeCompare(left.createdAt));
-  }, [filter, searchQuery, sortOrder, state.orders]);
+  }, [dateFrom, dateTo, filter, searchQuery, sortOrder, state.orders]);
   const canCreate = state.role === "account_manager" || state.role === "administrator";
   const canComplete = state.role === "production_manager" || state.role === "administrator";
   const canFinalApprove = state.role === "operation_manager" || state.role === "administrator";
@@ -331,6 +352,36 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
     window.setTimeout(cleanup, 30_000);
   }
 
+  async function downloadWorkOrder() {
+    if (!previewOrder || !sheetRef.current || downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      const images = Array.from(sheetRef.current.querySelectorAll("img"));
+      await Promise.all(images.map((image) => image.decode().catch(() => undefined)));
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+      const canvas = await html2canvas(sheetRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+      });
+      const document = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
+      const pageWidth = document.internal.pageSize.getWidth();
+      const pageHeight = document.internal.pageSize.getHeight();
+      document.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, pageWidth, pageHeight, undefined, "FAST");
+      const filename = `${previewOrder.code.replace(/[^A-Za-z0-9_-]+/g, "-")}-${previewOrder.clientName.replace(/[^A-Za-z0-9_-]+/g, "-")}.pdf`;
+      document.save(filename);
+      showToast(`${previewOrder.code} downloaded as PDF.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not download this work order.");
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
   if (loading) return <section className={styles.loading}><LoaderCircle size={28} /><h2>Loading Production…</h2><p>Preparing the work-order inbox.</p></section>;
 
   return <section className={styles.workspace}>
@@ -356,6 +407,12 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
 
       <div className={styles.orderToolbar}>
         <label className={styles.orderSearch}><Search size={16} /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search by client, order code, bundle, or manager…" aria-label="Search work orders" />{searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label="Clear work-order search"><X size={14} /></button>}</label>
+        <div className={styles.dateRange} aria-label="Filter work orders by production date">
+          <label><span>FROM</span><input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} aria-label="Work orders from date" /></label>
+          <ArrowRight size={14} />
+          <label><span>TO</span><input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} aria-label="Work orders to date" /></label>
+          {(dateFrom || dateTo) && <button type="button" onClick={() => { setDateFrom(""); setDateTo(""); }} aria-label="Clear date range"><X size={14} /></button>}
+        </div>
         <label className={styles.orderSort}><ListFilter size={15} /><span>Sort</span><select value={sortOrder} onChange={(event) => setSortOrder(event.target.value as typeof sortOrder)}><option value="newest">Newest first</option><option value="production_date">Production date</option></select></label>
         <span className={styles.resultCount}><strong>{visibleOrders.length}</strong> {visibleOrders.length === 1 ? "order" : "orders"} shown</span>
       </div>
@@ -400,10 +457,11 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
       })}</div> : <div className={styles.empty}><Inbox size={27} /><h3>No work orders in this view</h3><p>{canCreate ? "Create the first Media Guide work order and send it to Production." : "New work orders will appear here when they reach your workflow stage."}</p>{canCreate && <button className="small-primary" onClick={() => setCreateOpen(true)}><Plus size={15} /> New work order</button>}</div>}
     </section>
 
-    {previewOrder && <section className={styles.previewSection}>
-      <div className={styles.previewToolbar}><div><span>FINAL PRODUCTION DOCUMENT</span><strong>{previewOrder.code} · {previewOrder.clientName}</strong></div><div><button className="secondary-button" onClick={() => setPreviewOrder(null)}><X size={15} /> Close</button><button className="primary-button" onClick={printWorkOrder}><Printer size={16} /> Print / Save PDF</button></div></div>
-      <div className={styles.sheetFrame}>
-        <article className={styles.sheet} aria-label="Final Media Guide production work order">
+    {previewOrder && <div className={styles.previewModalLayer} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !downloadingPdf && setPreviewOrder(null)}>
+      <section className={styles.previewModalCard} role="dialog" aria-modal="true" aria-label={`Final work order ${previewOrder.code}`}>
+        <div className={styles.previewToolbar}><div><span>FINAL PRODUCTION DOCUMENT</span><strong>{previewOrder.code} · {previewOrder.clientName}</strong></div><div><button className="primary-button" disabled={downloadingPdf} onClick={() => void downloadWorkOrder()}>{downloadingPdf ? <><LoaderCircle size={16} /> Preparing PDF…</> : <><Download size={16} /> Download PDF</>}</button><button className="secondary-button" onClick={printWorkOrder}><Printer size={16} /> Print</button><button className="secondary-button" disabled={downloadingPdf} onClick={() => setPreviewOrder(null)}><X size={15} /> Close</button></div></div>
+        <div className={styles.previewModalBody}><div className={styles.sheetFrame}>
+        <article ref={sheetRef} className={styles.sheet} aria-label="Final Media Guide production work order">
           <header className={styles.sheetHeader}>
             <div className={styles.brand}><Image src="/fmg-logo-light.png" alt="FMG Agency" width={380} height={130} unoptimized priority /></div>
             <div className={styles.documentTitle}><span>CLIENT SERVICE DOCUMENT</span><h2>MEDIA GUIDE</h2><p>PRODUCTION WORK ORDER</p></div>
@@ -415,13 +473,14 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
               <ValueField label="DATE" value={prettyDate(previewOrder.workDate)} /><ValueField label="CALL TIME" value={previewOrder.callTime} /><ValueField label="TOTAL · EGP" value={money(previewOrder.workOrderTotal)} />
             </div></section>
             <section className={styles.formSection}><div className={styles.sectionHeading}><span>03</span><div><strong>Scope & pricing</strong><small>Bundle and add-on inputs, outputs, and prices</small></div></div><table className={styles.scopeTable}><thead><tr><th>TYPE</th><th>NAME</th><th>INPUTS</th><th>OUTPUTS</th><th>PRICE · EGP</th></tr></thead><tbody><tr><td>BUNDLE</td><td>{previewOrder.bundleName}</td><td>{previewOrder.bundleInputs.join(" · ") || "—"}</td><td>{previewOrder.bundleOutputs.join(" · ") || "—"}</td><td>{money(previewOrder.bundlePrice)}</td></tr>{previewOrder.addonName && <tr><td>ADD-ON</td><td>{previewOrder.addonName}</td><td>{previewOrder.addonInputs.join(" · ") || "—"}</td><td>{previewOrder.addonOutputs.join(" · ") || "—"}</td><td>{money(previewOrder.addonPrice)}</td></tr>}</tbody></table></section>
-            <section className={styles.formSection}><div className={styles.sectionHeading}><span>04</span><div><strong>Production options</strong><small>Approved resources and their billing treatment</small></div></div><table className={styles.optionsTable}><thead><tr><th>#</th><th>OPTION</th><th>NAME / DETAILS</th><th>TREATMENT</th><th>PRICE · EGP</th></tr></thead><tbody>{previewOrder.productionOptions.map((option, index) => <tr key={option.id}><td>{index + 1}</td><td>{optionLabels[option.type]}</td><td>{option.name}</td><td>{option.billingMode === "extra" ? "EXTRA COST" : "INCLUDED IN BUNDLE"}</td><td>{money(option.price)}</td></tr>)}</tbody><tfoot><tr><td colSpan={4}>EXTRA PRODUCTION CHARGES</td><td>{money(previewOrder.productionOptionsTotal)}</td></tr></tfoot></table></section>
+            <section className={styles.formSection}><div className={styles.sectionHeading}><span>04</span><div><strong>Production options</strong><small>Approved resources and their billing treatment</small></div></div><table className={styles.optionsTable}><thead><tr><th>#</th><th>OPTION</th><th>NAME / DETAILS</th><th>TREATMENT</th><th>PRICE · EGP</th></tr></thead><tbody>{previewOrder.productionOptions.map((option, index) => <tr key={option.id}><td>{index + 1}</td><td>{optionLabels[option.type]}</td><td>{option.name}</td><td><span className={option.billingMode === "extra" ? styles.extraTreatment : styles.includedTreatment}>{option.billingMode === "extra" ? "EXTRA COST" : "INCLUDED IN BUNDLE"}</span></td><td>{money(option.price)}</td></tr>)}</tbody><tfoot><tr><td colSpan={4}>EXTRA PRODUCTION CHARGES</td><td>{money(previewOrder.productionOptionsTotal)}</td></tr></tfoot></table></section>
             <section className={`${styles.formSection} ${styles.notesSection}`}><div className={styles.sectionHeading}><span>05</span><div><strong>Additional notes</strong><small>Final instructions approved by Operations</small></div></div><div className={styles.finalNotes}><span>NOTES</span><p><strong>Account Manager:</strong> {previewOrder.accountNote || "—"}</p><p><strong>Production Manager:</strong> {previewOrder.productionNote || "—"}</p><p className={styles.operationNote}><strong>Operation Manager:</strong> {previewOrder.operationNote || "—"}</p></div></section>
           </div>
           <footer className={styles.sheetFooter}><span>FMG AGENCY<br /><strong>MEDIA GUIDE PRODUCTION</strong></span><p><small>INSTRUCTION</small>Keep this work order with the production team on the shoot day.</p><strong><small>STATUS</small>FINAL APPROVED</strong></footer>
         </article>
-      </div>
-    </section>}
+        </div></div>
+      </section>
+    </div>}
 
     {createOpen && <WorkflowModal title="Create Media Guide work order" description="Account Manager stage · every field below becomes read-only after submission." onClose={() => !saving && setCreateOpen(false)}>
       <form className={styles.workflowForm} onSubmit={createOrder}>
