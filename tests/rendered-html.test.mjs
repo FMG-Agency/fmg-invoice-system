@@ -308,7 +308,13 @@ test("ships the locked Media Guide production workflow", async () => {
   assert.match(workOrder, /Download PDF/);
   assert.match(workOrder, /role="dialog" aria-modal="true" aria-label=\{`Final work order/);
   assert.match(workOrder, /import\("html2canvas"\)/);
+  assert.match(workOrder, /aria-expanded=\{expanded\}/);
+  assert.match(workOrder, /View details/);
+  assert.match(workOrder, /Number\.isFinite\(option\.price\) \? option\.price : ""/);
+  assert.match(workOrder, /productionOptionPrice\(option\)/);
   assert.match(workOrderStyles, /\.previewModalLayer/);
+  assert.match(workOrderStyles, /\.orderDetails \{/);
+  assert.match(workOrderStyles, /\.chevronOpen/);
   assert.match(workOrderStyles, /\.orderGrid \{[^}]*gap: 20px/);
   assert.match(workOrderStyles, /\.optionsTable th:nth-child\(4\) \{ width: 24%; \}/);
   assert.doesNotMatch(workOrderStyles, /\.optionsTable th:nth-child\(3\) \{ width: 55%; \}/);

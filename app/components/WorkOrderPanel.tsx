@@ -5,6 +5,7 @@ import {
   ArrowRight,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   CircleDollarSign,
   Clock3,
   Download,
@@ -83,6 +84,10 @@ function blankProductionDraft(): ProductionDraft {
   return { callTime: "", options: [], productionNote: "" };
 }
 
+function productionOptionPrice(option: ProductionCostOption) {
+  return option.billingMode === "included" && option.price === 0.1 ? 0 : option.price;
+}
+
 function operationDraftFrom(order: ProductionWorkOrder): OperationDraft {
   return {
     clientId: order.clientId,
@@ -90,7 +95,7 @@ function operationDraftFrom(order: ProductionWorkOrder): OperationDraft {
     addonCatalogId: order.addonCatalogId,
     workDate: order.workDate,
     callTime: order.callTime,
-    options: order.productionOptions.map((option) => ({ ...option })),
+    options: order.productionOptions.map((option) => ({ ...option, price: productionOptionPrice(option) })),
     accountNote: order.accountNote,
     productionNote: order.productionNote,
     operationNote: order.operationNote,
@@ -136,7 +141,7 @@ function ProductionOptionsEditor({ options, onChange }: { options: ProductionCos
       <label><span>Option</span><select value={option.type} onChange={(event) => patch(option.id, { type: event.target.value as ProductionOptionType })}>{optionTypes.map((type) => <option key={type} value={type}>{optionLabels[type]}</option>)}</select></label>
       <label><span>Name / details</span><input required maxLength={300} value={option.name} onChange={(event) => patch(option.id, { name: event.target.value })} placeholder={`Enter ${optionLabels[option.type].toLowerCase()} name`} /></label>
       <label><span>Price treatment</span><select value={option.billingMode} onChange={(event) => patch(option.id, { billingMode: event.target.value as ProductionCostOption["billingMode"] })}><option value="included">Included in bundle</option><option value="extra">Extra cost</option></select></label>
-      <label><span>{option.billingMode === "extra" ? "Extra price" : "Resource price"} · EGP</span><input required type="number" min="0" step="0.01" value={option.price || ""} onChange={(event) => patch(option.id, { price: Number(event.target.value) })} placeholder="5000" /></label>
+      <label><span>{option.billingMode === "extra" ? "Extra price" : "Resource price"} · EGP</span><input required type="number" min="0" step="0.01" value={Number.isFinite(option.price) ? option.price : ""} onChange={(event) => patch(option.id, { price: Number(event.target.value) })} placeholder="0" /></label>
       <button type="button" className={styles.removeOption} onClick={() => onChange(options.filter((item) => item.id !== option.id))} aria-label="Remove production option"><Trash2 size={16} /></button>
     </div>)}</div> : <div className={styles.noOptions}><Plus size={18} /><span>No production options yet. Press <strong>Add option</strong> to start.</span></div>}
     <footer><span>Extra amount added to bundle <small>Included resources do not increase the invoice</small></span><strong>{money(extraTotal)}</strong></footer>
@@ -192,6 +197,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [sortOrder, setSortOrder] = useState<"newest" | "production_date">("newest");
+  const [expandedOrderIds, setExpandedOrderIds] = useState<number[]>([]);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [accountDraft, setAccountDraft] = useState<AccountDraft>(blankAccountDraft);
   const [productionDraft, setProductionDraft] = useState<ProductionDraft>(blankProductionDraft);
@@ -251,6 +257,12 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
   const canCreate = state.role === "account_manager" || state.role === "administrator";
   const canComplete = state.role === "production_manager" || state.role === "administrator";
   const canFinalApprove = state.role === "operation_manager" || state.role === "administrator";
+
+  function toggleOrderDetails(orderId: number) {
+    setExpandedOrderIds((current) => current.includes(orderId)
+      ? []
+      : [orderId]);
+  }
 
   async function mutate(body: Record<string, unknown>) {
     setSaving(true);
@@ -334,6 +346,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
     if (!window.confirm(`Delete ${order.code} for ${order.clientName}? This cannot be undone.${invoiceNote}`)) return;
     try {
       await mutate({ action: "delete", id: order.id });
+      setExpandedOrderIds((current) => current.filter((id) => id !== order.id));
       if (previewOrder?.id === order.id) setPreviewOrder(null);
       if (reviewing?.id === order.id) { setReviewing(null); setOperationDraft(null); }
       if (completing?.id === order.id) setCompleting(null);
@@ -421,13 +434,18 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
         const pending = order.status === "pending_production";
         const pendingOperations = order.status === "pending_operations";
         const finalApproved = order.status === "final_approved";
+        const expanded = expandedOrderIds.includes(order.id);
         return <article key={order.id} className={`${styles.orderCard} ${pending ? styles.cardPending : pendingOperations ? styles.cardOperations : styles.cardReady}`}>
-          <header className={styles.orderCardHeader}>
-            <div className={styles.orderIdentity}><span className={pending ? styles.statusPending : pendingOperations ? styles.statusOperations : styles.statusReady}>{finalApproved ? <CheckCircle2 size={13} /> : <Clock3 size={13} />}{statusLabel(order)}</span><div><h3>{order.clientName}</h3><span className={styles.orderCode}>{order.code}</span></div><p>Media Guide work order</p></div>
-            <div className={styles.orderSchedule}><CalendarDays size={18} /><span><small>PRODUCTION DATE</small><strong>{prettyDate(order.workDate)}</strong>{!pending && order.callTime && <em><Clock3 size={11} /> {order.callTime}</em>}</span></div>
-            <span className={styles.locked}><LockKeyhole size={14} /> {finalApproved ? "Final locked" : "Stage locked"}</span>
+          <header className={`${styles.orderCardHeader} ${expanded ? styles.orderCardHeaderOpen : ""}`}>
+            <button type="button" className={styles.orderCardToggle} aria-expanded={expanded} aria-controls={`work-order-details-${order.id}`} onClick={() => toggleOrderDetails(order.id)}>
+              <div className={styles.orderIdentity}><span className={pending ? styles.statusPending : pendingOperations ? styles.statusOperations : styles.statusReady}>{finalApproved ? <CheckCircle2 size={13} /> : <Clock3 size={13} />}{statusLabel(order)}</span><div><h3>{order.clientName}</h3><span className={styles.orderCode}>{order.code}</span></div><p>Media Guide work order</p></div>
+              <div className={styles.orderSchedule}><CalendarDays size={18} /><span><small>PRODUCTION DATE</small><strong>{prettyDate(order.workDate)}</strong>{!pending && order.callTime && <em><Clock3 size={11} /> {order.callTime}</em>}</span></div>
+              <span className={styles.locked}><LockKeyhole size={14} /> {finalApproved ? "Final locked" : "Stage locked"}</span>
+              <span className={styles.expandControl}><span>{expanded ? "Hide details" : "View details"}</span><ChevronDown className={expanded ? styles.chevronOpen : ""} size={18} /></span>
+            </button>
           </header>
 
+          {expanded && <div id={`work-order-details-${order.id}`} className={styles.orderDetails}>
           <div className={styles.orderScope}>
             <div><PackageCheck size={17} /><span><small>BUNDLE</small><strong>{order.bundleName}</strong><em>{money(order.bundlePrice)}</em></span></div>
             <div><Plus size={17} /><span><small>ADD-ON</small><strong>{order.addonName || "No add-on selected"}</strong><em>{order.addonName ? money(order.addonPrice) : "Not added"}</em></span></div>
@@ -453,6 +471,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
               {state.role === "administrator" && <button className={styles.deleteButton} disabled={saving} onClick={() => void deleteOrder(order)}><Trash2 size={15} /> Delete</button>}
             </div>
           </footer>
+          </div>}
         </article>;
       })}</div> : <div className={styles.empty}><Inbox size={27} /><h3>No work orders in this view</h3><p>{canCreate ? "Create the first Media Guide work order and send it to Production." : "New work orders will appear here when they reach your workflow stage."}</p>{canCreate && <button className="small-primary" onClick={() => setCreateOpen(true)}><Plus size={15} /> New work order</button>}</div>}
     </section>
@@ -473,7 +492,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
               <ValueField label="DATE" value={prettyDate(previewOrder.workDate)} /><ValueField label="CALL TIME" value={previewOrder.callTime} /><ValueField label="TOTAL · EGP" value={money(previewOrder.workOrderTotal)} />
             </div></section>
             <section className={styles.formSection}><div className={styles.sectionHeading}><span>03</span><div><strong>Scope & pricing</strong><small>Bundle and add-on inputs, outputs, and prices</small></div></div><table className={styles.scopeTable}><thead><tr><th>TYPE</th><th>NAME</th><th>INPUTS</th><th>OUTPUTS</th><th>PRICE · EGP</th></tr></thead><tbody><tr><td>BUNDLE</td><td>{previewOrder.bundleName}</td><td>{previewOrder.bundleInputs.join(" · ") || "—"}</td><td>{previewOrder.bundleOutputs.join(" · ") || "—"}</td><td>{money(previewOrder.bundlePrice)}</td></tr>{previewOrder.addonName && <tr><td>ADD-ON</td><td>{previewOrder.addonName}</td><td>{previewOrder.addonInputs.join(" · ") || "—"}</td><td>{previewOrder.addonOutputs.join(" · ") || "—"}</td><td>{money(previewOrder.addonPrice)}</td></tr>}</tbody></table></section>
-            <section className={styles.formSection}><div className={styles.sectionHeading}><span>04</span><div><strong>Production options</strong><small>Approved resources and their billing treatment</small></div></div><table className={styles.optionsTable}><thead><tr><th>#</th><th>OPTION</th><th>NAME / DETAILS</th><th>TREATMENT</th><th>PRICE · EGP</th></tr></thead><tbody>{previewOrder.productionOptions.map((option, index) => <tr key={option.id}><td>{index + 1}</td><td>{optionLabels[option.type]}</td><td>{option.name}</td><td><span className={option.billingMode === "extra" ? styles.extraTreatment : styles.includedTreatment}>{option.billingMode === "extra" ? "EXTRA COST" : "INCLUDED IN BUNDLE"}</span></td><td>{money(option.price)}</td></tr>)}</tbody><tfoot><tr><td colSpan={4}>EXTRA PRODUCTION CHARGES</td><td>{money(previewOrder.productionOptionsTotal)}</td></tr></tfoot></table></section>
+            <section className={styles.formSection}><div className={styles.sectionHeading}><span>04</span><div><strong>Production options</strong><small>Approved resources and their billing treatment</small></div></div><table className={styles.optionsTable}><thead><tr><th>#</th><th>OPTION</th><th>NAME / DETAILS</th><th>TREATMENT</th><th>PRICE · EGP</th></tr></thead><tbody>{previewOrder.productionOptions.map((option, index) => <tr key={option.id}><td>{index + 1}</td><td>{optionLabels[option.type]}</td><td>{option.name}</td><td><span className={option.billingMode === "extra" ? styles.extraTreatment : styles.includedTreatment}>{option.billingMode === "extra" ? "EXTRA COST" : "INCLUDED IN BUNDLE"}</span></td><td>{money(productionOptionPrice(option))}</td></tr>)}</tbody><tfoot><tr><td colSpan={4}>EXTRA PRODUCTION CHARGES</td><td>{money(previewOrder.productionOptionsTotal)}</td></tr></tfoot></table></section>
             <section className={`${styles.formSection} ${styles.notesSection}`}><div className={styles.sectionHeading}><span>05</span><div><strong>Additional notes</strong><small>Final instructions approved by Operations</small></div></div><div className={styles.finalNotes}><span>NOTES</span><p><strong>Account Manager:</strong> {previewOrder.accountNote || "—"}</p><p><strong>Production Manager:</strong> {previewOrder.productionNote || "—"}</p><p className={styles.operationNote}><strong>Operation Manager:</strong> {previewOrder.operationNote || "—"}</p></div></section>
           </div>
           <footer className={styles.sheetFooter}><span>FMG AGENCY<br /><strong>MEDIA GUIDE PRODUCTION</strong></span><p><small>INSTRUCTION</small>Keep this work order with the production team on the shoot day.</p><strong><small>STATUS</small>FINAL APPROVED</strong></footer>
