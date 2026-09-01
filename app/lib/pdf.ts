@@ -336,28 +336,39 @@ export async function generateDocumentPdf(draft: DocumentDraft, client: Client, 
 
   y = totals(doc, draft, y + 3, theme) + 6;
   const showPaymentNotes = draft.type !== "invoice" || Boolean(draft.paymentTerms.trim() || draft.notesExclusions.trim());
+  const paymentTermsText = draft.paymentTerms.trim() || (draft.type === "invoice" ? "—" : "50% advance payment • 50% upon completion");
+  const notesText = draft.notesExclusions.trim() || "—";
+  doc.setFont("FMGArial", "normal");
+  doc.setFontSize(7);
+  const paymentTermsLines = doc.splitTextToSize(arabicText(doc, paymentTermsText), 134) as string[];
+  const notesLines = doc.splitTextToSize(arabicText(doc, notesText), 134) as string[];
+  const paymentTermsHeight = Math.max(10, 5 + paymentTermsLines.length * 3.6);
+  const notesHeight = Math.max(10, 5 + notesLines.length * 3.6);
+  const paymentNotesHeight = showPaymentNotes ? 10 + paymentTermsHeight + notesHeight + 4 : 0;
+  const closingHeight = paymentNotesHeight + (draft.type === "quotation" ? 22 : 8);
+  const closingBottom = doc.internal.pageSize.getHeight() - 22;
+  if (y + closingHeight > closingBottom) {
+    footer(doc, category, theme, digitalEmpire);
+    doc.addPage();
+    drawHeader(true);
+    y = 42;
+  }
   if (showPaymentNotes) {
-    if (y > 205) {
-      footer(doc, category, theme, digitalEmpire);
-      doc.addPage();
-      drawHeader(true);
-      y = 42;
-    }
     band(doc, "PAYMENT & NOTES  /", y, theme);
     y += 10;
     doc.setFillColor(theme.light);
-    doc.rect(14, y, 42, 10, "F");
+    doc.rect(14, y, 42, paymentTermsHeight, "F");
     text(doc, "PAYMENT TERMS", 17, y + 6.2, { fontSize: 7, bold: true });
     doc.setDrawColor("#d8d8d8");
-    doc.rect(56, y, 140, 10);
-    text(doc, draft.paymentTerms.trim() || (draft.type === "invoice" ? "—" : "50% advance payment • 50% upon completion"), 59, y + 6.2, { fontSize: 7, maxWidth: 134 });
-    y += 10;
+    doc.rect(56, y, 140, paymentTermsHeight);
+    text(doc, paymentTermsText, 59, y + 6.2, { fontSize: 7, maxWidth: 134 });
+    y += paymentTermsHeight;
     doc.setFillColor(theme.light);
-    doc.rect(14, y, 42, 18, "F");
+    doc.rect(14, y, 42, notesHeight, "F");
     text(doc, "NOTES / EXCLUSIONS", 17, y + 6.2, { fontSize: 7, bold: true });
-    doc.rect(56, y, 140, 18);
-    text(doc, draft.notesExclusions.trim() || "—", 59, y + 6.2, { fontSize: 7, maxWidth: 134 });
-    y += 24;
+    doc.rect(56, y, 140, notesHeight);
+    text(doc, notesText, 59, y + 6.2, { fontSize: 7, maxWidth: 134 });
+    y += notesHeight + 4;
   }
   if (draft.type === "quotation") {
     band(doc, "TERMS & ACCEPTANCE  /", y, theme);

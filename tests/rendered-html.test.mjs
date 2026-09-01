@@ -247,6 +247,10 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(pdf, /\["DATE", addonGroup \? "ADD-ON NAME" : "BUNDLE NAME", "INPUTS", "OUTPUTS"/);
   assert.match(pdf, /band\(doc, "PAYMENT & NOTES  \/", y, theme\)/);
   assert.match(pdf, /const showPaymentNotes = draft\.type !== "invoice" \|\| Boolean\(draft\.paymentTerms\.trim\(\) \|\| draft\.notesExclusions\.trim\(\)\)/);
+  assert.match(pdf, /const paymentNotesHeight = showPaymentNotes/);
+  assert.match(pdf, /const closingBottom = doc\.internal\.pageSize\.getHeight\(\) - 22/);
+  assert.match(pdf, /if \(y \+ closingHeight > closingBottom\)/);
+  assert.doesNotMatch(pdf, /if \(y > 205\)/);
   assert.match(pdf, /if \(showPaymentNotes\)/);
   assert.match(pdf, /draft\.type === "invoice" \? "—" : "50% advance payment • 50% upon completion"/);
   assert.match(pdf, /const grand = draft\.type === "invoice" \? rawTotal : Math\.max\(0, rawTotal\)/);
