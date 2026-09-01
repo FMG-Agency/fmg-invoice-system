@@ -3,7 +3,7 @@ import { z } from "zod";
 import { database } from "../../lib/database";
 import { ensureClientFinanceDatabase, importClientWorkbookData } from "../../lib/client-finance";
 import { getSession, requireAuth, type AuthSession } from "../../lib/auth-server";
-import { canAccess, type AccessPermission } from "../../lib/permissions";
+import { canAccess, isOperationManager, type AccessPermission } from "../../lib/permissions";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -454,7 +454,16 @@ export async function POST(request: Request) {
       if (existing.type !== payload.data.type) return Response.json({ error: "A document type cannot be changed after it is created." }, { status: 400 });
       requiredPermission = existing.type === "invoice" ? "invoices" : "quotations";
     }
-    if (!allowed(requiredPermission)) return accessDenied();
+    if (payload.action === "setDocumentStatus" || payload.action === "deleteDocument") {
+      const existing = await database.prepare("SELECT type FROM documents WHERE id = ?").bind(payload.id).first<{ type: "invoice" | "quotation" }>();
+      if (!existing) return Response.json({ error: "Document not found." }, { status: 404 });
+      requiredPermission = existing.type === "invoice" ? "invoices" : "quotations";
+    }
+    const documentLifecycleAction = payload.action === "setDocumentStatus" || payload.action === "deleteDocument";
+    if (documentLifecycleAction) {
+      const operationManagerInvoiceAccess = requiredPermission === "invoices" && isOperationManager(session.roleLabel) && allowed("invoices");
+      if (!allowed("all_data") && !operationManagerInvoiceAccess) return accessDenied();
+    } else if (!allowed(requiredPermission)) return accessDenied();
 
     if (payload.action === "createClient" || payload.action === "updateClient") {
       const values = payload.data;

@@ -209,6 +209,10 @@ const navSections: NavSection[] = [
   { id: "administration", label: "Administration", eyebrow: "Settings & access", icon: Settings2, items: ["settings", "users"] },
 ];
 
+function canOpenDocumentArchive(access: AuthState) {
+  return access.isAdmin || ["all_data", "invoices", "quotations"].some((permission) => access.permissions.includes(permission as AccessPermission));
+}
+
 function navGroupForView(next: View): NavGroupId | null {
   const section = navSections.find((entry) => !("item" in entry) && entry.items.includes(next));
   return section && !("item" in section) ? section.id : null;
@@ -431,6 +435,7 @@ export function FmgSystem() {
   function canOpenView(next: View, access = auth) {
     const item = navItems.find((entry) => entry.id === next);
     if (!item) return false;
+    if (next === "data") return canOpenDocumentArchive(access);
     return item.permission === "users" ? access.isAdmin : canAccess(access.permissions, item.permission, access.isAdmin);
   }
 
@@ -479,7 +484,7 @@ export function FmgSystem() {
       if (hrResponse && !hrResponse.ok) throw new Error("error" in hrResult && hrResult.error ? hrResult.error : "Could not load employee and attendance data");
       setState(result as AppState);
       setHrState(loadHrData ? hrResult as HrState : emptyHrState);
-      const allowed = navItems.filter((item) => item.permission === "users" ? access.isAdmin : canAccess(access.permissions, item.permission, access.isAdmin));
+      const allowed = navItems.filter((item) => canOpenView(item.id, access));
       setView((current) => allowed.some((item) => item.id === current) ? current : allowed[0]?.id ?? "dashboard");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Could not load your workspace");
@@ -563,12 +568,12 @@ export function FmgSystem() {
     const query = search.trim().toLowerCase();
     if (!query) return [];
     const clientResults = canAccess(auth.permissions, "clients", auth.isAdmin) ? state.clients.filter((client) => [client.name, client.companyName, client.ownerName, client.phone, client.email].some((value) => value.toLowerCase().includes(query))).slice(0, 3).map((record) => ({ kind: "Client", title: record.companyName || record.name, meta: record.ownerName, view: "clients" as View })) : [];
-    const docResults = canAccess(auth.permissions, "all_data", auth.isAdmin) ? state.documents.filter((document) => [document.generatedCode, document.clientName, document.companyName, document.categoryName, document.type].some((value) => value.toLowerCase().includes(query))).slice(0, 4).map((record) => ({ kind: record.type === "invoice" ? "Invoice" : "Quotation", title: record.generatedCode, meta: record.companyName || record.clientName, view: "data" as View })) : [];
+    const docResults = canOpenDocumentArchive(auth) ? state.documents.filter((document) => [document.generatedCode, document.clientName, document.companyName, document.categoryName, document.type].some((value) => value.toLowerCase().includes(query))).slice(0, 4).map((record) => ({ kind: record.type === "invoice" ? "Invoice" : "Quotation", title: record.generatedCode, meta: record.companyName || record.clientName, view: "data" as View })) : [];
     const employeeResults = canAccess(auth.permissions, "employees", auth.isAdmin) ? hrState.employees.filter((employee) => [employee.name, employee.title, employee.department, employee.biometricCode].some((value) => value.toLowerCase().includes(query))).slice(0, 3).map((record) => ({ kind: "Employee", title: record.name, meta: record.title || `Biometric ID ${record.biometricCode}`, view: "employees" as View })) : [];
     return [...employeeResults, ...docResults, ...clientResults];
   }, [auth, hrState.employees, search, state]);
 
-  const accessibleNavItems = navItems.filter((item) => item.permission === "users" ? auth.isAdmin : canAccess(auth.permissions, item.permission, auth.isAdmin));
+  const accessibleNavItems = navItems.filter((item) => canOpenView(item.id));
   const accessibleNavIds = new Set(accessibleNavItems.map((item) => item.id));
   const copy = viewCopy[view];
 

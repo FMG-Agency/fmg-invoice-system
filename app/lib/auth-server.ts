@@ -1,5 +1,5 @@
 import { database } from "./database";
-import { ALL_ACCESS_PERMISSIONS, canAccess, parsePermissions, type AccessPermission } from "./permissions";
+import { canAccess, effectivePermissions, parsePermissions, type AccessPermission } from "./permissions";
 
 const COOKIE_NAME = "fmg_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 7;
@@ -211,7 +211,7 @@ export async function getSession(request: Request): Promise<AuthSession | null> 
     displayName: row.displayName,
     roleLabel: row.roleLabel,
     isAdmin,
-    permissions: isAdmin ? ALL_ACCESS_PERMISSIONS : parsePermissions(row.permissionsJson),
+    permissions: effectivePermissions(parsePermissions(row.permissionsJson), row.roleLabel, isAdmin),
     employeeId: row.employeeId === null || row.employeeId === undefined ? null : Number(row.employeeId),
     clientId: row.clientId === null || row.clientId === undefined ? null : Number(row.clientId),
   };

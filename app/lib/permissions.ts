@@ -56,6 +56,23 @@ export function parsePermissions(value: string) {
   }
 }
 
+function normalizedRole(value: string) {
+  return value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+}
+
+export function isOperationManager(roleLabel: string) {
+  const role = normalizedRole(roleLabel);
+  return role === "operation manager" || role === "operations manager";
+}
+
+export function effectivePermissions(permissions: AccessPermission[], roleLabel: string, isAdmin = false) {
+  if (isAdmin) return [...ALL_ACCESS_PERMISSIONS];
+  const normalized = normalizePermissions(permissions);
+  return isOperationManager(roleLabel) && !normalized.includes("invoices")
+    ? [...normalized, "invoices" as AccessPermission]
+    : normalized;
+}
+
 export function canAccess(permissions: AccessPermission[], permission: AccessPermission, isAdmin = false) {
   return isAdmin || permissions.includes(permission);
 }

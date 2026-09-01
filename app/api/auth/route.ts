@@ -16,7 +16,7 @@ import {
   secureEqual,
   type AuthSession,
 } from "../../lib/auth-server";
-import { ALL_ACCESS_PERMISSIONS, parsePermissions } from "../../lib/permissions";
+import { ALL_ACCESS_PERMISSIONS, effectivePermissions, parsePermissions } from "../../lib/permissions";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -122,7 +122,11 @@ export async function POST(request: Request) {
         displayName: session?.displayName ?? credential.username,
         roleLabel: session?.roleLabel ?? "Team Member",
         isAdmin: Number(session?.isAdmin) === 1,
-        permissions: Number(session?.isAdmin) === 1 ? ALL_ACCESS_PERMISSIONS : parsePermissions(session?.permissionsJson ?? "[]"),
+        permissions: effectivePermissions(
+          parsePermissions(session?.permissionsJson ?? "[]"),
+          session?.roleLabel ?? "Team Member",
+          Number(session?.isAdmin) === 1,
+        ),
         employeeId: session?.employeeId === null || session?.employeeId === undefined ? null : Number(session.employeeId),
         clientId: session?.clientId === null || session?.clientId === undefined ? null : Number(session.clientId),
       };

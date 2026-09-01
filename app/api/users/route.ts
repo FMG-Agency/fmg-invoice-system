@@ -8,7 +8,7 @@ import {
   passwordHash,
   requireAdmin,
 } from "../../lib/auth-server";
-import { ACCESS_PERMISSIONS, normalizePermissions, parsePermissions } from "../../lib/permissions";
+import { ACCESS_PERMISSIONS, effectivePermissions, normalizePermissions, parsePermissions } from "../../lib/permissions";
 import { ensureHrDatabase } from "../../lib/hr";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +47,11 @@ async function listUsers() {
     roleLabel: String(row.roleLabel ?? "Team Member"),
     isAdmin: Number(row.isAdmin) === 1,
     active: Number(row.active) === 1,
-    permissions: Number(row.isAdmin) === 1 ? ACCESS_PERMISSIONS.map((permission) => permission.key) : parsePermissions(String(row.permissionsJson ?? "[]")),
+    permissions: effectivePermissions(
+      parsePermissions(String(row.permissionsJson ?? "[]")),
+      String(row.roleLabel ?? "Team Member"),
+      Number(row.isAdmin) === 1,
+    ),
     employeeId: row.employeeId === null || row.employeeId === undefined ? null : Number(row.employeeId),
     employeeName: String(row.employeeName ?? ""),
     clientId: row.clientId === null || row.clientId === undefined ? null : Number(row.clientId),

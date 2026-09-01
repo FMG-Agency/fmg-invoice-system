@@ -149,6 +149,18 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(requestAttachmentApi, /row\.employeeId !== session\.employeeId/);
   assert.match(permissions, /OPERATION_MANAGER_PERMISSIONS/);
   assert.doesNotMatch(permissions.match(/OPERATION_MANAGER_PERMISSIONS[\s\S]*?\];/)?.[0] ?? "", /"employees"|"attendance"/);
+  assert.match(permissions, /function isOperationManager/);
+  assert.match(permissions, /function effectivePermissions/);
+  assert.match(permissions, /!normalized\.includes\("invoices"\)/);
+  assert.match(authServer, /effectivePermissions\(parsePermissions\(row\.permissionsJson\), row\.roleLabel, isAdmin\)/);
+  assert.match(authApi, /effectivePermissions/);
+  assert.match(usersApi, /effectivePermissions/);
+  assert.match(component, /function canOpenDocumentArchive/);
+  assert.match(component, /\["all_data", "invoices", "quotations"\]/);
+  assert.match(api, /SELECT type FROM documents WHERE id = \?/);
+  assert.match(api, /allowed\("all_data"\)/);
+  assert.match(api, /isOperationManager\(session\.roleLabel\)/);
+  assert.match(api, /operationManagerInvoiceAccess/);
   assert.match(api, /@vercel\/blob/);
   assert.match(pdfApi, /get\(row\.pdfKey, \{ access: "private" \}\)/);
   assert.match(database, /TURSO_DATABASE_URL/);
