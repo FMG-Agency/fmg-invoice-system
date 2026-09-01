@@ -296,6 +296,13 @@ test("ships the locked Media Guide production workflow", async () => {
   assert.match(workOrder, /FINAL APPROVED/);
   assert.match(workOrder, /Included in bundle/);
   assert.match(workOrder, /Extra cost/);
+  assert.match(workOrder, /Search by client, order code, bundle, or manager/);
+  assert.match(workOrder, /WORK ORDER TOTAL/);
+  assert.match(workOrder, /PRODUCTION RESOURCES/);
+  assert.match(workOrder, /Action required/);
+  assert.match(workOrderStyles, /\.orderGrid \{ display: grid; grid-template-columns: 1fr/);
+  assert.match(workOrderStyles, /\.workflowTrack/);
+  assert.match(workOrderStyles, /\.orderToolbar/);
   assert.match(workOrder, /Only production options marked Extra cost are added above the bundle price/);
   assert.match(productionApi, /role !== "account_manager"/);
   assert.match(productionApi, /role !== "production_manager"/);

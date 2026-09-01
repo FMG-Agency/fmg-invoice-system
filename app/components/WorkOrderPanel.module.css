@@ -34,8 +34,8 @@
 .roleWarning strong { font-size: 12px; }
 .roleWarning p { margin: 0; color: var(--muted); font-size: 10px; }
 
-.inboxPanel { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
-.inboxHeading { margin-bottom: 17px; display: flex; align-items: end; justify-content: space-between; gap: 16px; }
+.inboxPanel { padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+.inboxHeading { margin-bottom: 15px; display: flex; align-items: end; justify-content: space-between; gap: 16px; }
 .inboxHeading > div:first-child > span, .previewToolbar span { color: var(--yellow-ink); font-size: 8px; font-weight: 900; letter-spacing: 1px; }
 .inboxHeading h2 { margin: 4px 0 2px; font-size: 18px; }
 .inboxHeading p { margin: 0; color: var(--muted); font-size: 10px; }
@@ -44,42 +44,83 @@
 .filters button span { min-width: 18px; padding: 2px 5px; border-radius: 999px; background: var(--line); color: var(--ink); font-size: 8px; }
 .filters button.active { background: var(--surface); color: var(--ink); box-shadow: 0 2px 8px rgba(0,0,0,.07); }
 
-.orderGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
-.orderCard { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); display: flex; flex-direction: column; gap: 13px; }
-.orderCard > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.orderCard h3 { margin: 8px 0 2px; font-size: 15px; }
-.orderCard header p { margin: 0; color: var(--muted); font-size: 9px; }
+.orderToolbar { min-height: 52px; margin-bottom: 14px; padding: 7px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); display: grid; grid-template-columns: minmax(260px, 1fr) auto auto; align-items: center; gap: 8px; }
+.orderSearch { height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); display: flex; align-items: center; gap: 8px; }
+.orderSearch > svg { flex: 0 0 auto; color: var(--muted); }
+.orderSearch input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 10px; }
+.orderSearch button { width: 27px; height: 27px; border: 0; border-radius: 7px; background: var(--surface-2); color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.orderSort { height: 38px; padding: 0 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: 8px; font-weight: 850; }
+.orderSort select { border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 9px; font-weight: 800; }
+.resultCount { padding: 0 10px; color: var(--muted); font-size: 8px; white-space: nowrap; }
+.resultCount strong { color: var(--ink); font-size: 11px; }
+
+.orderGrid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.orderCard { position: relative; min-width: 0; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); display: flex; flex-direction: column; overflow: hidden; transition: border-color .16s ease, box-shadow .16s ease; }
+.orderCard:hover { border-color: var(--line-strong); box-shadow: 0 10px 28px rgba(17,17,17,.07); }
+.orderCard::before { content: ""; position: absolute; z-index: 2; inset: 0 auto 0 0; width: 4px; background: #f5b83c; }
+.cardOperations::before { background: #4a78dc; }
+.cardReady::before { background: #33a768; }
+.orderCardHeader { min-height: 92px; padding: 16px 18px 15px 21px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface-2) 72%, var(--surface)); display: grid; grid-template-columns: minmax(250px, 1fr) auto auto; align-items: center; gap: 18px; }
+.orderIdentity { min-width: 0; }
+.orderIdentity > div { margin-top: 8px; display: flex; align-items: center; gap: 9px; }
+.orderCard h3 { margin: 0; overflow: hidden; font-size: 17px; letter-spacing: -.3px; text-overflow: ellipsis; white-space: nowrap; }
+.orderCode { padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); font-size: 8px; font-weight: 850; letter-spacing: .3px; }
+.orderCard header p { margin: 3px 0 0; color: var(--muted); font-size: 8px; }
 .statusPending, .statusOperations, .statusReady { width: fit-content; padding: 5px 7px; border-radius: 999px; font-size: 8px; font-weight: 800; display: flex; align-items: center; gap: 4px; }
-.statusPending { background: #fff4d9; color: #8a5d00; }
-.statusOperations { background: #e8efff; color: #2758b7; }
-.statusReady { background: #e2f7ea; color: #176f42; }
-.locked { color: var(--muted); font-size: 8px; display: flex; align-items: center; gap: 4px; }
-.orderScope { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.orderScope > div { min-width: 0; padding: 10px; border-radius: 9px; background: var(--surface-2); display: flex; align-items: center; gap: 8px; }
+.statusPending { background: color-mix(in srgb, #f5b83c 19%, var(--surface)); color: color-mix(in srgb, #8a5d00 88%, var(--ink)); }
+.statusOperations { background: color-mix(in srgb, #4a78dc 16%, var(--surface)); color: color-mix(in srgb, #2758b7 82%, var(--ink)); }
+.statusReady { background: color-mix(in srgb, #33a768 16%, var(--surface)); color: color-mix(in srgb, #176f42 82%, var(--ink)); }
+.orderSchedule { min-width: 178px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); display: flex; align-items: center; gap: 9px; }
+.orderSchedule > svg { color: var(--yellow-ink); }
+.orderSchedule span { display: flex; flex-direction: column; gap: 2px; }
+.orderSchedule small { color: var(--muted); font-size: 7px; font-weight: 900; letter-spacing: .7px; }
+.orderSchedule strong { font-size: 10px; }
+.orderSchedule em { color: var(--muted); display: flex; align-items: center; gap: 4px; font-size: 8px; font-style: normal; font-weight: 750; }
+.locked { color: var(--muted); font-size: 8px; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.orderScope { padding: 14px 18px 12px 21px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(210px, .85fr); gap: 9px; }
+.orderScope > div { min-width: 0; min-height: 70px; padding: 11px 12px; border: 1px solid transparent; border-radius: 10px; background: var(--surface-2); display: flex; align-items: center; gap: 10px; }
+.orderScope > div:hover { border-color: var(--line); }
+.orderScope .totalScope { background: color-mix(in srgb, var(--yellow) 11%, var(--surface-2)); }
 .orderScope svg { flex: 0 0 auto; color: var(--yellow-ink); }
 .orderScope span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .orderScope small { color: var(--muted); font-size: 7px; font-weight: 850; letter-spacing: .7px; }
-.orderScope strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.orderScope strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .orderScope em { color: var(--yellow-ink); font-size: 8px; font-style: normal; font-weight: 850; }
-.routeLine { min-width: 0; color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: 8px; overflow-x: auto; white-space: nowrap; }
-.routeLine span { padding: 4px 6px; border-radius: 6px; background: var(--surface-2); display: flex; align-items: center; gap: 4px; }
-.routeLine .routeCurrent { background: color-mix(in srgb, var(--yellow) 24%, var(--surface)); color: var(--ink); font-weight: 800; }
-.routeLine .routeComplete { background: #e2f7ea; color: #176f42; font-weight: 800; }
-.cardNote { margin: 0; padding: 9px 10px; border-left: 3px solid var(--yellow); border-radius: 7px; background: var(--surface-2); display: flex; align-items: flex-start; gap: 7px; }
+.workflowTrack { margin: 0 18px 13px 21px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); color: var(--muted); display: grid; grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr) 18px minmax(0, 1fr); align-items: center; gap: 8px; }
+.workflowTrack > svg { justify-self: center; color: var(--line-strong); }
+.stepComplete, .stepCurrent, .stepWaiting { min-width: 0; display: flex; align-items: center; gap: 9px; }
+.stepComplete i, .stepCurrent i, .stepWaiting i { width: 29px; height: 29px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--muted); display: grid; place-items: center; font-size: 8px; font-style: normal; font-weight: 900; }
+.stepComplete i { border-color: color-mix(in srgb, #33a768 38%, var(--line)); background: color-mix(in srgb, #33a768 15%, var(--surface)); color: #1f8b52; }
+.stepCurrent i { border-color: color-mix(in srgb, var(--yellow) 70%, var(--line)); background: color-mix(in srgb, var(--yellow) 24%, var(--surface)); color: var(--ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--yellow) 12%, transparent); }
+.stepComplete span, .stepCurrent span, .stepWaiting span { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.stepComplete small, .stepCurrent small, .stepWaiting small { color: var(--muted); font-size: 6.5px; font-weight: 900; letter-spacing: .7px; }
+.stepComplete strong, .stepCurrent strong, .stepWaiting strong { overflow: hidden; color: var(--ink); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.stepComplete em, .stepCurrent em, .stepWaiting em { color: var(--muted); font-size: 7px; font-style: normal; }
+.stepCurrent strong { color: var(--yellow-ink); }
+.stepWaiting { opacity: .58; }
+.cardNote { margin: 0 18px 13px 21px; padding: 10px 11px; border-left: 3px solid var(--yellow); border-radius: 8px; background: var(--surface-2); display: flex; align-items: flex-start; gap: 7px; }
 .cardNote svg { margin-top: 1px; flex: 0 0 auto; color: var(--yellow-ink); }
 .cardNote span { color: var(--muted); font-size: 9px; line-height: 1.5; }
 .cardNote strong { margin-right: 6px; color: var(--ink); }
-.productionSummary { display: flex; flex-wrap: wrap; gap: 6px; }
-.productionSummary span { padding: 5px 7px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-size: 8px; display: flex; align-items: center; gap: 4px; }
-.productionSummary > strong { margin-left: auto; padding: 5px 8px; border-radius: 7px; background: color-mix(in srgb, var(--yellow) 20%, var(--surface)); font-size: 9px; }
-.invoiceDraftBadge { padding: 9px 10px; border: 1px solid #aad9bc; border-radius: 9px; background: #effaf3; color: #176f42; display: flex; align-items: center; gap: 8px; }
+.productionSummary { margin: 0 18px 13px 21px; border: 1px solid var(--line); border-radius: 11px; overflow: hidden; }
+.productionSummary > header { min-height: 35px; padding: 0 11px; border-bottom: 1px solid var(--line); background: var(--surface-2); display: flex; align-items: center; justify-content: space-between; }
+.productionSummary > header span { color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: 7px; font-weight: 900; letter-spacing: .7px; }
+.productionSummary > header strong { font-size: 8px; }
+.productionSummary > div { padding: 9px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
+.productionSummary > div > span { min-width: 0; min-height: 49px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); display: flex; flex-direction: column; gap: 2px; }
+.productionSummary > div small { color: var(--muted); font-size: 6.5px; font-weight: 850; text-transform: uppercase; }
+.productionSummary > div strong { overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.productionSummary > div em { color: var(--yellow-ink); font-size: 7px; font-style: normal; font-weight: 800; }
+.productionSummary > div .moreResources { align-items: center; justify-content: center; text-align: center; }
+.productionSummary > div .moreResources strong { color: var(--yellow-ink); font-size: 13px; }
+.invoiceDraftBadge { margin: 0 18px 13px 21px; padding: 9px 10px; border: 1px solid color-mix(in srgb, #33a768 42%, var(--line)); border-radius: 9px; background: color-mix(in srgb, #33a768 10%, var(--surface)); color: color-mix(in srgb, #176f42 80%, var(--ink)); display: flex; align-items: center; gap: 8px; }
 .invoiceDraftBadge span { display: flex; flex-direction: column; gap: 1px; }
 .invoiceDraftBadge small { font-size: 7px; font-weight: 850; letter-spacing: .7px; }
 .invoiceDraftBadge strong { font-size: 10px; }
-.orderCard > footer { padding-top: 10px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.orderCard > footer { min-height: 58px; padding: 11px 18px 11px 21px; border-top: 1px solid var(--line); background: var(--surface-2); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .orderCard > footer > small { color: var(--muted); font-size: 8px; }
-.orderCard > footer > div { display: flex; gap: 6px; }
-.completeButton, .previewButton, .deleteButton { min-height: 31px; padding: 0 10px; border-radius: 8px; font-size: 8px; font-weight: 800; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.orderCard > footer > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.completeButton, .previewButton, .deleteButton { min-height: 35px; padding: 0 11px; border-radius: 8px; font-size: 8px; font-weight: 850; display: flex; align-items: center; gap: 5px; cursor: pointer; }
 .completeButton { border: 0; background: var(--yellow); color: #111; }
 .previewButton { border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
 .deleteButton { border: 1px solid color-mix(in srgb, #d04d4d 42%, var(--line)); background: color-mix(in srgb, #d04d4d 7%, var(--surface)); color: #b83232; }
@@ -203,7 +244,9 @@
 @media (max-width: 1040px) {
   .workflowHeader { grid-template-columns: 1fr auto; }
   .workflowHeader > button { grid-column: 1 / -1; justify-self: end; }
-  .orderGrid { grid-template-columns: 1fr; }
+  .orderScope { grid-template-columns: 1fr 1fr; }
+  .orderScope .totalScope { grid-column: 1 / -1; }
+  .productionSummary > div { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
@@ -215,8 +258,21 @@
   .inboxHeading { align-items: stretch; flex-direction: column; }
   .filters { width: 100%; overflow-x: auto; }
   .filters button { min-width: max-content; flex: 1; justify-content: center; }
+  .orderToolbar { grid-template-columns: 1fr auto; }
+  .orderSearch { grid-column: 1 / -1; }
+  .resultCount { justify-self: end; }
+  .orderCardHeader { grid-template-columns: minmax(0, 1fr) auto; gap: 11px; }
+  .orderSchedule { grid-column: 1 / -1; grid-row: 2; min-width: 0; }
+  .locked { grid-column: 2; grid-row: 1; align-self: start; }
   .orderScope { grid-template-columns: 1fr; }
+  .orderScope .totalScope { grid-column: auto; }
+  .workflowTrack { grid-template-columns: 1fr; }
+  .workflowTrack > svg { display: none; }
+  .stepComplete, .stepCurrent, .stepWaiting { padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .workflowTrack > div:last-child { padding-bottom: 0; border-bottom: 0; }
+  .productionSummary > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .orderCard > footer { align-items: stretch; flex-direction: column; }
+  .orderCard > footer > div { justify-content: stretch; }
   .orderCard > footer button { width: 100%; justify-content: center; }
   .modalLayer { padding: 10px; }
   .modalCard { max-height: calc(100vh - 20px); border-radius: 14px; }
@@ -237,6 +293,18 @@
 
 @media (max-width: 520px) {
   .stageStats { grid-template-columns: 1fr; }
+  .inboxPanel { padding: 12px; }
+  .orderToolbar { grid-template-columns: 1fr; }
+  .orderSort { min-width: 0; }
+  .orderSort select { flex: 1; }
+  .resultCount { justify-self: start; padding: 3px 6px 5px; }
+  .orderCardHeader, .orderScope, .orderCard > footer { padding-right: 13px; padding-left: 16px; }
+  .orderIdentity > div { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .orderCard h3 { white-space: normal; }
+  .locked { padding: 5px; border: 1px solid var(--line); border-radius: 7px; }
+  .locked svg { margin: 0; }
+  .workflowTrack, .cardNote, .productionSummary, .invoiceDraftBadge { margin-right: 13px; margin-left: 16px; }
+  .productionSummary > div { grid-template-columns: 1fr; }
 }
 
 @media print {

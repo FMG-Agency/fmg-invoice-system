@@ -3,20 +3,25 @@
 import Image from "next/image";
 import {
   ArrowRight,
+  CalendarDays,
   CheckCircle2,
+  CircleDollarSign,
   Clock3,
   Eye,
   FileCheck2,
   Inbox,
   LoaderCircle,
+  ListFilter,
   LockKeyhole,
   NotebookPen,
   PackageCheck,
   Plus,
   Printer,
+  Search,
   Send,
   Trash2,
   UserRound,
+  UsersRound,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -182,6 +187,8 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
   const [reviewing, setReviewing] = useState<ProductionWorkOrder | null>(null);
   const [previewOrder, setPreviewOrder] = useState<ProductionWorkOrder | null>(null);
   const [filter, setFilter] = useState<"all" | ProductionWorkOrder["status"]>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortOrder, setSortOrder] = useState<"newest" | "production_date">("newest");
   const [accountDraft, setAccountDraft] = useState<AccountDraft>(blankAccountDraft);
   const [productionDraft, setProductionDraft] = useState<ProductionDraft>(blankProductionDraft);
   const [operationDraft, setOperationDraft] = useState<OperationDraft | null>(null);
@@ -208,7 +215,18 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
   const operationBundle = bundles.find((item) => item.id === operationDraft?.bundleCatalogId);
   const operationAddons = useMemo(() => addons.filter((item) => !item.appliesTo || item.appliesTo.toLowerCase() === operationBundle?.name.toLowerCase()), [addons, operationBundle]);
   const operationAddon = addons.find((item) => item.id === operationDraft?.addonCatalogId);
-  const visibleOrders = useMemo(() => state.orders.filter((order) => filter === "all" || order.status === filter), [filter, state.orders]);
+  const visibleOrders = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const matches = state.orders.filter((order) => {
+      if (filter !== "all" && order.status !== filter) return false;
+      if (!query) return true;
+      return [order.code, order.clientName, order.bundleName, order.addonName, order.createdByName, order.productionManagerName, order.operationManagerName]
+        .some((value) => value.toLowerCase().includes(query));
+    });
+    return [...matches].sort((left, right) => sortOrder === "production_date"
+      ? left.workDate.localeCompare(right.workDate) || right.createdAt.localeCompare(left.createdAt)
+      : right.createdAt.localeCompare(left.createdAt));
+  }, [filter, searchQuery, sortOrder, state.orders]);
   const canCreate = state.role === "account_manager" || state.role === "administrator";
   const canComplete = state.role === "production_manager" || state.role === "administrator";
   const canFinalApprove = state.role === "operation_manager" || state.role === "administrator";
@@ -336,16 +354,37 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
         <button className={filter === "final_approved" ? styles.active : ""} onClick={() => setFilter("final_approved")}>Final <span>{state.finalApprovedCount}</span></button>
       </div></div>
 
+      <div className={styles.orderToolbar}>
+        <label className={styles.orderSearch}><Search size={16} /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search by client, order code, bundle, or manager…" aria-label="Search work orders" />{searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label="Clear work-order search"><X size={14} /></button>}</label>
+        <label className={styles.orderSort}><ListFilter size={15} /><span>Sort</span><select value={sortOrder} onChange={(event) => setSortOrder(event.target.value as typeof sortOrder)}><option value="newest">Newest first</option><option value="production_date">Production date</option></select></label>
+        <span className={styles.resultCount}><strong>{visibleOrders.length}</strong> {visibleOrders.length === 1 ? "order" : "orders"} shown</span>
+      </div>
+
       {visibleOrders.length ? <div className={styles.orderGrid}>{visibleOrders.map((order) => {
         const pending = order.status === "pending_production";
         const pendingOperations = order.status === "pending_operations";
         const finalApproved = order.status === "final_approved";
-        return <article key={order.id} className={styles.orderCard}>
-          <header><div><span className={pending ? styles.statusPending : pendingOperations ? styles.statusOperations : styles.statusReady}>{finalApproved ? <CheckCircle2 size={13} /> : <Clock3 size={13} />}{statusLabel(order)}</span><h3>{order.clientName}</h3><p>{order.code} · Media Guide · {prettyDate(order.workDate)}</p></div><span className={styles.locked}><LockKeyhole size={14} /> {finalApproved ? "Final locked" : "Stage locked"}</span></header>
-          <div className={styles.orderScope}><div><PackageCheck size={16} /><span><small>BUNDLE</small><strong>{order.bundleName}</strong><em>{money(order.bundlePrice)}</em></span></div><div><Plus size={16} /><span><small>ADD-ON</small><strong>{order.addonName || "No add-on"}</strong><em>{order.addonName ? money(order.addonPrice) : "—"}</em></span></div></div>
-          <div className={styles.routeLine}><span><UserRound size={13} /> {order.createdByName}</span><ArrowRight size={13} /><span className={pending ? styles.routeCurrent : ""}>Production Manager</span><ArrowRight size={13} /><span className={pendingOperations ? styles.routeCurrent : finalApproved ? styles.routeComplete : ""}>Operation Manager</span></div>
+        return <article key={order.id} className={`${styles.orderCard} ${pending ? styles.cardPending : pendingOperations ? styles.cardOperations : styles.cardReady}`}>
+          <header className={styles.orderCardHeader}>
+            <div className={styles.orderIdentity}><span className={pending ? styles.statusPending : pendingOperations ? styles.statusOperations : styles.statusReady}>{finalApproved ? <CheckCircle2 size={13} /> : <Clock3 size={13} />}{statusLabel(order)}</span><div><h3>{order.clientName}</h3><span className={styles.orderCode}>{order.code}</span></div><p>Media Guide work order</p></div>
+            <div className={styles.orderSchedule}><CalendarDays size={18} /><span><small>PRODUCTION DATE</small><strong>{prettyDate(order.workDate)}</strong>{!pending && order.callTime && <em><Clock3 size={11} /> {order.callTime}</em>}</span></div>
+            <span className={styles.locked}><LockKeyhole size={14} /> {finalApproved ? "Final locked" : "Stage locked"}</span>
+          </header>
+
+          <div className={styles.orderScope}>
+            <div><PackageCheck size={17} /><span><small>BUNDLE</small><strong>{order.bundleName}</strong><em>{money(order.bundlePrice)}</em></span></div>
+            <div><Plus size={17} /><span><small>ADD-ON</small><strong>{order.addonName || "No add-on selected"}</strong><em>{order.addonName ? money(order.addonPrice) : "Not added"}</em></span></div>
+            <div className={styles.totalScope}><CircleDollarSign size={17} /><span><small>WORK ORDER TOTAL</small><strong>{money(order.workOrderTotal)}</strong><em>{order.productionOptionsTotal ? `${money(order.productionOptionsTotal)} extra production` : "No extra production cost"}</em></span></div>
+          </div>
+
+          <div className={styles.workflowTrack} aria-label="Work-order approval route">
+            <div className={styles.stepComplete}><i>1</i><span><small>ACCOUNT</small><strong>{order.createdByName || "Account Manager"}</strong><em>Submitted</em></span></div><ArrowRight size={15} />
+            <div className={pending ? styles.stepCurrent : styles.stepComplete}><i>2</i><span><small>PRODUCTION</small><strong>{pending ? "Action required" : order.productionManagerName || "Production Manager"}</strong><em>{pending ? "Waiting for completion" : "Approved"}</em></span></div><ArrowRight size={15} />
+            <div className={pendingOperations ? styles.stepCurrent : finalApproved ? styles.stepComplete : styles.stepWaiting}><i>3</i><span><small>OPERATIONS</small><strong>{finalApproved ? order.operationManagerName || "Operation Manager" : pendingOperations ? "Action required" : "Operation Manager"}</strong><em>{finalApproved ? "Final approved" : pendingOperations ? "Waiting for review" : "Next stage"}</em></span></div>
+          </div>
+
           {order.accountNote && <p className={styles.cardNote}><NotebookPen size={14} /><span><strong>Account note</strong>{order.accountNote}</span></p>}
-          {!pending && <div className={styles.productionSummary}><span><Clock3 size={14} /> {order.callTime}</span>{order.productionOptions.slice(0, 4).map((option) => <span key={option.id}>{optionLabels[option.type]} · {option.name} · {money(option.price)} · {option.billingMode === "extra" ? "Extra" : "Included"}</span>)}<strong>{money(order.workOrderTotal)}</strong></div>}
+          {!pending && <section className={styles.productionSummary}><header><span><UsersRound size={15} /> PRODUCTION RESOURCES</span><strong>{order.productionOptions.length} assigned</strong></header><div>{order.productionOptions.slice(0, 5).map((option) => <span key={option.id}><small>{optionLabels[option.type]}</small><strong>{option.name}</strong><em>{option.billingMode === "extra" ? `${money(option.price)} extra` : "Included"}</em></span>)}{order.productionOptions.length > 5 && <span className={styles.moreResources}><strong>+{order.productionOptions.length - 5}</strong><small>more resources</small></span>}</div></section>}
           {finalApproved && order.draftInvoiceCode && <div className={styles.invoiceDraftBadge}><FileCheck2 size={15} /><span><small>DRAFT INVOICE CREATED</small><strong>{order.draftInvoiceCode}</strong></span></div>}
           <footer>
             <small>{pending ? `Submitted ${order.accountSubmittedAt.slice(0, 10)}` : pendingOperations ? `Production approved by ${order.productionManagerName}` : `Final approved by ${order.operationManagerName}`}</small>
