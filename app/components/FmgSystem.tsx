@@ -234,7 +234,7 @@ const viewCopy: Record<View, { eyebrow: string; title: string; description: stri
   categories: { eyebrow: "SERVICE LOGIC", title: "Categories", description: "Control prefixes, counters, and the PDF footer for each service." },
   data: { eyebrow: "DOCUMENT ARCHIVE", title: "All data", description: "Search, filter, preview, and manage every generated document." },
   settings: { eyebrow: "WORKSPACE SETTINGS", title: "Settings", description: "Set the defaults that power every new FMG document." },
-  users: { eyebrow: "ACCESS CONTROL", title: "Users and permissions", description: "Create team accounts and decide exactly which FMG areas each user can access." },
+  users: { eyebrow: "ACCESS CONTROL", title: "Employee and client users", description: "Manage internal employee access and private client portal accounts in separate, focused lists." },
 };
 
 function cx(...classes: Array<string | false | null | undefined>) {
