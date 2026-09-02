@@ -177,18 +177,19 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
     </section>
 
     <section className="panel data-panel">
-      <div className="toolbar access-toolbar">
+      <div className="access-directory-head">
         <div className="access-group-tabs" role="tablist" aria-label="User type">
           <button type="button" role="tab" aria-selected={activeGroup === "employees"} className={activeGroup === "employees" ? "access-group-tab active" : "access-group-tab"} onClick={() => setActiveGroup("employees")}>
-            <UserRound size={18} /><span><strong>Employee Users</strong><small>Internal team & administrators</small></span><em>{employeeUsers.length}</em>
+            <span className="access-group-icon"><UserRound size={18} /></span><span className="access-group-copy"><strong>Employee Users</strong><small>Internal team & administrators</small></span><span className="access-group-count">{employeeUsers.length}</span>
           </button>
           <button type="button" role="tab" aria-selected={activeGroup === "clients"} className={activeGroup === "clients" ? "access-group-tab active" : "access-group-tab"} onClick={() => setActiveGroup("clients")}>
-            <Building2 size={18} /><span><strong>Client Users</strong><small>Private client portal accounts</small></span><em>{clientUsers.length}</em>
+            <span className="access-group-icon"><Building2 size={18} /></span><span className="access-group-copy"><strong>Client Users</strong><small>Private client portal accounts</small></span><span className="access-group-count">{clientUsers.length}</span>
           </button>
         </div>
-        <div className="toolbar-spacer" />
-        <span className="record-count">{activeVisibleUsers} active · {visibleUsers.length} total</span>
-        <button className="small-primary" onClick={() => openCreate(activeGroup)}><Plus size={15} /> Add {activeGroup === "clients" ? "client" : "employee"}</button>
+        <div className="access-directory-actions">
+          <span className="record-count"><strong>{activeVisibleUsers}</strong> active <i /> {visibleUsers.length} total</span>
+          <button className="small-primary" onClick={() => openCreate(activeGroup)}><Plus size={15} /> Add {activeGroup === "clients" ? "client" : "employee"}</button>
+        </div>
       </div>
 
       {loading ? <div className="empty-panel"><div className="empty-icon"><UserCog size={24} /></div><h3>Loading users…</h3></div> : activeGroup === "employees" ? <EmployeeUsersTable users={employeeUsers} openEdit={openEdit} openCreate={() => openCreate("employees")} /> : <ClientUsersTable users={clientUsers} openEdit={openEdit} openCreate={() => openCreate("clients")} />}
