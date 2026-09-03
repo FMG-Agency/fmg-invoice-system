@@ -378,6 +378,52 @@ test("ships the locked Media Guide production workflow", async () => {
   assert.match(workOrderStyles, /size: A4 landscape/);
 });
 
+test("ships role-targeted in-app and device push notifications", async () => {
+  const [shell, center, notificationApi, notificationLib, productionApi, requestsApi, serviceWorker, manifest, migration] = await Promise.all([
+    readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
+    readFile(new URL("app/components/NotificationCenter.tsx", root), "utf8"),
+    readFile(new URL("app/api/notifications/route.ts", root), "utf8"),
+    readFile(new URL("app/lib/notifications.ts", root), "utf8"),
+    readFile(new URL("app/api/production/route.ts", root), "utf8"),
+    readFile(new URL("app/api/requests/route.ts", root), "utf8"),
+    readFile(new URL("public/sw.js", root), "utf8"),
+    readFile(new URL("public/manifest.webmanifest", root), "utf8"),
+    readFile(new URL("drizzle/0018_round_colleen_wing.sql", root), "utf8"),
+  ]);
+  assert.match(shell, /<NotificationCenter/);
+  assert.match(shell, /new URLSearchParams\(window\.location\.search\)\.get\("view"\)/);
+  assert.match(center, /navigator\.serviceWorker\.register\("\/sw\.js"/);
+  assert.match(center, /registration\.pushManager\.subscribe/);
+  assert.match(center, /Get alerts on this device/);
+  assert.match(center, /25_000/);
+  assert.match(notificationApi, /ON CONFLICT\(endpoint\) DO UPDATE SET user_id = excluded\.user_id/);
+  assert.match(notificationApi, /Invalid request origin/);
+  assert.match(notificationLib, /buildPushPayload/);
+  assert.match(notificationLib, /workflowRecipientUserIds/);
+  assert.match(productionApi, /work_order_pending_production/);
+  assert.match(productionApi, /work_order_pending_operations/);
+  assert.match(productionApi, /work_order_final_approved/);
+  assert.match(requestsApi, /employee_request_created/);
+  assert.match(requestsApi, /employee_request_assigned/);
+  assert.match(requestsApi, /employee_request_\$\{payload\.decision\}/);
+  assert.match(serviceWorker, /self\.addEventListener\("push"/);
+  assert.match(serviceWorker, /self\.addEventListener\("notificationclick"/);
+  assert.match(manifest, /"display": "standalone"/);
+  assert.match(migration, /CREATE TABLE `system_notifications`/);
+  assert.match(migration, /CREATE TABLE `push_subscriptions`/);
+
+  const db = createClient({ url: "file::memory:" });
+  await db.execute("PRAGMA foreign_keys = ON");
+  await db.execute("CREATE TABLE auth_users (id INTEGER PRIMARY KEY)");
+  await db.executeMultiple(migration);
+  await db.execute("INSERT INTO auth_users (id) VALUES (1)");
+  await db.execute("INSERT INTO system_notifications (user_id, type, title, message) VALUES (1, 'test', 'Ready', 'Notification stored')");
+  await db.execute("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (1, 'https://push.example/one', 'key', 'auth')");
+  const unread = await db.execute("SELECT COUNT(*) AS count FROM system_notifications WHERE user_id = 1 AND read_at = ''");
+  assert.equal(unread.rows[0].count, 1);
+  db.close();
+});
+
 test("ships the Production talent and crew directory with work-order pickers", async () => {
   const [component, directory, directoryStyles, workOrder, productionApi, migration] = await Promise.all([
     readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),

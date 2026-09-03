@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ensureAuthDatabase, getDatabase, getSession } from "../../lib/auth-server";
 import { database } from "../../lib/database";
 import { ensureHrDatabase } from "../../lib/hr";
+import { administratorUserIds, notifyUsers } from "../../lib/notifications";
 import { canAccess, parsePermissions } from "../../lib/permissions";
 import type { EmployeeRequest, RequestReviewer, RequestsState } from "../../types";
 
@@ -42,6 +43,18 @@ const defaultPolicy: RequestPolicy = {
   resortNoticeDays: 14,
   normalLeaveNoticeDays: 2,
 };
+
+const requestTypeLabels: Record<EmployeeRequest["type"], string> = {
+  leave: "leave request",
+  early_leave: "early-leave excuse",
+  mission: "work mission",
+  overtime: "overtime request",
+  early_arrival: "early-arrival overtime request",
+};
+
+function sessionName(session: { displayName: string; username: string }) {
+  return session.displayName.trim() || session.username;
+}
 
 const actionPayload = z.discriminatedUnion("action", [
   z.object({ action: z.literal("create"), data: requestData }),
@@ -373,6 +386,7 @@ export async function POST(request: Request) {
       }
       const attachment = attachmentBuffer(payload.data);
       let attachmentKey = "";
+      let createdRequestId = 0;
       const attachmentName = attachment ? payload.data.attachmentName.replace(/[\r\n"]/g, "").slice(0, 180) || "attachment" : "";
       try {
         if (attachment) {
@@ -385,17 +399,26 @@ export async function POST(request: Request) {
             contentType: attachment.contentType,
           });
         }
-        await database.prepare(`INSERT INTO employee_requests
+        const inserted = await database.prepare(`INSERT INTO employee_requests
           (employee_id, requester_user_id, type, leave_kind, date_from, date_to, start_time, end_time,
            duration_minutes, details, attachment_key, attachment_name, attachment_type)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .bind(session.employeeId, session.userId, payload.data.type, payload.data.leaveKind, payload.data.dateFrom,
             payload.data.dateTo, payload.data.startTime, payload.data.endTime, duration, payload.data.details,
             attachmentKey, attachmentName, attachment?.contentType ?? "").run();
+        createdRequestId = Number(inserted.meta.last_row_id);
       } catch (error) {
         if (attachmentKey) await del(attachmentKey).catch(() => undefined);
         throw error;
       }
+      await notifyUsers(await administratorUserIds(session.userId), {
+        type: "employee_request_created",
+        title: "New employee request",
+        message: `${sessionName(session)} sent a ${requestTypeLabels[payload.data.type]} for ${payload.data.dateFrom}.`,
+        targetView: "requests",
+        entityId: createdRequestId,
+        actorUserId: session.userId,
+      });
     }
 
     if (payload.action === "assign") {
@@ -410,14 +433,37 @@ export async function POST(request: Request) {
       const updated = await database.prepare("UPDATE employee_requests SET assigned_reviewer_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending' RETURNING id")
         .bind(payload.reviewerId, payload.id).first<{ id: number }>();
       if (!updated) return accessError(409, "Only pending requests can be forwarded.");
+      if (payload.reviewerId !== null) {
+        const assignedRequest = await database.prepare(`SELECT e.name AS employeeName, r.type, r.date_from AS dateFrom
+          FROM employee_requests r JOIN employees e ON e.id = r.employee_id WHERE r.id = ?`).bind(payload.id)
+          .first<{ employeeName: string; type: EmployeeRequest["type"]; dateFrom: string }>();
+        await notifyUsers([payload.reviewerId], {
+          type: "employee_request_assigned",
+          title: "Employee request assigned to you",
+          message: `${assignedRequest?.employeeName || "An employee"} has a ${requestTypeLabels[assignedRequest?.type || "leave"]} for ${assignedRequest?.dateFrom || "review"}.`,
+          targetView: "requests",
+          entityId: payload.id,
+          actorUserId: session.userId,
+        });
+      }
     }
 
     if (payload.action === "cancel") {
       if (!session.employeeId) return accessError(403);
       const cancelled = await database.prepare(`UPDATE employee_requests SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND employee_id = ? AND requester_user_id = ? AND status = 'pending' RETURNING id`)
-        .bind(payload.id, session.employeeId, session.userId).first<{ id: number }>();
+        WHERE id = ? AND employee_id = ? AND requester_user_id = ? AND status = 'pending'
+        RETURNING id, assigned_reviewer_id AS assignedReviewerId`)
+        .bind(payload.id, session.employeeId, session.userId).first<{ id: number; assignedReviewerId: number | null }>();
       if (!cancelled) return accessError(409, "Only your own pending requests can be cancelled.");
+      const cancellationRecipients = cancelled.assignedReviewerId ? [cancelled.assignedReviewerId] : await administratorUserIds(session.userId);
+      await notifyUsers(cancellationRecipients, {
+        type: "employee_request_cancelled",
+        title: "Employee request cancelled",
+        message: `${sessionName(session)} cancelled request #${payload.id}.`,
+        targetView: "requests",
+        entityId: payload.id,
+        actorUserId: session.userId,
+      });
     }
 
     if (payload.action === "decide") {
@@ -444,6 +490,14 @@ export async function POST(request: Request) {
       await database.batch(payload.decision === "approved" ? [decision, ...approvalStatements(employeeRequest, decisionToken, leavePaid)] : [decision]);
       const applied = await database.prepare("SELECT id FROM employee_requests WHERE id = ? AND decision_token = ?").bind(payload.id, decisionToken).first<{ id: number }>();
       if (!applied) return accessError(409, "This request has already been decided.");
+      await notifyUsers([employeeRequest.requesterUserId], {
+        type: `employee_request_${payload.decision}`,
+        title: `Your request was ${payload.decision}`,
+        message: `${requestTypeLabels[employeeRequest.type]} for ${employeeRequest.dateFrom}${payload.note ? ` · ${payload.note}` : ""}`,
+        targetView: "requests",
+        entityId: payload.id,
+        actorUserId: session.userId,
+      });
     }
 
     return Response.json(await getRequestsState(session));

@@ -3,7 +3,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ArrowLeft,
-  Bell,
   Building2,
   CalendarRange,
   Camera,
@@ -48,13 +47,14 @@ import Image from "next/image";
 import { z } from "zod";
 import { generateDocumentPdf, pdfDataUri, savePdf } from "../lib/pdf";
 import { canAccess, type AccessPermission } from "../lib/permissions";
-import type { AppState, Category, Client, CompanyKey, DocumentDraft, DocumentRecord, HrState, LineItem, QuotationCatalogItem, Settings } from "../types";
+import type { AppState, Category, Client, CompanyKey, DocumentDraft, DocumentRecord, HrState, LineItem, NotificationTargetView, QuotationCatalogItem, Settings } from "../types";
 import { AccessPanel } from "./AccessPanel";
 import { ClientAccountPanel } from "./ClientAccountPanel";
 import { ClientFinancePanel } from "./ClientFinancePanel";
 import { ClientPortalAdmin, ClientPortalShell } from "./ClientPortalPanel";
 import { AttendancePanel, EmployeesPanel, type HrMutation } from "./HrPanels";
 import { LoginCredentialsPanel } from "./LoginCredentialsPanel";
+import { NotificationCenter } from "./NotificationCenter";
 import { RequestsPanel } from "./RequestsPanel";
 import { ProductionDirectoryPanel } from "./ProductionDirectoryPanel";
 import { WorkOrderPanel } from "./WorkOrderPanel";
@@ -432,6 +432,21 @@ export function FmgSystem() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!auth.authenticated || auth.clientId !== null) return;
+    const timer = window.setTimeout(() => {
+      const requestedView = new URLSearchParams(window.location.search).get("view") as NotificationTargetView | null;
+      if (requestedView && canOpenView(requestedView)) {
+        setView(requestedView);
+        setOpenNavGroup(navGroupForView(requestedView));
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // The URL is only consumed after the signed-in user's permissions are known.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.authenticated, auth.clientId, auth.permissions, auth.isAdmin]);
+
   function showToast(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(null), 3600);
@@ -510,7 +525,21 @@ export function FmgSystem() {
   }
 
   async function logout() {
-    try { await fetch("/api/auth", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "logout" }) }); } finally {
+    try {
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration();
+        const subscription = registration && "pushManager" in registration ? await registration.pushManager.getSubscription() : null;
+        if (subscription) {
+          await fetch("/api/notifications", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "unsubscribe", endpoint: subscription.endpoint }),
+          }).catch(() => undefined);
+          await subscription.unsubscribe().catch(() => false);
+        }
+      }
+      await fetch("/api/auth", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "logout" }) });
+    } finally {
       setState(emptyState);
       setHrState(emptyHrState);
       setView("dashboard");
@@ -638,7 +667,7 @@ export function FmgSystem() {
           </div>
           <div className="top-actions">
             <button className="icon-button theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
-            <button className="icon-button notification" aria-label="Employee request notifications" onClick={() => canOpenView("requests") && chooseView("requests")}><Bell size={18} />{canOpenView("requests") && <span />}</button>
+            <NotificationCenter onNavigate={(target) => chooseView(target)} showToast={showToast} />
             <div className="top-avatar">{initials(auth.displayName || auth.username)}</div>
           </div>
         </header>

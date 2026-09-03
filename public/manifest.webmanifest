@@ -1,0 +1,12 @@
+{
+  "name": "FMG Agency System",
+  "short_name": "FMG System",
+  "description": "FMG Agency work orders, employee requests, invoices, and operations workspace.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f4f1",
+  "theme_color": "#111111",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

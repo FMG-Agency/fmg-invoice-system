@@ -171,6 +171,37 @@ export const authUserSessions = sqliteTable("auth_user_sessions", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("idx_auth_user_sessions_expires_at").on(table.expiresAt)]);
 
+export const systemNotifications = sqliteTable("system_notifications", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  targetView: text("target_view").notNull().default("dashboard"),
+  entityId: integer("entity_id"),
+  readAt: text("read_at").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("idx_system_notifications_user_created").on(table.userId, table.createdAt),
+  index("idx_system_notifications_user_unread").on(table.userId, table.readAt),
+]);
+
+export const pushSubscriptions = sqliteTable("push_subscriptions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  expirationTime: integer("expiration_time"),
+  userAgent: text("user_agent").notNull().default(""),
+  active: integer("active").notNull().default(1),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("idx_push_subscriptions_endpoint").on(table.endpoint),
+  index("idx_push_subscriptions_user_active").on(table.userId, table.active),
+]);
+
 export const productionWorkOrders = sqliteTable("production_work_orders", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   documentType: text("document_type", { enum: ["media_guide"] }).notNull().default("media_guide"),

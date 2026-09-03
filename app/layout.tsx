@@ -13,6 +13,8 @@ export async function generateMetadata(): Promise<Metadata> {
     title,
     description,
     applicationName: "FMG Agency System",
+    manifest: "/manifest.webmanifest",
+    appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "FMG System" },
     openGraph: { title, description, type: "website", url: origin, images: [{ url: `${origin}/og.png`, width: 1730, height: 909, alt: "FMG Invoice & Quotation System" }] },
     twitter: { card: "summary_large_image", title, description, images: [`${origin}/og.png`] },
   };

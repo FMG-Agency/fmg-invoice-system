@@ -474,6 +474,26 @@ export type RequestsState = {
   pendingCount: number;
 };
 
+export type NotificationTargetView = "dashboard" | "work-order" | "requests";
+
+export type SystemNotification = {
+  id: number;
+  type: string;
+  title: string;
+  message: string;
+  targetView: NotificationTargetView;
+  entityId: number | null;
+  read: boolean;
+  createdAt: string;
+};
+
+export type NotificationsState = {
+  notifications: SystemNotification[];
+  unreadCount: number;
+  pushConfigured: boolean;
+  vapidPublicKey: string;
+};
+
 export type ProductionWorkflowRole = "account_manager" | "production_manager" | "operation_manager" | "administrator" | "viewer";
 export type ProductionWorkOrderStatus = "pending_production" | "pending_operations" | "final_approved";
 
