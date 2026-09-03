@@ -398,7 +398,7 @@ test("ships the Production talent and crew directory with work-order pickers", a
   assert.match(migration, /CREATE TABLE `production_settings`/);
 });
 
-test("lets every account change its own password while company settings stay administrator-only", async () => {
+test("lets internal users change their own password while client and company settings stay protected", async () => {
   const [component, credentials, clientPortal, authApi, stateApi, permissions] = await Promise.all([
     readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
     readFile(new URL("app/components/LoginCredentialsPanel.tsx", root), "utf8"),
@@ -413,9 +413,10 @@ test("lets every account change its own password while company settings stay adm
   assert.match(credentials, /Change my password/);
   assert.match(credentials, /readOnly=\{!allowUsernameChange\}/);
   assert.match(credentials, /Company profile and document defaults remain administrator-only/);
-  assert.match(clientPortal, /Settings2/);
-  assert.match(clientPortal, /<LoginCredentialsPanel/);
+  assert.doesNotMatch(clientPortal, /Settings2/);
+  assert.doesNotMatch(clientPortal, /<LoginCredentialsPanel/);
   assert.match(authApi, /session\.isAdmin \? payload\.newUsername : session\.username/);
+  assert.match(authApi, /session\.clientId !== null[\s\S]*Client login credentials can only be changed by an administrator/);
   assert.match(stateApi, /payload\.action === "updateSettings" && !session\.isAdmin/);
   assert.match(permissions, /Personal login credentials; agency defaults remain administrator-only/);
 });

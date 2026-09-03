@@ -13,7 +13,6 @@ import {
   Moon,
   ReceiptText,
   Save,
-  Settings2,
   Sparkles,
   Sun,
   Trash2,
@@ -23,7 +22,6 @@ import {
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Client, ClientPortalPlanPart, ClientPortalState } from "../types";
-import { LoginCredentialsPanel } from "./LoginCredentialsPanel";
 import styles from "./ClientPortalPanel.module.css";
 
 const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -81,11 +79,11 @@ function MonthPicker({ year, selected, plans, onSelect }: { year: number; select
   })}</div>;
 }
 
-export function ClientPortalShell({ displayName, username, dark, onToggleTheme, onLogout, onCredentialsChanged }: { displayName: string; username: string; dark: boolean; onToggleTheme: () => void; onLogout: () => Promise<void>; onCredentialsChanged: (username: string) => void }) {
+export function ClientPortalShell({ displayName, dark, onToggleTheme, onLogout }: { displayName: string; dark: boolean; onToggleTheme: () => void; onLogout: () => Promise<void> }) {
   const [state, setState] = useState<ClientPortalState | null>(null);
   const [year, setYear] = useState(currentYear());
   const [month, setMonth] = useState(currentMonth());
-  const [tab, setTab] = useState<"invoices" | "plans" | "settings">("invoices");
+  const [tab, setTab] = useState<"invoices" | "plans">("invoices");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -109,14 +107,14 @@ export function ClientPortalShell({ displayName, username, dark, onToggleTheme, 
   return <div className={styles.portal} data-agency={state?.client?.agencyKey || "fmg"}>
     <header className={styles.portalHeader}>
       <div className={styles.portalBrand}><Image src="/fmg-logo-light.png" alt="FMG Agency" width={380} height={130} unoptimized /><span>CLIENT PORTAL</span></div>
-      <nav aria-label="Client portal navigation"><button className={tab === "invoices" ? styles.activeTab : ""} onClick={() => setTab("invoices")}><ReceiptText size={17} /> Invoices</button><button className={tab === "plans" ? styles.activeTab : ""} onClick={() => setTab("plans")}><CalendarDays size={17} /> Monthly plans</button><button className={tab === "settings" ? styles.activeTab : ""} onClick={() => setTab("settings")}><Settings2 size={17} /> Settings</button></nav>
+      <nav aria-label="Client portal navigation"><button className={tab === "invoices" ? styles.activeTab : ""} onClick={() => setTab("invoices")}><ReceiptText size={17} /> Invoices</button><button className={tab === "plans" ? styles.activeTab : ""} onClick={() => setTab("plans")}><CalendarDays size={17} /> Monthly plans</button></nav>
       <div className={styles.portalUser}><button onClick={onToggleTheme} aria-label="Toggle theme">{dark ? <Sun size={17} /> : <Moon size={17} />}</button><span><ClientBrandMark key={`header-${state?.client?.id}-${state?.client?.portalLogoUpdatedAt}`} client={state?.client} title={title} className={styles.portalUserMark} /><span><strong>{title}</strong><small>{displayName}</small></span></span><button onClick={() => void onLogout()} aria-label="Sign out"><LogOut size={17} /></button></div>
     </header>
 
     <main className={styles.portalMain}>
       {loading && !state ? <div className={styles.portalLoading}><span /><strong>Preparing your private workspace…</strong></div> : error ? <div className={styles.portalError}><FileText size={24} /><h2>Portal unavailable</h2><p>{error}</p></div> : state?.client ? <>
         <section className={styles.clientWelcome}>
-          <div><span><Sparkles size={14} /> FMG × {title}</span><h1>{tab === "invoices" ? "Your account, made clear." : tab === "plans" ? "Every plan. Every month. One place." : "Keep your account secure."}</h1><p>{tab === "invoices" ? "Review issued invoices, see what has been paid, and open the document whenever you need it." : tab === "plans" ? "Choose a month, then open Part 1 or Part 2 for the exact content period you need." : "Update your own password without access to any FMG company settings."}</p></div>
+          <div><span><Sparkles size={14} /> FMG × {title}</span><h1>{tab === "invoices" ? "Your account, made clear." : "Every plan. Every month. One place."}</h1><p>{tab === "invoices" ? "Review issued invoices, see what has been paid, and open the document whenever you need it." : "Choose a month, then open Part 1 or Part 2 for the exact content period you need."}</p></div>
           <ClientBrandMark key={`hero-${state.client.id}-${state.client.portalLogoUpdatedAt}`} client={state.client} title={title} className={styles.welcomeMark} />
         </section>
 
@@ -135,7 +133,7 @@ export function ClientPortalShell({ displayName, username, dark, onToggleTheme, 
               <div className={styles.invoiceActions}><a href={`/api/pdf/${invoice.id}`} target="_blank" rel="noopener noreferrer"><span>{invoice.remaining > 0 ? "Open invoice" : "View invoice"}</span><ArrowUpRight size={16} /></a><a href={`/api/pdf/${invoice.id}?download=1`} aria-label={`Download ${invoice.generatedCode}`}><Download size={16} /></a></div>
             </article>)}</div> : <PortalEmpty icon={ReceiptText} title="No issued invoices yet" body="When FMG issues an invoice for your account, it will appear here automatically." />}
           </section>
-        </> : tab === "plans" ? <>
+        </> : <>
           <section className={styles.planToolbar}><div><span>PLAN LIBRARY</span><h2>{year} content plans</h2></div><label><span>Year</span><select value={year} onChange={(event) => { setLoading(true); setYear(Number(event.target.value)); }}>{state.years.map((value) => <option key={value}>{value}</option>)}</select></label></section>
           <MonthPicker year={year} selected={month} plans={state.plans} onSelect={setMonth} />
           <section className={styles.portalSection}>
@@ -145,10 +143,7 @@ export function ClientPortalShell({ displayName, username, dark, onToggleTheme, 
               {plan ? <a href={plan.url} target="_blank" rel="noopener noreferrer"><span>Open Part {part}</span><ExternalLink size={16} /></a> : <span className={styles.waitingLabel}><CalendarDays size={15} /> Coming soon</span>}
             </article>; })}</div>
           </section>
-        </> : <section className={styles.portalSection}>
-          <div className={styles.sectionHeading}><div><span>ACCOUNT SECURITY</span><h2>Your login</h2><p>Change only your own password. FMG company profile and document settings are not available here.</p></div><span className={styles.securePill}><CheckCircle2 size={14} /> Private & secure</span></div>
-          <LoginCredentialsPanel key={username} username={username} onChanged={onCredentialsChanged} />
-        </section>}
+        </>}
       </> : <PortalEmpty icon={UserRound} title="Client profile not linked" body="Ask FMG to connect this login to your client account." />}
     </main>
     <footer className={styles.portalFooter}><span>FMG AGENCY · CLIENT EXPERIENCE</span><span>Private workspace for {title}</span></footer>

@@ -140,6 +140,7 @@ export async function POST(request: Request) {
 
     const session = await getSession(request);
     if (!session) return Response.json({ error: "Authentication required.", code: "AUTH_REQUIRED" }, { status: 401 });
+    if (session.clientId !== null) return Response.json({ error: "Client login credentials can only be changed by an administrator." }, { status: 403 });
     const credential = await db.prepare("SELECT password_hash AS passwordHash, password_salt AS passwordSalt, password_iterations AS passwordIterations FROM auth_users WHERE id = ?")
       .bind(session.userId).first<{ passwordHash: string; passwordSalt: string; passwordIterations: number }>();
     if (!credential) return Response.json({ error: "User account not found." }, { status: 404 });
