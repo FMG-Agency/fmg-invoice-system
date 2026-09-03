@@ -10,7 +10,7 @@ export const ACCESS_PERMISSIONS = [
   { key: "production", label: "Production", description: "Create, complete, receive, and print locked Media Guide production work orders." },
   { key: "categories", label: "Categories", description: "Service categories, prefixes, counters, and document footers." },
   { key: "all_data", label: "All Data", description: "Document archive, statuses, downloads, and deletion." },
-  { key: "settings", label: "Settings", description: "Agency defaults and the user's own login credentials." },
+  { key: "settings", label: "Settings", description: "Personal login credentials; agency defaults remain administrator-only." },
 ] as const;
 
 export type AccessPermission = (typeof ACCESS_PERMISSIONS)[number]["key"];

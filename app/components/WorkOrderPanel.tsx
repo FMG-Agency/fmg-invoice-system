@@ -153,7 +153,10 @@ function ProductionOptionsEditor({ options, crew, modelCatalogUrl, onChange }: {
     <header><div><span>PRODUCTION OPTIONS</span><strong>Add every resource separately</strong><small>Choose whether each price is already included in the bundle or must be billed as an extra.</small></div><button type="button" className="secondary-button" onClick={() => onChange([...options, newProductionOption()])}><Plus size={15} /> Add option</button></header>
     {options.length ? <div className={styles.optionRows}>{options.map((option, index) => {
       const directoryCategory = crewCategoryByOption[option.type];
-      const availableCrew = directoryCategory ? crew.filter((member) => member.active && member.category === directoryCategory) : [];
+      const isCameraCrew = directoryCategory === "photographer" || directoryCategory === "videographer";
+      const availableCrew = directoryCategory ? crew.filter((member) => member.active && (isCameraCrew
+        ? member.category === "photographer" || member.category === "videographer"
+        : member.category === directoryCategory)) : [];
       const selectedMember = option.crewMemberId ? crew.find((member) => member.id === option.crewMemberId) : undefined;
       return <div className={styles.optionRow} key={option.id}>
         <span className={styles.optionNumber}>{String(index + 1).padStart(2, "0")}</span>
@@ -163,7 +166,7 @@ function ProductionOptionsEditor({ options, crew, modelCatalogUrl, onChange }: {
             const crewMemberId = event.target.value === "manual" ? null : Number(event.target.value);
             const member = crew.find((item) => item.id === crewMemberId);
             patch(option.id, { crewMemberId, name: member?.name ?? "" });
-          }}><option value="manual">Use someone not listed</option>{availableCrew.map((member) => <option key={member.id} value={member.id}>{member.name}{member.phone ? ` · ${member.phone}` : ""}</option>)}</select></label>}
+          }}><option value="manual">Use someone not listed</option>{availableCrew.map((member) => <option key={member.id} value={member.id}>{member.name}{isCameraCrew ? ` · ${optionLabels[member.category]}` : ""}{member.phone ? ` · ${member.phone}` : ""}</option>)}</select></label>}
           <label><span>Name / details</span><input required maxLength={300} value={option.name} onChange={(event) => patch(option.id, { name: event.target.value })} placeholder={`Enter ${optionLabels[option.type].toLowerCase()} name`} /></label>
           {selectedMember?.phone && <small className={styles.memberPhone}>Saved phone · {selectedMember.phone}</small>}
           {option.type === "model" && (selectedMember?.profileUrl || modelCatalogUrl) && <div className={styles.catalogueHint}><span>Need to check the model first?</span>{selectedMember?.profileUrl && <a href={selectedMember.profileUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} /> View {selectedMember.name}&apos;s portfolio</a>}{modelCatalogUrl && <a href={modelCatalogUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} /> Open model catalogue</a>}</div>}

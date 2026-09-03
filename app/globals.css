@@ -806,6 +806,10 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; -
 .settings-save > div svg { color: var(--success); }
 .security-card { width: 100%; }
 .security-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.security-grid input[readonly] { background: color-mix(in srgb, var(--surface-2) 78%, var(--line)); color: var(--muted); cursor: not-allowed; }
+.credentials-feedback { margin-top: 15px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; font-size: 9px; font-weight: 750; display: flex; align-items: center; gap: 7px; }
+.credentials-feedback.success { border-color: color-mix(in srgb, var(--success) 45%, var(--line)); background: color-mix(in srgb, var(--success) 9%, var(--surface)); color: var(--success); }
+.credentials-feedback.error { border-color: #e5b5b5; background: #fff3f3; color: #b63232; }
 .security-actions { margin-top: 22px; padding-top: 17px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 15px; }
 .security-actions > div { color: var(--muted); display: flex; align-items: center; gap: 7px; font-size: 9px; }
 .security-actions > div svg { color: var(--yellow-ink); }

@@ -145,19 +145,20 @@ export async function POST(request: Request) {
     if (!credential) return Response.json({ error: "User account not found." }, { status: 404 });
     const currentHash = await passwordHash(payload.currentPassword, credential.passwordSalt, credential.passwordIterations);
     if (!secureEqual(currentHash, credential.passwordHash)) return Response.json({ error: "Current password is incorrect." }, { status: 401 });
+    const nextUsername = session.isAdmin ? payload.newUsername : session.username;
     const duplicateUsername = await db.prepare("SELECT id FROM auth_users WHERE lower(username) = lower(?) AND id <> ?")
-      .bind(payload.newUsername, session.userId).first<{ id: number }>();
+      .bind(nextUsername, session.userId).first<{ id: number }>();
     if (duplicateUsername) return Response.json({ error: "This username is already in use." }, { status: 400 });
     const salt = payload.newPassword ? newSalt() : credential.passwordSalt;
     const hash = payload.newPassword ? await passwordHash(payload.newPassword, salt) : credential.passwordHash;
     const iterations = payload.newPassword ? PASSWORD_ITERATIONS : credential.passwordIterations;
     await db.batch([
       db.prepare("UPDATE auth_users SET username = ?, password_hash = ?, password_salt = ?, password_iterations = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-        .bind(payload.newUsername, hash, salt, iterations, session.userId),
+        .bind(nextUsername, hash, salt, iterations, session.userId),
       db.prepare("DELETE FROM auth_user_sessions WHERE user_id = ?").bind(session.userId),
     ]);
     const cookie = await createSession(request, session.userId);
-    return Response.json({ ...sessionPayload({ ...session, username: payload.newUsername }), username: payload.newUsername }, { headers: { "set-cookie": cookie } });
+    return Response.json({ ...sessionPayload({ ...session, username: nextUsername }), username: nextUsername }, { headers: { "set-cookie": cookie } });
   } catch (error) {
     return errorResponse(error);
   }

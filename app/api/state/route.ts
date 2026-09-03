@@ -437,6 +437,7 @@ export async function POST(request: Request) {
     await ensureDatabase();
     const payload = actionPayload.parse(await request.json());
     const allowed = (permission: AccessPermission) => canAccess(session.permissions, permission, session.isAdmin);
+    if (payload.action === "updateSettings" && !session.isAdmin) return accessDenied();
     let requiredPermission: AccessPermission = payload.action === "createClient" || payload.action === "updateClient" || payload.action === "deleteClient"
       ? "clients"
       : payload.action === "createCategory" || payload.action === "updateCategory" || payload.action === "deleteCategory"

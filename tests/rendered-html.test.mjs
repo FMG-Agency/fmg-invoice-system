@@ -388,11 +388,36 @@ test("ships the Production talent and crew directory with work-order pickers", a
   assert.match(workOrder, /Use someone not listed/);
   assert.match(workOrder, /Saved talent \/ crew/);
   assert.match(workOrder, /Open model catalogue/);
+  assert.match(workOrder, /directoryCategory === "photographer" \|\| directoryCategory === "videographer"/);
+  assert.match(workOrder, /member\.category === "photographer" \|\| member\.category === "videographer"/);
+  assert.match(workOrder, /optionLabels\[member\.category\]/);
   assert.match(productionApi, /action: z\.literal\("saveCrew"\)/);
   assert.match(productionApi, /action: z\.literal\("saveDirectorySettings"\)/);
   assert.match(productionApi, /requirePermission\(request, "production"\)/);
   assert.match(migration, /CREATE TABLE `production_crew_members`/);
   assert.match(migration, /CREATE TABLE `production_settings`/);
+});
+
+test("lets every account change its own password while company settings stay administrator-only", async () => {
+  const [component, credentials, clientPortal, authApi, stateApi, permissions] = await Promise.all([
+    readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
+    readFile(new URL("app/components/LoginCredentialsPanel.tsx", root), "utf8"),
+    readFile(new URL("app/components/ClientPortalPanel.tsx", root), "utf8"),
+    readFile(new URL("app/api/auth/route.ts", root), "utf8"),
+    readFile(new URL("app/api/state/route.ts", root), "utf8"),
+    readFile(new URL("app/lib/permissions.ts", root), "utf8"),
+  ]);
+  assert.match(component, /next === "settings"/);
+  assert.match(component, /auth\.isAdmin[\s\S]*<SettingsPanel[\s\S]*<LoginCredentialsPanel/);
+  assert.match(credentials, /Login credentials/);
+  assert.match(credentials, /Change my password/);
+  assert.match(credentials, /readOnly=\{!allowUsernameChange\}/);
+  assert.match(credentials, /Company profile and document defaults remain administrator-only/);
+  assert.match(clientPortal, /Settings2/);
+  assert.match(clientPortal, /<LoginCredentialsPanel/);
+  assert.match(authApi, /session\.isAdmin \? payload\.newUsername : session\.username/);
+  assert.match(stateApi, /payload\.action === "updateSettings" && !session\.isAdmin/);
+  assert.match(permissions, /Personal login credentials; agency defaults remain administrator-only/);
 });
 
 test("upgrades existing production orders for Operations final approval", async () => {

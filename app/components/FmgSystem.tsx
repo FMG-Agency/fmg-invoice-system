@@ -54,6 +54,7 @@ import { ClientAccountPanel } from "./ClientAccountPanel";
 import { ClientFinancePanel } from "./ClientFinancePanel";
 import { ClientPortalAdmin, ClientPortalShell } from "./ClientPortalPanel";
 import { AttendancePanel, EmployeesPanel, type HrMutation } from "./HrPanels";
+import { LoginCredentialsPanel } from "./LoginCredentialsPanel";
 import { RequestsPanel } from "./RequestsPanel";
 import { ProductionDirectoryPanel } from "./ProductionDirectoryPanel";
 import { WorkOrderPanel } from "./WorkOrderPanel";
@@ -440,6 +441,7 @@ export function FmgSystem() {
     const item = navItems.find((entry) => entry.id === next);
     if (!item) return false;
     if (next === "data") return canOpenDocumentArchive(access);
+    if (next === "settings") return access.authenticated && access.clientId === null;
     return item.permission === "users" ? access.isAdmin : canAccess(access.permissions, item.permission, access.isAdmin);
   }
 
@@ -583,7 +585,7 @@ export function FmgSystem() {
 
   if (auth.checking || (auth.authenticated && loading)) return <div className="app-loader"><Image src="/fmg-logo-light.png" alt="FMG Agency" width={380} height={130} unoptimized /><span /><p>Preparing your agency workspace…</p></div>;
   if (!auth.authenticated) return <AuthScreen setupRequired={auth.setupRequired} onAuthenticated={handleAuthenticated} />;
-  if (auth.clientId !== null) return <ClientPortalShell displayName={auth.displayName || auth.username} dark={dark} onToggleTheme={toggleTheme} onLogout={logout} />;
+  if (auth.clientId !== null) return <ClientPortalShell displayName={auth.displayName || auth.username} username={auth.username} dark={dark} onToggleTheme={toggleTheme} onLogout={logout} onCredentialsChanged={(username) => setAuth((current) => ({ ...current, username }))} />;
 
   return (
     <div className="app-shell" dir="ltr">
@@ -673,7 +675,9 @@ export function FmgSystem() {
             setCompanyKey(document.companyKey || "fmg");
             setView(document.type);
           }} />}
-          {view === "settings" && <SettingsPanel settings={state.settings} mutate={mutate} busy={busy} showToast={showToast} authUsername={auth.username} onCredentialsChanged={(username) => setAuth((current) => ({ ...current, username }))} />}
+          {view === "settings" && (auth.isAdmin
+            ? <SettingsPanel settings={state.settings} mutate={mutate} busy={busy} showToast={showToast} authUsername={auth.username} onCredentialsChanged={(username) => setAuth((current) => ({ ...current, username }))} />
+            : <div className="settings-stack"><LoginCredentialsPanel key={auth.username} username={auth.username} onChanged={(username) => setAuth((current) => ({ ...current, username }))} /></div>)}
           {view === "users" && auth.isAdmin && <AccessPanel showToast={showToast} />}
         </div>
       </main>
@@ -1016,36 +1020,7 @@ function SettingsPanel({ settings, mutate, busy, showToast, authUsername, onCred
   type Input = z.infer<typeof schema>;
   const form = useForm<Input>({ resolver: zodResolver(schema), values: { agencyName: settings.agencyName, defaultCurrency: settings.defaultCurrency, preparedBy: settings.preparedBy, defaultPaymentTerms: settings.defaultPaymentTerms, defaultTax: settings.defaultTax, phone: settings.phone, email: settings.email, address: settings.address } });
   const submit = form.handleSubmit(async (data) => { try { await mutate({ action: "updateSettings", data }); showToast("Workspace settings saved."); } catch (error) { showToast(error instanceof Error ? error.message : "Could not save settings"); } });
-  return <div className="settings-stack"><form className="settings-layout" onSubmit={submit}><section className="panel settings-card"><div className="settings-heading"><div className="settings-icon"><Building2 size={20} /></div><div><h2>Agency profile</h2><p>Defaults used when preparing FMG documents.</p></div></div><div className="form-grid"><Field label="Agency name"><input {...form.register("agencyName")} /></Field><Field label="Prepared by"><input {...form.register("preparedBy")} /></Field><Field label="Phone" hint="Optional"><input {...form.register("phone")} placeholder="+20…" /></Field><Field label="Email" hint="Optional"><input {...form.register("email")} placeholder="finance@fmg.agency" /></Field><Field label="Address" wide hint="Optional"><input {...form.register("address")} placeholder="Agency address" /></Field></div></section><section className="panel settings-card"><div className="settings-heading"><div className="settings-icon yellow"><CircleDollarSign size={20} /></div><div><h2>Document defaults</h2><p>These values prefill new invoices and quotations.</p></div></div><div className="form-grid"><Field label="Default currency"><select {...form.register("defaultCurrency")}><option>EGP</option><option>USD</option><option>EUR</option><option>SAR</option><option>AED</option></select></Field><Field label="Default tax / VAT %"><input type="number" min="0" max="100" step="0.01" {...form.register("defaultTax", { valueAsNumber: true })} /></Field><Field label="Default payment terms" wide><textarea rows={3} {...form.register("defaultPaymentTerms")} /></Field></div></section><section className="settings-save"><div><Check size={16} /><span>Changes apply to new documents. Existing PDFs stay unchanged.</span></div><button className="primary-button" disabled={busy}>{busy ? "Saving…" : "Save settings"}</button></section></form><CredentialsPanel username={authUsername} onChanged={onCredentialsChanged} showToast={showToast} /></div>;
-}
-
-function CredentialsPanel({ username, onChanged, showToast }: { username: string; onChanged: (username: string) => void; showToast: (message: string) => void }) {
-  const schema = z.object({
-    currentPassword: z.string().min(1, "Enter your current password."),
-    newUsername: z.string().trim().min(3, "Use at least 3 characters.").max(80).regex(/^[A-Za-z0-9._-]+$/, "Use letters, numbers, dots, dashes, or underscores."),
-    newPassword: z.union([z.string().min(8, "Use at least 8 characters."), z.literal("")]),
-    confirmPassword: z.string(),
-  }).refine((value) => value.newPassword === value.confirmPassword, { path: ["confirmPassword"], message: "Passwords do not match." });
-  type Input = z.infer<typeof schema>;
-  const form = useForm<Input>({ resolver: zodResolver(schema), defaultValues: { currentPassword: "", newUsername: username, newPassword: "", confirmPassword: "" } });
-  const [saving, setSaving] = useState(false);
-  const submit = form.handleSubmit(async (data) => {
-    setSaving(true);
-    try {
-      const response = await fetch("/api/auth", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "change", currentPassword: data.currentPassword, newUsername: data.newUsername, newPassword: data.newPassword }) });
-      const result = await response.json() as { username?: string; error?: string };
-      if (!response.ok) throw new Error(result.error || "Could not update credentials.");
-      const nextUsername = result.username || data.newUsername;
-      onChanged(nextUsername);
-      form.reset({ currentPassword: "", newUsername: nextUsername, newPassword: "", confirmPassword: "" });
-      showToast("Login credentials updated. Other sessions were signed out.");
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "Could not update credentials.");
-    } finally {
-      setSaving(false);
-    }
-  });
-  return <form className="panel settings-card security-card" onSubmit={submit}><div className="settings-heading"><div className="settings-icon yellow"><ShieldCheck size={20} /></div><div><h2>Login credentials</h2><p>Change the username or set a new password for your current FMG account.</p></div></div><div className="form-grid security-grid"><Field label="Current password" error={form.formState.errors.currentPassword?.message}><input type="password" autoComplete="current-password" {...form.register("currentPassword")} placeholder="Required to confirm changes" /></Field><Field label="Username" error={form.formState.errors.newUsername?.message}><input autoComplete="username" {...form.register("newUsername")} /></Field><Field label="New password" hint="Leave blank to keep it" error={form.formState.errors.newPassword?.message}><input type="password" autoComplete="new-password" {...form.register("newPassword")} placeholder="At least 8 characters" /></Field><Field label="Confirm new password" error={form.formState.errors.confirmPassword?.message}><input type="password" autoComplete="new-password" {...form.register("confirmPassword")} placeholder="Repeat the new password" /></Field></div><div className="security-actions"><div><LockKeyhole size={15} /><span>Changing credentials signs out every other active session.</span></div><button className="primary-button" disabled={saving}>{saving ? "Updating…" : "Update login"}</button></div></form>;
+  return <div className="settings-stack"><form className="settings-layout" onSubmit={submit}><section className="panel settings-card"><div className="settings-heading"><div className="settings-icon"><Building2 size={20} /></div><div><h2>Agency profile</h2><p>Defaults used when preparing FMG documents.</p></div></div><div className="form-grid"><Field label="Agency name"><input {...form.register("agencyName")} /></Field><Field label="Prepared by"><input {...form.register("preparedBy")} /></Field><Field label="Phone" hint="Optional"><input {...form.register("phone")} placeholder="+20…" /></Field><Field label="Email" hint="Optional"><input {...form.register("email")} placeholder="finance@fmg.agency" /></Field><Field label="Address" wide hint="Optional"><input {...form.register("address")} placeholder="Agency address" /></Field></div></section><section className="panel settings-card"><div className="settings-heading"><div className="settings-icon yellow"><CircleDollarSign size={20} /></div><div><h2>Document defaults</h2><p>These values prefill new invoices and quotations.</p></div></div><div className="form-grid"><Field label="Default currency"><select {...form.register("defaultCurrency")}><option>EGP</option><option>USD</option><option>EUR</option><option>SAR</option><option>AED</option></select></Field><Field label="Default tax / VAT %"><input type="number" min="0" max="100" step="0.01" {...form.register("defaultTax", { valueAsNumber: true })} /></Field><Field label="Default payment terms" wide><textarea rows={3} {...form.register("defaultPaymentTerms")} /></Field></div></section><section className="settings-save"><div><Check size={16} /><span>Changes apply to new documents. Existing PDFs stay unchanged.</span></div><button className="primary-button" disabled={busy}>{busy ? "Saving…" : "Save settings"}</button></section></form><LoginCredentialsPanel key={authUsername} username={authUsername} allowUsernameChange onChanged={onCredentialsChanged} /></div>;
 }
 
 function Field({ label, hint, error, wide, children }: { label: string; hint?: string; error?: string; wide?: boolean; children: React.ReactNode }) {
