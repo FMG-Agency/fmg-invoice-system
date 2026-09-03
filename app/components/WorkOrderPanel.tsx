@@ -9,6 +9,7 @@ import {
   CircleDollarSign,
   Clock3,
   Download,
+  ExternalLink,
   Eye,
   FileCheck2,
   Inbox,
@@ -27,7 +28,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ProductionCostOption, ProductionOptionType, ProductionState, ProductionWorkOrder } from "../types";
+import type { ProductionCostOption, ProductionCrewCategory, ProductionOptionType, ProductionState, ProductionWorkOrder } from "../types";
 import styles from "./WorkOrderPanel.module.css";
 
 type AccountDraft = {
@@ -62,6 +63,9 @@ const emptyState: ProductionState = {
   orders: [],
   clients: [],
   catalog: [],
+  crew: [],
+  modelCatalogUrl: "",
+  canManageDirectory: false,
   pendingProductionCount: 0,
   pendingOperationsCount: 0,
   finalApprovedCount: 0,
@@ -117,7 +121,7 @@ const optionLabels: Record<ProductionOptionType, string> = {
 const optionTypes = Object.keys(optionLabels) as ProductionOptionType[];
 
 function newProductionOption(): ProductionCostOption {
-  return { id: crypto.randomUUID(), type: "photographer", name: "", price: 0, billingMode: "included" };
+  return { id: crypto.randomUUID(), type: "photographer", crewMemberId: null, name: "", price: 0, billingMode: "included" };
 }
 
 function money(value: number) {
@@ -131,19 +135,44 @@ function CatalogDetails({ label, name, price, inputs, outputs }: { label: string
   </article>;
 }
 
-function ProductionOptionsEditor({ options, onChange }: { options: ProductionCostOption[]; onChange: (options: ProductionCostOption[]) => void }) {
+const crewCategoryByOption: Partial<Record<ProductionOptionType, ProductionCrewCategory>> = {
+  model: "model",
+  photographer: "photographer",
+  videographer: "videographer",
+};
+
+function ProductionOptionsEditor({ options, crew, modelCatalogUrl, onChange }: {
+  options: ProductionCostOption[];
+  crew: ProductionState["crew"];
+  modelCatalogUrl: string;
+  onChange: (options: ProductionCostOption[]) => void;
+}) {
   const extraTotal = options.reduce((sum, option) => sum + (option.billingMode === "extra" ? Number(option.price || 0) : 0), 0);
   const patch = (id: string, values: Partial<ProductionCostOption>) => onChange(options.map((option) => option.id === id ? { ...option, ...values } : option));
   return <section className={styles.optionsEditor}>
     <header><div><span>PRODUCTION OPTIONS</span><strong>Add every resource separately</strong><small>Choose whether each price is already included in the bundle or must be billed as an extra.</small></div><button type="button" className="secondary-button" onClick={() => onChange([...options, newProductionOption()])}><Plus size={15} /> Add option</button></header>
-    {options.length ? <div className={styles.optionRows}>{options.map((option, index) => <div className={styles.optionRow} key={option.id}>
-      <span className={styles.optionNumber}>{String(index + 1).padStart(2, "0")}</span>
-      <label><span>Option</span><select value={option.type} onChange={(event) => patch(option.id, { type: event.target.value as ProductionOptionType })}>{optionTypes.map((type) => <option key={type} value={type}>{optionLabels[type]}</option>)}</select></label>
-      <label><span>Name / details</span><input required maxLength={300} value={option.name} onChange={(event) => patch(option.id, { name: event.target.value })} placeholder={`Enter ${optionLabels[option.type].toLowerCase()} name`} /></label>
-      <label><span>Price treatment</span><select value={option.billingMode} onChange={(event) => patch(option.id, { billingMode: event.target.value as ProductionCostOption["billingMode"] })}><option value="included">Included in bundle</option><option value="extra">Extra cost</option></select></label>
-      <label><span>{option.billingMode === "extra" ? "Extra price" : "Resource price"} · EGP</span><input required type="number" min="0" step="0.01" value={Number.isFinite(option.price) ? option.price : ""} onChange={(event) => patch(option.id, { price: Number(event.target.value) })} placeholder="0" /></label>
-      <button type="button" className={styles.removeOption} onClick={() => onChange(options.filter((item) => item.id !== option.id))} aria-label="Remove production option"><Trash2 size={16} /></button>
-    </div>)}</div> : <div className={styles.noOptions}><Plus size={18} /><span>No production options yet. Press <strong>Add option</strong> to start.</span></div>}
+    {options.length ? <div className={styles.optionRows}>{options.map((option, index) => {
+      const directoryCategory = crewCategoryByOption[option.type];
+      const availableCrew = directoryCategory ? crew.filter((member) => member.active && member.category === directoryCategory) : [];
+      const selectedMember = option.crewMemberId ? crew.find((member) => member.id === option.crewMemberId) : undefined;
+      return <div className={styles.optionRow} key={option.id}>
+        <span className={styles.optionNumber}>{String(index + 1).padStart(2, "0")}</span>
+        <label><span>Option</span><select value={option.type} onChange={(event) => patch(option.id, { type: event.target.value as ProductionOptionType, crewMemberId: null, name: "" })}>{optionTypes.map((type) => <option key={type} value={type}>{optionLabels[type]}</option>)}</select></label>
+        <div className={styles.resourceField}>
+          {directoryCategory && <label><span>Saved talent / crew</span><select value={option.crewMemberId ? String(option.crewMemberId) : "manual"} onChange={(event) => {
+            const crewMemberId = event.target.value === "manual" ? null : Number(event.target.value);
+            const member = crew.find((item) => item.id === crewMemberId);
+            patch(option.id, { crewMemberId, name: member?.name ?? "" });
+          }}><option value="manual">Use someone not listed</option>{availableCrew.map((member) => <option key={member.id} value={member.id}>{member.name}{member.phone ? ` · ${member.phone}` : ""}</option>)}</select></label>}
+          <label><span>Name / details</span><input required maxLength={300} value={option.name} onChange={(event) => patch(option.id, { name: event.target.value })} placeholder={`Enter ${optionLabels[option.type].toLowerCase()} name`} /></label>
+          {selectedMember?.phone && <small className={styles.memberPhone}>Saved phone · {selectedMember.phone}</small>}
+          {option.type === "model" && (selectedMember?.profileUrl || modelCatalogUrl) && <div className={styles.catalogueHint}><span>Need to check the model first?</span>{selectedMember?.profileUrl && <a href={selectedMember.profileUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} /> View {selectedMember.name}&apos;s portfolio</a>}{modelCatalogUrl && <a href={modelCatalogUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} /> Open model catalogue</a>}</div>}
+        </div>
+        <label><span>Price treatment</span><select value={option.billingMode} onChange={(event) => patch(option.id, { billingMode: event.target.value as ProductionCostOption["billingMode"] })}><option value="included">Included in bundle</option><option value="extra">Extra cost</option></select></label>
+        <label><span>{option.billingMode === "extra" ? "Extra price" : "Resource price"} · EGP</span><input required type="number" min="0" step="0.01" value={Number.isFinite(option.price) ? option.price : ""} onChange={(event) => patch(option.id, { price: Number(event.target.value) })} placeholder="0" /></label>
+        <button type="button" className={styles.removeOption} onClick={() => onChange(options.filter((item) => item.id !== option.id))} aria-label="Remove production option"><Trash2 size={16} /></button>
+      </div>;
+    })}</div> : <div className={styles.noOptions}><Plus size={18} /><span>No production options yet. Press <strong>Add option</strong> to start.</span></div>}
     <footer><span>Extra amount added to bundle <small>Included resources do not increase the invoice</small></span><strong>{money(extraTotal)}</strong></footer>
   </section>;
 }
@@ -525,7 +554,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
           <label><span>Call time</span><input required type="time" value={productionDraft.callTime} onChange={(event) => setProductionDraft({ ...productionDraft, callTime: event.target.value })} /></label>
           <div className={styles.wide}><CatalogDetails label="BUNDLE SCOPE" name={completing.bundleName} price={completing.bundlePrice} inputs={completing.bundleInputs} outputs={completing.bundleOutputs} /></div>
           {completing.addonName && <div className={styles.wide}><CatalogDetails label="ADD-ON SCOPE" name={completing.addonName} price={completing.addonPrice} inputs={completing.addonInputs} outputs={completing.addonOutputs} /></div>}
-          <div className={styles.wide}><ProductionOptionsEditor options={productionDraft.options} onChange={(options) => setProductionDraft({ ...productionDraft, options })} /></div>
+          <div className={styles.wide}><ProductionOptionsEditor options={productionDraft.options} crew={state.crew} modelCatalogUrl={state.modelCatalogUrl} onChange={(options) => setProductionDraft({ ...productionDraft, options })} /></div>
           <label className={styles.wide}><span>Production Manager note <small>Optional</small></span><textarea rows={4} maxLength={5000} value={productionDraft.productionNote} onChange={(event) => setProductionDraft({ ...productionDraft, productionNote: event.target.value })} placeholder="Add production instructions, equipment notes, or special arrangements." /></label>
         </div>
         <div className={styles.finalWarning}><LockKeyhole size={18} /><span><strong>Final production approval</strong><small>After approval, the order goes to Operation Manager and cannot be edited or cancelled.</small></span></div>
@@ -544,7 +573,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
           <label><span>Call time</span><input required type="time" value={operationDraft.callTime} onChange={(event) => setOperationDraft({ ...operationDraft, callTime: event.target.value })} /></label>
           {operationBundle && <div className={styles.wide}><CatalogDetails label="BUNDLE SCOPE" name={operationBundle.name} price={operationBundle.price} inputs={operationBundle.inputs} outputs={operationBundle.outputs} /></div>}
           {operationAddon && <div className={styles.wide}><CatalogDetails label="ADD-ON SCOPE" name={operationAddon.name} price={operationAddon.price} inputs={operationAddon.inputs} outputs={operationAddon.outputs} /></div>}
-          <div className={styles.wide}><ProductionOptionsEditor options={operationDraft.options} onChange={(options) => setOperationDraft({ ...operationDraft, options })} /></div>
+          <div className={styles.wide}><ProductionOptionsEditor options={operationDraft.options} crew={state.crew} modelCatalogUrl={state.modelCatalogUrl} onChange={(options) => setOperationDraft({ ...operationDraft, options })} /></div>
           <label className={styles.wide}><span>Account Manager note <small>Editable by Operations</small></span><textarea rows={3} maxLength={5000} value={operationDraft.accountNote} onChange={(event) => setOperationDraft({ ...operationDraft, accountNote: event.target.value })} /></label>
           <label className={styles.wide}><span>Production Manager note <small>Editable by Operations</small></span><textarea rows={3} maxLength={5000} value={operationDraft.productionNote} onChange={(event) => setOperationDraft({ ...operationDraft, productionNote: event.target.value })} /></label>
           <label className={styles.wide}><span>Operation Manager note <small>Optional</small></span><textarea rows={3} maxLength={5000} value={operationDraft.operationNote} onChange={(event) => setOperationDraft({ ...operationDraft, operationNote: event.target.value })} placeholder="Add the final operational instruction or approval note." /></label>

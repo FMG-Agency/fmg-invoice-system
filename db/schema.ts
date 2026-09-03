@@ -225,6 +225,27 @@ export const productionWorkOrderEvents = sqliteTable("production_work_order_even
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("idx_production_work_order_events_order").on(table.workOrderId, table.createdAt)]);
 
+export const productionCrewMembers = sqliteTable("production_crew_members", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  category: text("category", { enum: ["model", "photographer", "videographer"] }).notNull(),
+  name: text("name").notNull(),
+  phone: text("phone").notNull().default(""),
+  profileUrl: text("profile_url").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  active: integer("active").notNull().default(1),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("idx_production_crew_category").on(table.category, table.name),
+  index("idx_production_crew_active").on(table.active),
+]);
+
+export const productionSettings = sqliteTable("production_settings", {
+  id: integer("id").primaryKey(),
+  modelCatalogUrl: text("model_catalog_url").notNull().default(""),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const authAttempts = sqliteTable("auth_attempts", {
   attemptKey: text("attempt_key").primaryKey(),
   attempts: integer("attempts").notNull().default(0),

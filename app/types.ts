@@ -495,9 +495,24 @@ export type ProductionCatalogOption = {
 
 export type ProductionOptionType = "photographer" | "videographer" | "model" | "blogger" | "location" | "studio" | "hair_stylist" | "makeup_stylist" | "stylist";
 
+export type ProductionCrewCategory = "model" | "photographer" | "videographer";
+
+export type ProductionCrewMember = {
+  id: number;
+  category: ProductionCrewCategory;
+  name: string;
+  phone: string;
+  profileUrl: string;
+  notes: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ProductionCostOption = {
   id: string;
   type: ProductionOptionType;
+  crewMemberId?: number | null;
   name: string;
   price: number;
   billingMode: "included" | "extra";
@@ -552,6 +567,9 @@ export type ProductionState = {
   orders: ProductionWorkOrder[];
   clients: ProductionClientOption[];
   catalog: ProductionCatalogOption[];
+  crew: ProductionCrewMember[];
+  modelCatalogUrl: string;
+  canManageDirectory: boolean;
   pendingProductionCount: number;
   pendingOperationsCount: number;
   finalApprovedCount: number;

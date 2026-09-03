@@ -187,8 +187,15 @@
 .optionsEditor > header strong { font-size: 11px; }
 .optionsEditor > header small { color: var(--muted); font-size: 8px; }
 .optionRows { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-.optionRow { padding: 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); display: grid; grid-template-columns: 32px .9fr 1.25fr 1fr .75fr 34px; align-items: end; gap: 8px; }
+.optionRow { padding: 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); display: grid; grid-template-columns: 32px .8fr 1.55fr 1fr .75fr 34px; align-items: end; gap: 8px; }
 .optionNumber { height: 42px; border-radius: 7px; background: var(--ink); color: var(--surface); font-size: 8px; font-weight: 850; display: grid; place-items: center; }
+.resourceField { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.resourceField > label { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.memberPhone { margin-top: -1px; color: var(--muted); font-size: 7px; font-weight: 750; }
+.catalogueHint { padding: 7px 8px; border: 1px solid color-mix(in srgb, var(--yellow) 45%, var(--line)); border-radius: 7px; background: color-mix(in srgb, var(--yellow) 9%, var(--surface)); display: flex; flex-wrap: wrap; align-items: center; gap: 5px 9px; }
+.catalogueHint > span { width: 100%; color: var(--muted); font-size: 7px; font-weight: 750; }
+.catalogueHint a { color: var(--yellow-ink); font-size: 7.5px; font-weight: 850; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.catalogueHint a:hover { text-decoration: underline; }
 .removeOption { width: 34px; height: 42px; border: 1px solid color-mix(in srgb, #d04d4d 40%, var(--line)); border-radius: 8px; background: color-mix(in srgb, #d04d4d 8%, var(--surface)); color: #bd3434; display: grid; place-items: center; cursor: pointer; }
 .noOptions { min-height: 80px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 9px; }
 .noOptions svg { color: var(--yellow-ink); }
@@ -321,8 +328,9 @@
   .catalogDetails > header, .catalogDetails > div { grid-template-columns: 1fr; }
   .optionRow { grid-template-columns: 32px 1fr 34px; }
   .optionRow label { grid-column: 2; }
-  .optionNumber { grid-row: 1 / 5; height: 100%; }
-  .removeOption { grid-column: 3; grid-row: 1 / 5; height: 100%; }
+  .resourceField { grid-column: 2; }
+  .optionNumber { grid-row: 1 / 6; height: 100%; }
+  .removeOption { grid-column: 3; grid-row: 1 / 6; height: 100%; }
   .optionsEditor > header { align-items: stretch; flex-direction: column; }
 }
 

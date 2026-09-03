@@ -6,6 +6,7 @@ import {
   Bell,
   Building2,
   CalendarRange,
+  Camera,
   Check,
   ChevronDown,
   CircleDollarSign,
@@ -54,9 +55,10 @@ import { ClientFinancePanel } from "./ClientFinancePanel";
 import { ClientPortalAdmin, ClientPortalShell } from "./ClientPortalPanel";
 import { AttendancePanel, EmployeesPanel, type HrMutation } from "./HrPanels";
 import { RequestsPanel } from "./RequestsPanel";
+import { ProductionDirectoryPanel } from "./ProductionDirectoryPanel";
 import { WorkOrderPanel } from "./WorkOrderPanel";
 
-type View = "dashboard" | "invoice" | "quotation" | "media-guide" | "work-order" | "clients" | "client-accounts" | "monthly-clients" | "client-portal-admin" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
+type View = "dashboard" | "invoice" | "quotation" | "media-guide" | "work-order" | "production-directory" | "clients" | "client-accounts" | "monthly-clients" | "client-portal-admin" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
 type Mutation = (body: Record<string, unknown>) => Promise<AppState>;
 const companyNames: Record<CompanyKey, string> = { fmg: "FMG Agency", digital_empire: "The Digital Empire" };
 type AuthState = {
@@ -180,7 +182,8 @@ const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof L
   { id: "invoice", label: "New Invoice", eyebrow: "Create", icon: ReceiptText, permission: "invoices" },
   { id: "quotation", label: "New Quotation", eyebrow: "Create", icon: FilePlus2, permission: "quotations" },
   { id: "media-guide", label: "Media Guide Catalog", eyebrow: "Bundles & add-ons", icon: Sparkles, permission: "quotations" },
-  { id: "work-order", label: "Production", eyebrow: "Work-order pipeline", icon: FilePenLine, permission: "production" },
+  { id: "work-order", label: "Work Orders", eyebrow: "Approval pipeline", icon: FilePenLine, permission: "production" },
+  { id: "production-directory", label: "Talent & Crew", eyebrow: "Models, photographers & crew", icon: Camera, permission: "production" },
   { id: "clients", label: "Client Directory", eyebrow: "Profiles & contacts", icon: UsersRound, permission: "clients" },
   { id: "client-accounts", label: "Client Accounts", eyebrow: "Balances & ledger", icon: CircleDollarSign, permission: "clients" },
   { id: "monthly-clients", label: "Retainers", eyebrow: "Monthly finance", icon: CalendarRange, permission: "clients" },
@@ -194,14 +197,14 @@ const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof L
   { id: "users", label: "Users & Access", eyebrow: "Administrator", icon: ShieldCheck, permission: "users" },
 ];
 
-type NavGroupId = "documents" | "clients" | "services" | "people" | "administration";
+type NavGroupId = "production" | "documents" | "clients" | "services" | "people" | "administration";
 type NavSection =
-  | { id: "dashboard" | "production"; item: View }
+  | { id: "dashboard"; item: View }
   | { id: NavGroupId; label: string; eyebrow: string; icon: typeof LayoutDashboard; items: View[] };
 
 const navSections: NavSection[] = [
   { id: "dashboard", item: "dashboard" },
-  { id: "production", item: "work-order" },
+  { id: "production", label: "Production", eyebrow: "Orders, talent & crew", icon: FilePenLine, items: ["work-order", "production-directory"] },
   { id: "documents", label: "Documents", eyebrow: "Create & archive", icon: FileText, items: ["invoice", "quotation", "data"] },
   { id: "clients", label: "Clients", eyebrow: "Directory & experience", icon: UsersRound, items: ["clients", "client-accounts", "monthly-clients", "client-portal-admin"] },
   { id: "services", label: "Services", eyebrow: "Catalog & categories", icon: Sparkles, items: ["media-guide", "categories"] },
@@ -223,7 +226,8 @@ const viewCopy: Record<View, { eyebrow: string; title: string; description: stri
   invoice: { eyebrow: "CREATE DOCUMENT", title: "New invoice", description: "Select a client and category, then add the billable work." },
   quotation: { eyebrow: "CREATE DOCUMENT", title: "New quotation", description: "Turn a scoped project into a polished client proposal." },
   "media-guide": { eyebrow: "MEDIA GUIDE SERVICES", title: "Bundles and add-ons", description: "Manage every reusable Media Guide bundle, included service, add-on, and EGP price." },
-  "work-order": { eyebrow: "PRODUCTION WORKFLOW", title: "Production", description: "Create, complete, lock, route, and print Media Guide production work orders." },
+  "work-order": { eyebrow: "PRODUCTION WORKFLOW", title: "Work orders", description: "Create, complete, lock, route, and print Media Guide production work orders." },
+  "production-directory": { eyebrow: "PRODUCTION RESOURCES", title: "Talent & Crew", description: "Manage models, photographers, videographers, phone numbers, and the shared model catalogue." },
   clients: { eyebrow: "CLIENT DIRECTORY", title: "Clients", description: "Profiles, invoices, payments, outstanding balances, and complete account history." },
   "client-accounts": { eyebrow: "CLIENT FINANCE", title: "Client accounts", description: "See every client's charges, payments, credit, and live balance in one clear overview." },
   "monthly-clients": { eyebrow: "MONTHLY CLIENTS", title: "Retainers", description: "Plan retainers by month, apply one amount across a period, and forecast annual client revenue." },
@@ -653,6 +657,7 @@ export function FmgSystem() {
           {view === "requests" && <RequestsPanel showToast={showToast} />}
           {view === "categories" && <CategoriesPanel categories={state.categories} mutate={mutate} busy={busy} showToast={showToast} />}
           {view === "media-guide" && <section className="panel catalog-page-panel"><QuotationCatalog catalog={state.quotationCatalog} mutate={mutate} busy={busy} showToast={showToast} /></section>}
+          {view === "production-directory" && <ProductionDirectoryPanel showToast={showToast} />}
           {view === "work-order" && <WorkOrderPanel showToast={showToast} onWorkspaceChanged={() => loadWorkspace(auth)} onOpenDraftInvoice={(invoiceId) => {
             const invoice = state.documents.find((document) => document.id === invoiceId);
             if (!invoice) return showToast("Reload the workspace to open this Draft invoice.");

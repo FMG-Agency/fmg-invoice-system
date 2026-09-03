@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { database } from "../../lib/database";
 import { getSession, requirePermission, type AuthSession } from "../../lib/auth-server";
-import type { ProductionCostOption, ProductionState, ProductionWorkflowRole, ProductionWorkOrder } from "../../types";
+import type { ProductionCostOption, ProductionCrewMember, ProductionState, ProductionWorkflowRole, ProductionWorkOrder } from "../../types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,10 +9,13 @@ export const runtime = "nodejs";
 const dateValue = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a valid production date.");
 const timeValue = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Choose a valid call time.");
 const noteValue = z.string().trim().max(5000).default("");
+const webLink = z.string().trim().max(2000).refine((value) => !value || /^https?:\/\//i.test(value), "Use a full link starting with http:// or https://.");
 const optionTypes = ["photographer", "videographer", "model", "blogger", "location", "studio", "hair_stylist", "makeup_stylist", "stylist"] as const;
+const crewCategories = ["model", "photographer", "videographer"] as const;
 const productionOptionSchema = z.object({
   id: z.string().trim().min(1).max(100),
   type: z.enum(optionTypes),
+  crewMemberId: z.number().int().positive().nullable().optional().default(null),
   name: z.string().trim().min(1, "Enter a name or detail for every production option.").max(300),
   price: z.number().finite().min(0, "Production option prices cannot be negative."),
   billingMode: z.enum(["included", "extra"]).default("included"),
@@ -57,6 +60,22 @@ const payloadSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("delete"),
     id: z.number().int().positive(),
+  }),
+  z.object({
+    action: z.literal("saveCrew"),
+    id: z.number().int().positive().nullable(),
+    data: z.object({
+      category: z.enum(crewCategories),
+      name: z.string().trim().min(1, "Enter the crew member's name.").max(200),
+      phone: z.string().trim().min(1, "Enter the crew member's phone number.").max(100),
+      profileUrl: webLink,
+      notes: z.string().trim().max(2000),
+      active: z.boolean(),
+    }),
+  }),
+  z.object({
+    action: z.literal("saveDirectorySettings"),
+    data: z.object({ modelCatalogUrl: webLink }),
   }),
 ]);
 
@@ -110,9 +129,28 @@ const productionSchema = [
     note TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS production_crew_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL CHECK(category IN ('model','photographer','videographer')),
+    name TEXT NOT NULL,
+    phone TEXT NOT NULL DEFAULT '',
+    profile_url TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS production_settings (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    model_catalog_url TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
   "CREATE INDEX IF NOT EXISTS idx_production_work_orders_status_date ON production_work_orders(status, work_date)",
   "CREATE INDEX IF NOT EXISTS idx_production_work_orders_creator ON production_work_orders(created_by_user_id, created_at)",
   "CREATE INDEX IF NOT EXISTS idx_production_work_order_events_order ON production_work_order_events(work_order_id, created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_production_crew_category ON production_crew_members(category, name)",
+  "CREATE INDEX IF NOT EXISTS idx_production_crew_active ON production_crew_members(active)",
+  "INSERT OR IGNORE INTO production_settings (id, model_catalog_url) VALUES (1, '')",
 ];
 
 let productionDatabaseReady: Promise<void> | null = null;
@@ -184,6 +222,10 @@ function workflowRole(session: AuthSession): ProductionWorkflowRole {
 
 function displayName(session: AuthSession) {
   return session.displayName.trim() || session.username;
+}
+
+function canManageProductionDirectory(role: ProductionWorkflowRole) {
+  return role === "production_manager" || role === "operation_manager" || role === "administrator";
 }
 
 function codeFor(id: number) {
@@ -278,7 +320,7 @@ function mapOrder(row: Record<string, unknown>): ProductionWorkOrder {
 
 async function getProductionState(session: AuthSession): Promise<ProductionState> {
   const role = workflowRole(session);
-  const [ordersResult, clientsResult, catalogResult] = await Promise.all([
+  const [ordersResult, clientsResult, catalogResult, crewResult, settingsResult] = await Promise.all([
     database.prepare(`SELECT p.id, p.document_type AS documentType, p.client_id AS clientId, p.client_name AS clientName,
         p.bundle_catalog_id AS bundleCatalogId, p.bundle_name AS bundleName, p.bundle_price AS bundlePrice,
         p.bundle_inputs_json AS bundleInputsJson, p.bundle_outputs_json AS bundleOutputsJson,
@@ -301,6 +343,10 @@ async function getProductionState(session: AuthSession): Promise<ProductionState
     database.prepare(`SELECT id, kind, name, price, inputs_json AS inputsJson, outputs_json AS outputsJson,
         applies_to AS appliesTo, bundle_total AS bundleTotal FROM quotation_catalog
       WHERE active = 1 ORDER BY kind DESC, sort_order, id`).all<Record<string, unknown>>(),
+    database.prepare(`SELECT id, category, name, phone, profile_url AS profileUrl, notes, active,
+        created_at AS createdAt, updated_at AS updatedAt
+      FROM production_crew_members ORDER BY active DESC, category, name COLLATE NOCASE`).all<Record<string, unknown>>(),
+    database.prepare("SELECT model_catalog_url AS modelCatalogUrl FROM production_settings WHERE id = 1").first<{ modelCatalogUrl: string }>(),
   ]);
 
   const allOrders = ordersResult.results.map(mapOrder);
@@ -311,6 +357,19 @@ async function getProductionState(session: AuthSession): Promise<ProductionState
       : role === "viewer"
         ? []
         : allOrders;
+
+  const canManageDirectory = canManageProductionDirectory(role);
+  const crew = crewResult.results.map((row): ProductionCrewMember => ({
+    id: Number(row.id),
+    category: row.category === "photographer" ? "photographer" : row.category === "videographer" ? "videographer" : "model",
+    name: String(row.name ?? ""),
+    phone: String(row.phone ?? ""),
+    profileUrl: String(row.profileUrl ?? ""),
+    notes: String(row.notes ?? ""),
+    active: Boolean(row.active),
+    createdAt: String(row.createdAt ?? ""),
+    updatedAt: String(row.updatedAt ?? ""),
+  })).filter((member) => canManageDirectory || member.active);
 
   return {
     role,
@@ -330,6 +389,9 @@ async function getProductionState(session: AuthSession): Promise<ProductionState
         bundleTotal: row.bundleTotal === null || row.bundleTotal === undefined ? null : Number(row.bundleTotal),
       }))
       : [],
+    crew,
+    modelCatalogUrl: settingsResult?.modelCatalogUrl ?? "",
+    canManageDirectory,
     pendingProductionCount: orders.filter((order) => order.status === "pending_production").length,
     pendingOperationsCount: orders.filter((order) => order.status === "pending_operations").length,
     finalApprovedCount: orders.filter((order) => order.status === "final_approved").length,
@@ -478,7 +540,28 @@ export async function POST(request: Request) {
     const role = workflowRole(session);
     const payload = payloadSchema.parse(await request.json());
 
-    if (payload.action === "delete") {
+    if (payload.action === "saveCrew") {
+      if (!canManageProductionDirectory(role)) return accessDenied("Only Production, Operations, or an administrator can manage the talent and crew directory.");
+      if (payload.id) {
+        const updated = await database.prepare(`UPDATE production_crew_members SET
+            category = ?, name = ?, phone = ?, profile_url = ?, notes = ?, active = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?`)
+          .bind(payload.data.category, payload.data.name, payload.data.phone, payload.data.profileUrl,
+            payload.data.notes, payload.data.active ? 1 : 0, payload.id).run();
+        if (Number(updated.meta.changes) !== 1) return Response.json({ error: "Crew member not found." }, { status: 404 });
+      } else {
+        await database.prepare(`INSERT INTO production_crew_members
+          (category, name, phone, profile_url, notes, active) VALUES (?, ?, ?, ?, ?, ?)`)
+          .bind(payload.data.category, payload.data.name, payload.data.phone, payload.data.profileUrl,
+            payload.data.notes, payload.data.active ? 1 : 0).run();
+      }
+    } else if (payload.action === "saveDirectorySettings") {
+      if (!canManageProductionDirectory(role)) return accessDenied("Only Production, Operations, or an administrator can manage the catalogue link.");
+      await database.prepare(`INSERT INTO production_settings (id, model_catalog_url, updated_at)
+        VALUES (1, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET model_catalog_url = excluded.model_catalog_url, updated_at = CURRENT_TIMESTAMP`)
+        .bind(payload.data.modelCatalogUrl).run();
+    } else if (payload.action === "delete") {
       if (!session.isAdmin) return accessDenied("Only an administrator can delete production work orders.");
       const existing = await database.prepare("SELECT id FROM production_work_orders WHERE id = ?").bind(payload.id).first<{ id: number }>();
       if (!existing) return Response.json({ error: "Work order not found." }, { status: 404 });

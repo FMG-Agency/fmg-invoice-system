@@ -123,7 +123,7 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(authServer, /JOIN auth_users/);
   assert.match(usersApi, /requireAdmin/);
   assert.match(usersApi, /permissions_json/);
-  assert.match(accessComponent, /Ready-made access presets/);
+  assert.match(accessComponent, /Ready-made employee presets/);
   assert.match(accessComponent, /Account Manager/);
   assert.match(accessComponent, /Production Manager/);
   assert.match(accessComponent, /Operation Manager/);
@@ -364,6 +364,35 @@ test("ships the locked Media Guide production workflow", async () => {
   assert.match(costingMigration, /production_work_order_id/);
   assert.match(costingMigration, /draft_invoice_id/);
   assert.match(workOrderStyles, /size: A4 landscape/);
+});
+
+test("ships the Production talent and crew directory with work-order pickers", async () => {
+  const [component, directory, directoryStyles, workOrder, productionApi, migration] = await Promise.all([
+    readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
+    readFile(new URL("app/components/ProductionDirectoryPanel.tsx", root), "utf8"),
+    readFile(new URL("app/components/ProductionDirectoryPanel.module.css", root), "utf8"),
+    readFile(new URL("app/components/WorkOrderPanel.tsx", root), "utf8"),
+    readFile(new URL("app/api/production/route.ts", root), "utf8"),
+    readFile(new URL("drizzle/0016_outgoing_ken_ellis.sql", root), "utf8"),
+  ]);
+  assert.match(component, /label: "Production"[\s\S]*items: \["work-order", "production-directory"\]/);
+  assert.match(component, /label: "Work Orders"/);
+  assert.match(component, /label: "Talent & Crew"/);
+  assert.match(directory, /Open model catalogue/);
+  assert.match(directory, /Phone number/);
+  assert.match(directory, /Add talent \/ crew/);
+  assert.match(directory, /Models/);
+  assert.match(directory, /Photographers/);
+  assert.match(directory, /Videographers/);
+  assert.match(directoryStyles, /\.crewGrid/);
+  assert.match(workOrder, /Use someone not listed/);
+  assert.match(workOrder, /Saved talent \/ crew/);
+  assert.match(workOrder, /Open model catalogue/);
+  assert.match(productionApi, /action: z\.literal\("saveCrew"\)/);
+  assert.match(productionApi, /action: z\.literal\("saveDirectorySettings"\)/);
+  assert.match(productionApi, /requirePermission\(request, "production"\)/);
+  assert.match(migration, /CREATE TABLE `production_crew_members`/);
+  assert.match(migration, /CREATE TABLE `production_settings`/);
 });
 
 test("upgrades existing production orders for Operations final approval", async () => {
