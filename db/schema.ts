@@ -186,6 +186,7 @@ export const productionWorkOrders = sqliteTable("production_work_orders", {
   addonPrice: real("addon_price").notNull().default(0),
   addonInputsJson: text("addon_inputs_json").notNull().default("[]"),
   addonOutputsJson: text("addon_outputs_json").notNull().default("[]"),
+  addonsJson: text("addons_json").notNull().default("[]"),
   workDate: text("work_date").notNull(),
   callTime: text("call_time").notNull().default(""),
   location: text("location").notNull().default(""),

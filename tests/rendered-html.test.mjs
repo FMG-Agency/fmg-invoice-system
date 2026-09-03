@@ -285,7 +285,7 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
 });
 
 test("ships the locked Media Guide production workflow", async () => {
-  const [component, workOrder, workOrderStyles, productionApi, permissions, migration, finalApprovalMigration, costingMigration] = await Promise.all([
+  const [component, workOrder, workOrderStyles, productionApi, permissions, migration, finalApprovalMigration, costingMigration, multiAddonMigration] = await Promise.all([
     readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
     readFile(new URL("app/components/WorkOrderPanel.tsx", root), "utf8"),
     readFile(new URL("app/components/WorkOrderPanel.module.css", root), "utf8"),
@@ -294,6 +294,7 @@ test("ships the locked Media Guide production workflow", async () => {
     readFile(new URL("drizzle/0011_stormy_nightshade.sql", root), "utf8"),
     readFile(new URL("drizzle/0012_demonic_gunslinger.sql", root), "utf8"),
     readFile(new URL("drizzle/0013_third_mimic.sql", root), "utf8"),
+    readFile(new URL("drizzle/0017_brown_goblin_queen.sql", root), "utf8"),
   ]);
   assert.match(permissions, /key: "production"/);
   assert.match(component, /label: "Production"/);
@@ -341,6 +342,10 @@ test("ships the locked Media Guide production workflow", async () => {
   assert.match(workOrderStyles, /\.optionsTable th:nth-child\(4\) \{ width: 24%; \}/);
   assert.doesNotMatch(workOrderStyles, /\.optionsTable th:nth-child\(3\) \{ width: 55%; \}/);
   assert.match(workOrder, /Only production options marked Extra cost are added above the bundle price/);
+  assert.match(workOrder, /Choose more than one or create a custom item/);
+  assert.match(workOrder, /Custom add-on/);
+  assert.match(workOrder, /previewOrder\.addons\.map/);
+  assert.match(workOrder, /completing\.addons\.map/);
   assert.match(productionApi, /role !== "account_manager"/);
   assert.match(productionApi, /role !== "production_manager"/);
   assert.match(productionApi, /role !== "operation_manager"/);
@@ -351,6 +356,9 @@ test("ships the locked Media Guide production workflow", async () => {
   assert.match(productionApi, /billingMode: z\.enum\(\["included", "extra"\]\)\.default\("included"\)/);
   assert.match(productionApi, /option\.billingMode === "extra" \? option\.price : 0/);
   assert.match(productionApi, /input\.options\.filter\(\(option\) => option\.billingMode === "extra"\)/);
+  assert.match(productionApi, /addons: z\.array\(addonSelectionSchema\)\.max\(20/);
+  assert.match(productionApi, /input\.scope\.addons\.map/);
+  assert.match(productionApi, /addons_json/);
   assert.match(productionApi, /Only an administrator can delete production work orders/);
   assert.match(productionApi, /DELETE FROM production_work_orders WHERE id = \?/);
   assert.match(productionApi, /INSERT OR IGNORE INTO documents/);
@@ -363,6 +371,10 @@ test("ships the locked Media Guide production workflow", async () => {
   assert.match(costingMigration, /production_options_json/);
   assert.match(costingMigration, /production_work_order_id/);
   assert.match(costingMigration, /draft_invoice_id/);
+  assert.match(multiAddonMigration, /ADD `addons_json`/);
+  assert.match(multiAddonMigration, /Rana Wagih/);
+  assert.match(multiAddonMigration, /Ahmed Attia/);
+  assert.match(multiAddonMigration, /Foreign model/);
   assert.match(workOrderStyles, /size: A4 landscape/);
 });
 
@@ -427,6 +439,8 @@ test("upgrades existing production orders for Operations final approval", async 
   await db.executeMultiple(await readFile(new URL("drizzle/0011_stormy_nightshade.sql", root), "utf8"));
   await db.executeMultiple(await readFile(new URL("drizzle/0012_demonic_gunslinger.sql", root), "utf8"));
   await db.executeMultiple(await readFile(new URL("drizzle/0013_third_mimic.sql", root), "utf8"));
+  await db.executeMultiple(await readFile(new URL("drizzle/0016_outgoing_ken_ellis.sql", root), "utf8"));
+  await db.executeMultiple(await readFile(new URL("drizzle/0017_brown_goblin_queen.sql", root), "utf8"));
   const columns = await db.execute("PRAGMA table_info(production_work_orders)");
   const names = columns.rows.map((column) => column.name);
   assert.ok(names.includes("operation_note"));
@@ -435,8 +449,13 @@ test("upgrades existing production orders for Operations final approval", async 
   assert.ok(names.includes("final_approved_at"));
   assert.ok(names.includes("production_options_json"));
   assert.ok(names.includes("draft_invoice_id"));
+  assert.ok(names.includes("addons_json"));
   const documentColumns = await db.execute("PRAGMA table_info(documents)");
   assert.ok(documentColumns.rows.some((column) => column.name === "production_work_order_id"));
+  const seededModels = await db.execute("SELECT name, phone, notes FROM production_crew_members WHERE category = 'model' ORDER BY id");
+  assert.equal(seededModels.rows.length, 17);
+  assert.ok(seededModels.rows.some((model) => model.name === "Neven Tarek" && model.notes === "Ahmed Attia"));
+  assert.ok(seededModels.rows.some((model) => model.name === "Anastasia" && model.notes === "Foreign model"));
   db.close();
 });
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { database } from "../../lib/database";
 import { getSession, requirePermission, type AuthSession } from "../../lib/auth-server";
-import type { ProductionCostOption, ProductionCrewMember, ProductionState, ProductionWorkflowRole, ProductionWorkOrder } from "../../types";
+import type { ProductionCostOption, ProductionCrewMember, ProductionState, ProductionWorkflowRole, ProductionWorkOrder, ProductionWorkOrderAddon } from "../../types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,6 +20,19 @@ const productionOptionSchema = z.object({
   price: z.number().finite().min(0, "Production option prices cannot be negative."),
   billingMode: z.enum(["included", "extra"]).default("included"),
 });
+const addonDetail = z.string().trim().min(1).max(300);
+const addonSelectionSchema = z.object({
+  id: z.string().trim().min(1).max(100),
+  catalogId: z.number().int().positive().nullable(),
+  name: z.string().trim().min(1, "Enter a name for every custom add-on.").max(300),
+  price: z.number().finite().min(0, "Add-on prices cannot be negative."),
+  inputs: z.array(addonDetail).max(30),
+  outputs: z.array(addonDetail).max(30),
+});
+const storedAddonSchema = addonSelectionSchema.extend({
+  appliesTo: z.string().trim().max(300).default(""),
+  bundleTotal: z.number().finite().min(0).nullable().default(null),
+});
 
 const payloadSchema = z.discriminatedUnion("action", [
   z.object({
@@ -28,7 +41,7 @@ const payloadSchema = z.discriminatedUnion("action", [
       documentType: z.literal("media_guide"),
       clientId: z.number().int().positive(),
       bundleCatalogId: z.number().int().positive(),
-      addonCatalogId: z.number().int().positive().nullable(),
+      addons: z.array(addonSelectionSchema).max(20, "Choose no more than 20 add-ons."),
       workDate: dateValue,
       accountNote: noteValue,
     }),
@@ -48,7 +61,7 @@ const payloadSchema = z.discriminatedUnion("action", [
     data: z.object({
       clientId: z.number().int().positive(),
       bundleCatalogId: z.number().int().positive(),
-      addonCatalogId: z.number().int().positive().nullable(),
+      addons: z.array(addonSelectionSchema).max(20, "Choose no more than 20 add-ons."),
       workDate: dateValue,
       callTime: timeValue,
       options: z.array(productionOptionSchema).min(1, "Add at least one production option.").max(30),
@@ -95,6 +108,7 @@ const productionSchema = [
     addon_price REAL NOT NULL DEFAULT 0,
     addon_inputs_json TEXT NOT NULL DEFAULT '[]',
     addon_outputs_json TEXT NOT NULL DEFAULT '[]',
+    addons_json TEXT NOT NULL DEFAULT '[]',
     work_date TEXT NOT NULL,
     call_time TEXT NOT NULL DEFAULT '',
     location TEXT NOT NULL DEFAULT '',
@@ -153,11 +167,36 @@ const productionSchema = [
   "INSERT OR IGNORE INTO production_settings (id, model_catalog_url) VALUES (1, '')",
 ];
 
+const modelDirectorySeed = [
+  ["Rana Wagih", "01055875887", ""],
+  ["Margret", "01278264486", ""],
+  ["Layal", "01115559983", ""],
+  ["Youstina", "01279230089", ""],
+  ["Nour", "01063820556", ""],
+  ["Maha", "01090509247", ""],
+  ["Hla", "01055445568", ""],
+  ["Sherouk Abdallah", "01153458342", ""],
+  ["Ranem", "01111692898", ""],
+  ["Neven Tarek", "01118229804", "Ahmed Attia"],
+  ["Esraa Elsobky", "01118229804", "Ahmed Attia"],
+  ["Samar Heagazy", "01118229804", "Ahmed Attia"],
+  ["Aya El Tourki", "01118229804", "Ahmed Attia"],
+  ["Manal Fathlla", "01118229804", "Ahmed Attia"],
+  ["Tia Zuhair", "01140445763", "Foreign model"],
+  ["Angel", "01062485466", "Foreign model"],
+  ["Anastasia", "01559911997", "Foreign model"],
+] as const;
+
 let productionDatabaseReady: Promise<void> | null = null;
 
 async function ensureProductionDatabase() {
   productionDatabaseReady ??= (async () => {
     await database.batch(productionSchema.map((statement) => database.prepare(statement)));
+    await database.batch(modelDirectorySeed.map(([name, phone, notes]) => database.prepare(`INSERT INTO production_crew_members
+        (category, name, phone, profile_url, notes, active)
+      SELECT 'model', ?, ?, '', ?, 1
+      WHERE NOT EXISTS (SELECT 1 FROM production_crew_members WHERE category = 'model' AND name = ? COLLATE NOCASE)`)
+      .bind(name, phone, notes, name)));
     const columns = await database.prepare("PRAGMA table_info(production_work_orders)").all<{ name: string }>();
     const names = new Set(columns.results.map((column) => column.name));
     const additions = [
@@ -171,6 +210,7 @@ async function ensureProductionDatabase() {
       ["addon_price", "ALTER TABLE production_work_orders ADD COLUMN addon_price REAL NOT NULL DEFAULT 0"],
       ["addon_inputs_json", "ALTER TABLE production_work_orders ADD COLUMN addon_inputs_json TEXT NOT NULL DEFAULT '[]'"],
       ["addon_outputs_json", "ALTER TABLE production_work_orders ADD COLUMN addon_outputs_json TEXT NOT NULL DEFAULT '[]'"],
+      ["addons_json", "ALTER TABLE production_work_orders ADD COLUMN addons_json TEXT NOT NULL DEFAULT '[]'"],
       ["production_options_json", "ALTER TABLE production_work_orders ADD COLUMN production_options_json TEXT NOT NULL DEFAULT '[]'"],
       ["draft_invoice_id", "ALTER TABLE production_work_orders ADD COLUMN draft_invoice_id INTEGER"],
     ] as const;
@@ -202,6 +242,17 @@ async function ensureProductionDatabase() {
       addon_inputs_json = COALESCE((SELECT inputs_json FROM quotation_catalog WHERE id = addon_catalog_id), addon_inputs_json),
       addon_outputs_json = COALESCE((SELECT outputs_json FROM quotation_catalog WHERE id = addon_catalog_id), addon_outputs_json)
       WHERE addon_catalog_id IS NOT NULL AND addon_inputs_json = '[]'`).run();
+    await database.prepare(`UPDATE production_work_orders SET addons_json = json_array(json_object(
+        'id', 'legacy-addon-' || id,
+        'catalogId', addon_catalog_id,
+        'name', addon_name,
+        'price', addon_price,
+        'inputs', json(addon_inputs_json),
+        'outputs', json(addon_outputs_json),
+        'appliesTo', '',
+        'bundleTotal', NULL
+      ))
+      WHERE addons_json = '[]' AND addon_name <> ''`).run();
   })();
   try {
     await productionDatabaseReady;
@@ -241,6 +292,27 @@ function stringArray(value: unknown) {
   }
 }
 
+function workOrderAddons(row: Record<string, unknown>): ProductionWorkOrderAddon[] {
+  try {
+    const parsed = z.array(storedAddonSchema).safeParse(JSON.parse(String(row.addonsJson ?? "[]")));
+    if (parsed.success && parsed.data.length) return parsed.data;
+  } catch {
+    // Fall through to the legacy single add-on snapshot.
+  }
+  const name = String(row.addonName ?? "").trim();
+  if (!name) return [];
+  return [{
+    id: `legacy-addon-${String(row.id ?? "")}`,
+    catalogId: row.addonCatalogId === null || row.addonCatalogId === undefined ? null : Number(row.addonCatalogId),
+    name,
+    price: Number(row.addonPrice ?? 0),
+    inputs: stringArray(row.addonInputsJson),
+    outputs: stringArray(row.addonOutputsJson),
+    appliesTo: "",
+    bundleTotal: null,
+  }];
+}
+
 function productionOptions(row: Record<string, unknown>): ProductionCostOption[] {
   try {
     const parsed = z.array(productionOptionSchema).safeParse(JSON.parse(String(row.productionOptionsJson ?? "[]")));
@@ -271,7 +343,9 @@ function mapOrder(row: Record<string, unknown>): ProductionWorkOrder {
     : "pending_production";
   const options = productionOptions(row);
   const bundlePrice = Number(row.bundlePrice ?? 0);
-  const addonPrice = Number(row.addonPrice ?? 0);
+  const addons = workOrderAddons(row);
+  const primaryAddon = addons[0] ?? null;
+  const addonsTotal = addons.reduce((total, addon) => total + addon.price, 0);
   const productionOptionsTotal = options.reduce((total, option) => total + (option.billingMode === "extra" ? option.price : 0), 0);
   return {
     id,
@@ -284,11 +358,13 @@ function mapOrder(row: Record<string, unknown>): ProductionWorkOrder {
     bundlePrice,
     bundleInputs: stringArray(row.bundleInputsJson),
     bundleOutputs: stringArray(row.bundleOutputsJson),
-    addonCatalogId: row.addonCatalogId === null || row.addonCatalogId === undefined ? null : Number(row.addonCatalogId),
-    addonName: String(row.addonName ?? ""),
-    addonPrice,
-    addonInputs: stringArray(row.addonInputsJson),
-    addonOutputs: stringArray(row.addonOutputsJson),
+    addonCatalogId: primaryAddon?.catalogId ?? null,
+    addonName: primaryAddon?.name ?? "",
+    addonPrice: primaryAddon?.price ?? 0,
+    addonInputs: primaryAddon?.inputs ?? [],
+    addonOutputs: primaryAddon?.outputs ?? [],
+    addons,
+    addonsTotal,
     workDate: String(row.workDate ?? ""),
     callTime: String(row.callTime ?? ""),
     location: String(row.location ?? ""),
@@ -299,7 +375,7 @@ function mapOrder(row: Record<string, unknown>): ProductionWorkOrder {
     operationNote: String(row.operationNote ?? ""),
     productionOptions: options,
     productionOptionsTotal,
-    workOrderTotal: bundlePrice + addonPrice + productionOptionsTotal,
+    workOrderTotal: bundlePrice + addonsTotal + productionOptionsTotal,
     status,
     createdByUserId: Number(row.createdByUserId),
     createdByName: String(row.createdByName ?? ""),
@@ -325,7 +401,7 @@ async function getProductionState(session: AuthSession): Promise<ProductionState
         p.bundle_catalog_id AS bundleCatalogId, p.bundle_name AS bundleName, p.bundle_price AS bundlePrice,
         p.bundle_inputs_json AS bundleInputsJson, p.bundle_outputs_json AS bundleOutputsJson,
         p.addon_catalog_id AS addonCatalogId, p.addon_name AS addonName, p.addon_price AS addonPrice,
-        p.addon_inputs_json AS addonInputsJson, p.addon_outputs_json AS addonOutputsJson,
+        p.addon_inputs_json AS addonInputsJson, p.addon_outputs_json AS addonOutputsJson, p.addons_json AS addonsJson,
         p.work_date AS workDate, p.call_time AS callTime, p.location, p.model_name AS modelName,
         p.photographer_name AS photographerName, p.account_note AS accountNote, p.production_note AS productionNote,
         p.operation_note AS operationNote, p.production_options_json AS productionOptionsJson,
@@ -402,7 +478,7 @@ function accessDenied(message: string) {
   return Response.json({ error: message, code: "PRODUCTION_ROLE_REQUIRED" }, { status: 403 });
 }
 
-async function resolveScope(data: { clientId: number; bundleCatalogId: number; addonCatalogId: number | null }) {
+async function resolveScope(data: { clientId: number; bundleCatalogId: number; addons: z.infer<typeof addonSelectionSchema>[] }) {
   const [client, bundleRow] = await Promise.all([
     database.prepare("SELECT COALESCE(NULLIF(company_name, ''), name) AS name, agency_key AS agencyKey FROM clients WHERE id = ?")
       .bind(data.clientId).first<{ name: string; agencyKey: string }>(),
@@ -420,24 +496,40 @@ async function resolveScope(data: { clientId: number; bundleCatalogId: number; a
     bundleTotal: bundleRow.bundleTotal === null || bundleRow.bundleTotal === undefined ? null : Number(bundleRow.bundleTotal),
   };
 
-  let addon: typeof bundle | null = null;
-  if (data.addonCatalogId) {
+  const catalogIds = data.addons.flatMap((addon) => addon.catalogId ? [addon.catalogId] : []);
+  if (new Set(catalogIds).size !== catalogIds.length) throw new Error("The same add-on cannot be selected more than once.");
+  const addons = await Promise.all(data.addons.map(async (selection): Promise<ProductionWorkOrderAddon> => {
+    if (!selection.catalogId) return {
+      id: selection.id,
+      catalogId: null,
+      name: selection.name,
+      price: selection.price,
+      inputs: selection.inputs,
+      outputs: selection.outputs,
+      appliesTo: "",
+      bundleTotal: null,
+    };
     const addonRow = await database.prepare(`SELECT id, name, price, inputs_json AS inputsJson, outputs_json AS outputsJson,
         applies_to AS appliesTo, bundle_total AS bundleTotal
       FROM quotation_catalog WHERE id = ? AND kind = 'addon' AND active = 1`)
-      .bind(data.addonCatalogId).first<Record<string, unknown>>();
-    if (!addonRow) throw new Error("The selected add-on is no longer available.");
-    addon = {
-      id: Number(addonRow.id), name: String(addonRow.name ?? ""), price: Number(addonRow.price ?? 0),
-      inputs: stringArray(addonRow.inputsJson), outputs: stringArray(addonRow.outputsJson),
+      .bind(selection.catalogId).first<Record<string, unknown>>();
+    if (!addonRow) throw new Error("One of the selected add-ons is no longer available.");
+    const addon: ProductionWorkOrderAddon = {
+      id: `catalog-addon-${String(addonRow.id)}`,
+      catalogId: Number(addonRow.id),
+      name: String(addonRow.name ?? ""),
+      price: Number(addonRow.price ?? 0),
+      inputs: stringArray(addonRow.inputsJson),
+      outputs: stringArray(addonRow.outputsJson),
       appliesTo: String(addonRow.appliesTo ?? ""),
       bundleTotal: addonRow.bundleTotal === null || addonRow.bundleTotal === undefined ? null : Number(addonRow.bundleTotal),
     };
     if (addon.appliesTo && addon.appliesTo.toLowerCase() !== bundle.name.toLowerCase()) {
-      throw new Error("This add-on is not available for the selected bundle.");
+      throw new Error(`${addon.name} is not available for the selected bundle.`);
     }
-  }
-  return { client, bundle, addon };
+    return addon;
+  }));
+  return { client, bundle, addons };
 }
 
 const productionOptionLabels: Record<ProductionCostOption["type"], string> = {
@@ -482,8 +574,8 @@ async function ensureDraftInvoice(input: {
   const items = [
     lineItem(`wo-${input.workOrderId}-bundle`, input.scope.bundle.name, input.scope.bundle.price, "package", input.scope.bundle.id,
       input.scope.bundle.inputs, input.scope.bundle.outputs, "", input.scope.bundle.bundleTotal),
-    ...(input.scope.addon ? [lineItem(`wo-${input.workOrderId}-addon`, input.scope.addon.name, input.scope.addon.price, "addon", input.scope.addon.id,
-      input.scope.addon.inputs, input.scope.addon.outputs, input.scope.addon.appliesTo, input.scope.addon.bundleTotal)] : []),
+    ...input.scope.addons.map((addon, index) => lineItem(`wo-${input.workOrderId}-addon-${index + 1}`, addon.name, addon.price,
+      addon.catalogId ? "addon" : "custom", addon.catalogId, addon.inputs, addon.outputs, addon.appliesTo, addon.bundleTotal)),
     ...input.options.filter((option) => option.billingMode === "extra").map((option, index) => lineItem(`wo-${input.workOrderId}-option-${index + 1}`,
       `${productionOptionLabels[option.type]} · ${option.name}`, option.price, "custom", null, [option.name], [])),
   ];
@@ -513,7 +605,7 @@ function errorResponse(error: unknown) {
     ? error.issues[0]?.message ?? "Invalid work order data."
     : error instanceof Error ? error.message : "Unexpected production workflow error.";
   const conflict = /already been completed|no longer pending|already received final approval/i.test(message);
-  const invalidSelection = /selected .+ no longer available|add-on is not available/i.test(message);
+  const invalidSelection = /selected .+ no longer available|add-on is not available|same add-on cannot be selected/i.test(message);
   return Response.json({ error: message }, { status: conflict ? 409 : error instanceof z.ZodError || invalidSelection ? 400 : 500 });
 }
 
@@ -572,16 +664,17 @@ export async function POST(request: Request) {
       ]);
     } else if (payload.action === "create") {
       if (role !== "account_manager" && role !== "administrator") return accessDenied("Only an Account Manager can create and submit a work order.");
-      const { client, bundle, addon } = await resolveScope(payload.data);
+      const { client, bundle, addons } = await resolveScope(payload.data);
+      const primaryAddon = addons[0] ?? null;
 
       const actorName = displayName(session);
       const inserted = await database.prepare(`INSERT INTO production_work_orders
         (document_type, client_id, client_name, bundle_catalog_id, bundle_name, bundle_price, bundle_inputs_json, bundle_outputs_json,
-          addon_catalog_id, addon_name, addon_price, addon_inputs_json, addon_outputs_json,
+          addon_catalog_id, addon_name, addon_price, addon_inputs_json, addon_outputs_json, addons_json,
           work_date, account_note, status, created_by_user_id, created_by_name, created_by_role)
-        VALUES ('media_guide', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_production', ?, ?, ?)`)
+        VALUES ('media_guide', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_production', ?, ?, ?)`)
         .bind(payload.data.clientId, client.name, bundle.id, bundle.name, bundle.price, JSON.stringify(bundle.inputs), JSON.stringify(bundle.outputs),
-          addon?.id ?? null, addon?.name ?? "", addon?.price ?? 0, JSON.stringify(addon?.inputs ?? []), JSON.stringify(addon?.outputs ?? []),
+          primaryAddon?.catalogId ?? null, primaryAddon?.name ?? "", primaryAddon?.price ?? 0, JSON.stringify(primaryAddon?.inputs ?? []), JSON.stringify(primaryAddon?.outputs ?? []), JSON.stringify(addons),
           payload.data.workDate, payload.data.accountNote, session.userId, actorName, session.roleLabel).run();
       const workOrderId = Number(inserted.meta.last_row_id);
       await database.prepare(`INSERT INTO production_work_order_events
@@ -607,7 +700,8 @@ export async function POST(request: Request) {
     } else {
       if (role !== "operation_manager" && role !== "administrator") return accessDenied("Only an Operation Manager can edit and give final approval to this work order.");
       const scope = await resolveScope(payload.data);
-      const { client, bundle, addon } = scope;
+      const { client, bundle, addons } = scope;
+      const primaryAddon = addons[0] ?? null;
       const actorName = displayName(session);
       const options = payload.data.options as ProductionCostOption[];
       const pendingOrder = await database.prepare("SELECT id FROM production_work_orders WHERE id = ? AND status = 'ready_for_operations' AND final_approved_at = ''")
@@ -625,14 +719,14 @@ export async function POST(request: Request) {
       });
       const updated = await database.prepare(`UPDATE production_work_orders SET
           client_id = ?, client_name = ?, bundle_catalog_id = ?, bundle_name = ?, bundle_price = ?, bundle_inputs_json = ?, bundle_outputs_json = ?,
-          addon_catalog_id = ?, addon_name = ?, addon_price = ?, addon_inputs_json = ?, addon_outputs_json = ?,
+          addon_catalog_id = ?, addon_name = ?, addon_price = ?, addon_inputs_json = ?, addon_outputs_json = ?, addons_json = ?,
           work_date = ?, photographer_name = ?, model_name = ?, location = ?, call_time = ?, production_options_json = ?,
           account_note = ?, production_note = ?, operation_note = ?, draft_invoice_id = ?,
           operation_manager_user_id = ?, operation_manager_name = ?, final_approved_at = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ? AND status = 'ready_for_operations' AND final_approved_at = ''`)
         .bind(payload.data.clientId, client.name, bundle.id, bundle.name, bundle.price, JSON.stringify(bundle.inputs), JSON.stringify(bundle.outputs),
-          addon?.id ?? null, addon?.name ?? "", addon?.price ?? 0, JSON.stringify(addon?.inputs ?? []), JSON.stringify(addon?.outputs ?? []),
+          primaryAddon?.catalogId ?? null, primaryAddon?.name ?? "", primaryAddon?.price ?? 0, JSON.stringify(primaryAddon?.inputs ?? []), JSON.stringify(primaryAddon?.outputs ?? []), JSON.stringify(addons),
           payload.data.workDate, firstOption(options, "photographer"), firstOption(options, "model"), firstOption(options, "location") || firstOption(options, "studio"),
           payload.data.callTime, JSON.stringify(options), payload.data.accountNote, payload.data.productionNote, payload.data.operationNote, draftInvoice.id,
           session.userId, actorName, payload.id).run();

@@ -180,6 +180,33 @@
 .catalogDetails > div span { color: var(--muted); font-size: 9px; line-height: 1.5; }
 .catalogDetails > div small { margin-bottom: 3px; color: var(--ink); font-size: 7px; font-weight: 900; letter-spacing: .7px; display: block; }
 
+.addonsEditor { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.addonsEditor > header { padding: 12px 13px; border-bottom: 1px solid var(--line); background: var(--surface-2); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.addonsEditor > header > div { display: flex; flex-direction: column; gap: 2px; }
+.addonsEditor > header span { color: var(--yellow-ink); font-size: 7px; font-weight: 900; letter-spacing: .8px; }
+.addonsEditor > header strong { font-size: 11px; }
+.addonsEditor > header small { color: var(--muted); font-size: 8px; }
+.addonsEditor > header button:disabled { opacity: .5; cursor: not-allowed; }
+.addonChoices { padding: 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.addonChoice, .addonChoiceSelected { min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); display: grid !important; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 9px !important; cursor: pointer; }
+.addonChoiceSelected { border-color: #cdb500; background: color-mix(in srgb, var(--yellow) 11%, var(--surface)); box-shadow: inset 3px 0 0 var(--yellow); }
+.addonChoice input, .addonChoiceSelected input { width: 16px !important; height: 16px !important; padding: 0 !important; accent-color: #bda600; }
+.addonChoice > span, .addonChoiceSelected > span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.addonChoice strong, .addonChoiceSelected strong { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.addonChoice small, .addonChoiceSelected small { overflow: hidden; color: var(--muted); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.addonChoice b, .addonChoiceSelected b { color: var(--yellow-ink); font-size: 8px; white-space: nowrap; }
+.addonsEmpty { min-height: 62px; padding: 15px; color: var(--muted); font-size: 9px; display: grid; place-items: center; text-align: center; }
+.customAddonList { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 8px; }
+.customAddonRow { padding: 10px; border: 1px solid color-mix(in srgb, var(--yellow) 48%, var(--line)); border-radius: 9px; background: color-mix(in srgb, var(--yellow) 7%, var(--surface)); display: grid; grid-template-columns: auto minmax(180px, 1.2fr) minmax(125px, .55fr) minmax(160px, 1fr) minmax(160px, 1fr) 34px; align-items: end; gap: 8px; }
+.customAddonNumber { height: 42px; padding: 0 9px; border-radius: 7px; background: var(--ink); color: var(--surface); font-size: 7px; font-weight: 850; display: grid; place-items: center; white-space: nowrap; }
+.customAddonRow label { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.customAddonRow label > span { font-size: 8px; font-weight: 800; }
+.customAddonRow textarea { min-height: 58px; }
+.customAddonRow > button { width: 34px; height: 42px; border: 1px solid color-mix(in srgb, #d04d4d 40%, var(--line)); border-radius: 8px; background: color-mix(in srgb, #d04d4d 8%, var(--surface)); color: #bd3434; display: grid; place-items: center; cursor: pointer; }
+.addonsEditor > footer { padding: 9px 13px; border-top: 1px solid var(--line); background: var(--surface-2); display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.addonsEditor > footer span { color: var(--muted); font-size: 8px; }
+.addonsEditor > footer strong { color: var(--ink); font-size: 11px; }
+
 .optionsEditor { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
 .optionsEditor > header { padding: 12px 13px; border-bottom: 1px solid var(--line); background: var(--surface-2); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .optionsEditor > header > div { display: flex; flex-direction: column; gap: 2px; }
@@ -326,6 +353,12 @@
   .previewModalBody { padding: 8px; }
   .sheetFrame { padding: 12px; border-radius: 12px; }
   .catalogDetails > header, .catalogDetails > div { grid-template-columns: 1fr; }
+  .addonsEditor > header { align-items: stretch; flex-direction: column; }
+  .addonChoices { grid-template-columns: 1fr; }
+  .customAddonRow { grid-template-columns: 70px 1fr 34px; }
+  .customAddonRow label { grid-column: 2; }
+  .customAddonNumber { grid-row: 1 / 5; height: 100%; }
+  .customAddonRow > button { grid-column: 3; grid-row: 1 / 5; height: 100%; }
   .optionRow { grid-template-columns: 32px 1fr 34px; }
   .optionRow label { grid-column: 2; }
   .resourceField { grid-column: 2; }

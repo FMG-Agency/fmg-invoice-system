@@ -120,6 +120,13 @@
       "when": 1788427878573,
       "tag": "0016_outgoing_ken_ellis",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1788439261141,
+      "tag": "0017_brown_goblin_queen",
+      "breakpoints": true
     }
   ]
 }
