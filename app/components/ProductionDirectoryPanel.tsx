@@ -19,7 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ProductionCrewCategory, ProductionCrewMember, ProductionState } from "../types";
 import styles from "./ProductionDirectoryPanel.module.css";
 
-type CrewDraft = Pick<ProductionCrewMember, "category" | "name" | "phone" | "profileUrl" | "notes" | "active">;
+type CrewDraft = Pick<ProductionCrewMember, "category" | "name" | "phone" | "profileUrl" | "modelNationality" | "hourlyRate" | "dailyRate" | "notes" | "active">;
 type DirectoryFilter = "all" | ProductionCrewCategory;
 
 const emptyState: ProductionState = {
@@ -41,7 +41,29 @@ const categoryDetails: Record<ProductionCrewCategory, { label: string; plural: s
   videographer: { label: "Videographer", plural: "Videographers", icon: Video },
 };
 
-const blankCrew: CrewDraft = { category: "model", name: "", phone: "", profileUrl: "", notes: "", active: true };
+const blankCrew: CrewDraft = {
+  category: "model",
+  name: "",
+  phone: "",
+  profileUrl: "",
+  modelNationality: "egyptian",
+  hourlyRate: null,
+  dailyRate: null,
+  notes: "",
+  active: true,
+};
+
+function modelNationalityLabel(value: ProductionCrewMember["modelNationality"]) {
+  return value === "foreign" ? "Foreign" : "Egyptian";
+}
+
+function optionalRate(value: string) {
+  return value === "" ? null : Number(value);
+}
+
+function money(value: number) {
+  return `${value.toLocaleString("en-US", { maximumFractionDigits: 2 })} EGP`;
+}
 
 function normalizeState(value: ProductionState): ProductionState {
   return {
@@ -96,7 +118,8 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
     return state.crew.filter((member) => {
       if (filter !== "all" && member.category !== filter) return false;
       if (!query) return true;
-      return [member.name, member.phone, member.notes, categoryDetails[member.category].label].some((value) => value.toLowerCase().includes(query));
+      return [member.name, member.phone, member.notes, categoryDetails[member.category].label,
+        member.modelNationality ? modelNationalityLabel(member.modelNationality) : ""].some((value) => value.toLowerCase().includes(query));
     });
   }, [filter, search, state.crew]);
 
@@ -124,7 +147,17 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
 
   function openCrew(member: ProductionCrewMember) {
     setEditingId(member.id);
-    setCrewDraft({ category: member.category, name: member.name, phone: member.phone, profileUrl: member.profileUrl, notes: member.notes, active: member.active });
+    setCrewDraft({
+      category: member.category,
+      name: member.name,
+      phone: member.phone,
+      profileUrl: member.profileUrl,
+      modelNationality: member.modelNationality,
+      hourlyRate: member.hourlyRate,
+      dailyRate: member.dailyRate,
+      notes: member.notes,
+      active: member.active,
+    });
   }
 
   async function saveCrew(event: React.FormEvent) {
@@ -184,8 +217,12 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
         const details = categoryDetails[member.category];
         const Icon = details.icon;
         return <article key={member.id} className={`${styles.crewCard} ${!member.active ? styles.inactive : ""}`}>
-          <header><span className={styles.memberIcon}><Icon size={20} /></span><div><small>{details.label.toUpperCase()}</small><h3>{member.name}</h3></div>{!member.active && <em>Inactive</em>}</header>
+          <header><span className={styles.memberIcon}><Icon size={20} /></span><div><small>{details.label.toUpperCase()}{member.category === "model" ? ` · ${modelNationalityLabel(member.modelNationality)}` : ""}</small><h3>{member.name}</h3></div>{!member.active && <em>Inactive</em>}</header>
           <a className={styles.phoneLine} href={`tel:${member.phone.replace(/\s+/g, "")}`}><Phone size={15} /><span><small>PHONE NUMBER</small><strong>{member.phone || "Phone not added"}</strong></span></a>
+          {member.category === "model" && (member.hourlyRate !== null || member.dailyRate !== null) && <div className={styles.modelRates}>
+            {member.hourlyRate !== null && <span><small>PER HOUR</small><strong>{money(member.hourlyRate)}</strong></span>}
+            {member.dailyRate !== null && <span><small>PER DAY</small><strong>{money(member.dailyRate)}</strong></span>}
+          </div>}
           {member.notes && <p>{member.notes}</p>}
           <footer>{member.profileUrl ? <a href={member.profileUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open portfolio</a> : <span>No personal portfolio link</span>}{state.canManageDirectory && <button type="button" onClick={() => openCrew(member)}><Pencil size={14} /> Edit</button>}</footer>
         </article>;
@@ -195,10 +232,24 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
     {crewDraft && <DirectoryModal title={editingId ? "Edit talent or crew" : "Add talent or crew"} description="These details will appear as selectable options inside production work orders." onClose={() => !saving && setCrewDraft(null)}>
       <form className={styles.form} onSubmit={saveCrew}>
         <div className={styles.formGrid}>
-          <label><span>Type</span><select value={crewDraft.category} onChange={(event) => setCrewDraft({ ...crewDraft, category: event.target.value as ProductionCrewCategory })}><option value="model">Model</option><option value="photographer">Photographer</option><option value="videographer">Videographer</option></select></label>
+          <label><span>Type</span><select value={crewDraft.category} onChange={(event) => {
+            const category = event.target.value as ProductionCrewCategory;
+            setCrewDraft({
+              ...crewDraft,
+              category,
+              modelNationality: category === "model" ? crewDraft.modelNationality ?? "egyptian" : null,
+              hourlyRate: category === "model" ? crewDraft.hourlyRate : null,
+              dailyRate: category === "model" ? crewDraft.dailyRate : null,
+            });
+          }}><option value="model">Model</option><option value="photographer">Photographer</option><option value="videographer">Videographer</option></select></label>
           <label><span>Name</span><input required maxLength={200} value={crewDraft.name} onChange={(event) => setCrewDraft({ ...crewDraft, name: event.target.value })} placeholder="Full or professional name" /></label>
           <label><span>Phone number</span><input required type="tel" maxLength={100} value={crewDraft.phone} onChange={(event) => setCrewDraft({ ...crewDraft, phone: event.target.value })} placeholder="e.g. +20 100 000 0000" /></label>
           <label><span>Portfolio / personal catalogue link <small>Optional</small></span><input type="url" maxLength={2000} value={crewDraft.profileUrl} onChange={(event) => setCrewDraft({ ...crewDraft, profileUrl: event.target.value })} placeholder="https://…" /></label>
+          {crewDraft.category === "model" && <>
+            <label><span>Model nationality</span><select required value={crewDraft.modelNationality ?? "egyptian"} onChange={(event) => setCrewDraft({ ...crewDraft, modelNationality: event.target.value as "egyptian" | "foreign" })}><option value="egyptian">Egyptian</option><option value="foreign">Foreign</option></select></label>
+            <label><span>Hourly rate · EGP <small>Optional</small></span><input type="number" min="0" step="0.01" value={crewDraft.hourlyRate ?? ""} onChange={(event) => setCrewDraft({ ...crewDraft, hourlyRate: optionalRate(event.target.value) })} placeholder="Optional hourly rate" /></label>
+            <label><span>Daily rate · EGP <small>Optional</small></span><input type="number" min="0" step="0.01" value={crewDraft.dailyRate ?? ""} onChange={(event) => setCrewDraft({ ...crewDraft, dailyRate: optionalRate(event.target.value) })} placeholder="Optional daily rate" /></label>
+          </>}
           <label className={styles.wide}><span>Notes <small>Optional</small></span><textarea rows={4} maxLength={2000} value={crewDraft.notes} onChange={(event) => setCrewDraft({ ...crewDraft, notes: event.target.value })} placeholder="Availability, style, rates, or internal notes…" /></label>
           {editingId && <label className={styles.activeToggle}><input type="checkbox" checked={crewDraft.active} onChange={(event) => setCrewDraft({ ...crewDraft, active: event.target.checked })} /><span><strong>Available for new work orders</strong><small>Turn this off to archive the person without losing their saved details.</small></span></label>}
         </div>

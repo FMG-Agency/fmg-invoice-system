@@ -13,6 +13,22 @@ const noteValue = z.string().trim().max(5000).default("");
 const webLink = z.string().trim().max(2000).refine((value) => !value || /^https?:\/\//i.test(value), "Use a full link starting with http:// or https://.");
 const optionTypes = ["photographer", "videographer", "model", "blogger", "location", "studio", "hair_stylist", "makeup_stylist", "stylist"] as const;
 const crewCategories = ["model", "photographer", "videographer"] as const;
+const optionalRate = z.number().finite().min(0, "Rates cannot be negative.").nullable();
+const crewDataSchema = z.object({
+  category: z.enum(crewCategories),
+  name: z.string().trim().min(1, "Enter the crew member's name.").max(200),
+  phone: z.string().trim().min(1, "Enter the crew member's phone number.").max(100),
+  profileUrl: webLink,
+  modelNationality: z.enum(["egyptian", "foreign"]).nullable(),
+  hourlyRate: optionalRate,
+  dailyRate: optionalRate,
+  notes: z.string().trim().max(2000),
+  active: z.boolean(),
+}).superRefine((data, context) => {
+  if (data.category === "model" && !data.modelNationality) {
+    context.addIssue({ code: "custom", path: ["modelNationality"], message: "Choose whether the model is Egyptian or foreign." });
+  }
+});
 const productionOptionSchema = z.object({
   id: z.string().trim().min(1).max(100),
   type: z.enum(optionTypes),
@@ -78,14 +94,7 @@ const payloadSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("saveCrew"),
     id: z.number().int().positive().nullable(),
-    data: z.object({
-      category: z.enum(crewCategories),
-      name: z.string().trim().min(1, "Enter the crew member's name.").max(200),
-      phone: z.string().trim().min(1, "Enter the crew member's phone number.").max(100),
-      profileUrl: webLink,
-      notes: z.string().trim().max(2000),
-      active: z.boolean(),
-    }),
+    data: crewDataSchema,
   }),
   z.object({
     action: z.literal("saveDirectorySettings"),
@@ -150,6 +159,9 @@ const productionSchema = [
     name TEXT NOT NULL,
     phone TEXT NOT NULL DEFAULT '',
     profile_url TEXT NOT NULL DEFAULT '',
+    model_nationality TEXT CHECK(model_nationality IN ('egyptian','foreign')),
+    hourly_rate REAL,
+    daily_rate REAL,
     notes TEXT NOT NULL DEFAULT '',
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -224,6 +236,25 @@ async function ensureProductionDatabase() {
         }
       }
     }
+    const crewColumns = await database.prepare("PRAGMA table_info(production_crew_members)").all<{ name: string }>();
+    const crewColumnNames = new Set(crewColumns.results.map((column) => column.name));
+    const crewAdditions = [
+      ["model_nationality", "ALTER TABLE production_crew_members ADD COLUMN model_nationality TEXT CHECK(model_nationality IN ('egyptian','foreign'))"],
+      ["hourly_rate", "ALTER TABLE production_crew_members ADD COLUMN hourly_rate REAL"],
+      ["daily_rate", "ALTER TABLE production_crew_members ADD COLUMN daily_rate REAL"],
+    ] as const;
+    for (const [name, statement] of crewAdditions) {
+      if (!crewColumnNames.has(name)) {
+        try {
+          await database.prepare(statement).run();
+        } catch (error) {
+          if (!/duplicate column name/i.test(error instanceof Error ? error.message : String(error))) throw error;
+        }
+      }
+    }
+    await database.prepare(`UPDATE production_crew_members
+      SET model_nationality = CASE WHEN LOWER(notes) LIKE '%foreign%' THEN 'foreign' ELSE 'egyptian' END
+      WHERE category = 'model' AND model_nationality IS NULL`).run();
     const documentColumns = await database.prepare("PRAGMA table_info(documents)").all<{ name: string }>();
     if (!documentColumns.results.some((column) => column.name === "production_work_order_id")) {
       try {
@@ -420,7 +451,8 @@ async function getProductionState(session: AuthSession): Promise<ProductionState
     database.prepare(`SELECT id, kind, name, price, inputs_json AS inputsJson, outputs_json AS outputsJson,
         applies_to AS appliesTo, bundle_total AS bundleTotal FROM quotation_catalog
       WHERE active = 1 ORDER BY kind DESC, sort_order, id`).all<Record<string, unknown>>(),
-    database.prepare(`SELECT id, category, name, phone, profile_url AS profileUrl, notes, active,
+    database.prepare(`SELECT id, category, name, phone, profile_url AS profileUrl,
+        model_nationality AS modelNationality, hourly_rate AS hourlyRate, daily_rate AS dailyRate, notes, active,
         created_at AS createdAt, updated_at AS updatedAt
       FROM production_crew_members ORDER BY active DESC, category, name COLLATE NOCASE`).all<Record<string, unknown>>(),
     database.prepare("SELECT model_catalog_url AS modelCatalogUrl FROM production_settings WHERE id = 1").first<{ modelCatalogUrl: string }>(),
@@ -440,6 +472,9 @@ async function getProductionState(session: AuthSession): Promise<ProductionState
     name: String(row.name ?? ""),
     phone: String(row.phone ?? ""),
     profileUrl: String(row.profileUrl ?? ""),
+    modelNationality: row.modelNationality === "foreign" ? "foreign" : row.modelNationality === "egyptian" ? "egyptian" : null,
+    hourlyRate: row.hourlyRate === null || row.hourlyRate === undefined ? null : Number(row.hourlyRate),
+    dailyRate: row.dailyRate === null || row.dailyRate === undefined ? null : Number(row.dailyRate),
     notes: String(row.notes ?? ""),
     active: Boolean(row.active),
     createdAt: String(row.createdAt ?? ""),
@@ -633,18 +668,21 @@ export async function POST(request: Request) {
 
     if (payload.action === "saveCrew") {
       if (!canManageProductionDirectory(role)) return accessDenied("Only Production, Operations, or an administrator can manage the talent and crew directory.");
+      const modelNationality = payload.data.category === "model" ? payload.data.modelNationality : null;
+      const hourlyRate = payload.data.category === "model" ? payload.data.hourlyRate : null;
+      const dailyRate = payload.data.category === "model" ? payload.data.dailyRate : null;
       if (payload.id) {
         const updated = await database.prepare(`UPDATE production_crew_members SET
-            category = ?, name = ?, phone = ?, profile_url = ?, notes = ?, active = ?, updated_at = CURRENT_TIMESTAMP
+            category = ?, name = ?, phone = ?, profile_url = ?, model_nationality = ?, hourly_rate = ?, daily_rate = ?, notes = ?, active = ?, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?`)
           .bind(payload.data.category, payload.data.name, payload.data.phone, payload.data.profileUrl,
-            payload.data.notes, payload.data.active ? 1 : 0, payload.id).run();
+            modelNationality, hourlyRate, dailyRate, payload.data.notes, payload.data.active ? 1 : 0, payload.id).run();
         if (Number(updated.meta.changes) !== 1) return Response.json({ error: "Crew member not found." }, { status: 404 });
       } else {
         await database.prepare(`INSERT INTO production_crew_members
-          (category, name, phone, profile_url, notes, active) VALUES (?, ?, ?, ?, ?, ?)`)
+          (category, name, phone, profile_url, model_nationality, hourly_rate, daily_rate, notes, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .bind(payload.data.category, payload.data.name, payload.data.phone, payload.data.profileUrl,
-            payload.data.notes, payload.data.active ? 1 : 0).run();
+            modelNationality, hourlyRate, dailyRate, payload.data.notes, payload.data.active ? 1 : 0).run();
       }
     } else if (payload.action === "saveDirectorySettings") {
       if (!canManageProductionDirectory(role)) return accessDenied("Only Production, Operations, or an administrator can manage the catalogue link.");

@@ -52,6 +52,10 @@
 .phoneLine span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .phoneLine small { color: var(--muted); font-size: 6.5px; font-weight: 850; letter-spacing: .7px; }
 .phoneLine strong { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.modelRates { margin: 8px 13px 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.modelRates > span { min-width: 0; padding: 8px 9px; border: 1px solid color-mix(in srgb, var(--yellow) 35%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--yellow) 7%, var(--surface)); display: flex; flex-direction: column; gap: 2px; }
+.modelRates small { color: var(--muted); font-size: 6px; font-weight: 850; letter-spacing: .65px; }
+.modelRates strong { overflow: hidden; color: var(--ink); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .crewCard > p { min-height: 41px; margin: 9px 13px; color: var(--muted); font-size: 8px; line-height: 1.55; }
 .crewCard > footer { min-height: 45px; padding: 9px 13px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .crewCard > footer a, .crewCard > footer button { border: 0; background: transparent; color: var(--yellow-ink); font: inherit; font-size: 8px; font-weight: 850; text-decoration: none; display: flex; align-items: center; gap: 5px; cursor: pointer; }

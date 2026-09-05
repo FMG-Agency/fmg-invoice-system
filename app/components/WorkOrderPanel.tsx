@@ -128,6 +128,20 @@ function money(value: number) {
   return `${Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })} EGP`;
 }
 
+function modelDirectoryLabel(member: ProductionState["crew"][number]) {
+  if (member.category !== "model") return "";
+  return member.modelNationality === "foreign" ? "Foreign" : "Egyptian";
+}
+
+function modelRateSummary(member: ProductionState["crew"][number]) {
+  if (member.category !== "model") return "";
+  return [
+    modelDirectoryLabel(member),
+    member.hourlyRate !== null ? `${money(member.hourlyRate)} / hour` : "",
+    member.dailyRate !== null ? `${money(member.dailyRate)} / day` : "",
+  ].filter(Boolean).join(" · ");
+}
+
 function CatalogDetails({ label, name, price, inputs, outputs }: { label: string; name: string; price: number; inputs: string[]; outputs: string[] }) {
   return <article className={styles.catalogDetails}>
     <header><span>{label}</span><strong>{name}</strong><b>{money(price)}</b></header>
@@ -234,9 +248,10 @@ function ProductionOptionsEditor({ options, crew, modelCatalogUrl, onChange }: {
             const crewMemberId = event.target.value === "manual" ? null : Number(event.target.value);
             const member = crew.find((item) => item.id === crewMemberId);
             patch(option.id, { crewMemberId, name: member?.name ?? "" });
-          }}><option value="manual">Use someone not listed</option>{availableCrew.map((member) => <option key={member.id} value={member.id}>{member.name}{isCameraCrew ? ` · ${optionLabels[member.category]}` : ""}{member.phone ? ` · ${member.phone}` : ""}</option>)}</select></label>}
+          }}><option value="manual">Use someone not listed</option>{availableCrew.map((member) => <option key={member.id} value={member.id}>{member.name}{isCameraCrew ? ` · ${optionLabels[member.category]}` : member.category === "model" ? ` · ${modelDirectoryLabel(member)}` : ""}{member.phone ? ` · ${member.phone}` : ""}</option>)}</select></label>}
           <label><span>Name / details</span><input required maxLength={300} value={option.name} onChange={(event) => patch(option.id, { name: event.target.value })} placeholder={`Enter ${optionLabels[option.type].toLowerCase()} name`} /></label>
           {selectedMember?.phone && <small className={styles.memberPhone}>Saved phone · {selectedMember.phone}</small>}
+          {selectedMember?.category === "model" && <small className={styles.memberRate}>{modelRateSummary(selectedMember)}</small>}
           {option.type === "model" && (selectedMember?.profileUrl || modelCatalogUrl) && <div className={styles.catalogueHint}><span>Need to check the model first?</span>{selectedMember?.profileUrl && <a href={selectedMember.profileUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} /> View {selectedMember.name}&apos;s portfolio</a>}{modelCatalogUrl && <a href={modelCatalogUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} /> Open model catalogue</a>}</div>}
         </div>
         <label><span>Price treatment</span><select value={option.billingMode} onChange={(event) => patch(option.id, { billingMode: event.target.value as ProductionCostOption["billingMode"] })}><option value="included">Included in bundle</option><option value="extra">Extra cost</option></select></label>

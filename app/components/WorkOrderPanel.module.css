@@ -219,6 +219,7 @@
 .resourceField { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .resourceField > label { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .memberPhone { margin-top: -1px; color: var(--muted); font-size: 7px; font-weight: 750; }
+.memberRate { margin-top: -2px; color: var(--yellow-ink); font-size: 7px; font-weight: 850; }
 .catalogueHint { padding: 7px 8px; border: 1px solid color-mix(in srgb, var(--yellow) 45%, var(--line)); border-radius: 7px; background: color-mix(in srgb, var(--yellow) 9%, var(--surface)); display: flex; flex-wrap: wrap; align-items: center; gap: 5px 9px; }
 .catalogueHint > span { width: 100%; color: var(--muted); font-size: 7px; font-weight: 750; }
 .catalogueHint a { color: var(--yellow-ink); font-size: 7.5px; font-weight: 850; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
