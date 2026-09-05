@@ -346,9 +346,12 @@ test("ships the locked Media Guide production workflow", async () => {
   assert.match(workOrder, /Custom add-on/);
   assert.match(workOrder, /previewOrder\.addons\.map/);
   assert.match(workOrder, /completing\.addons\.map/);
-  assert.match(productionApi, /role !== "account_manager"/);
-  assert.match(productionApi, /role !== "production_manager"/);
-  assert.match(productionApi, /role !== "operation_manager"/);
+  assert.match(productionApi, /role !== "account_manager" && role !== "operation_manager" && role !== "administrator"/);
+  assert.match(productionApi, /role !== "production_manager" && role !== "operation_manager" && role !== "administrator"/);
+  assert.match(productionApi, /role !== "operation_manager" && role !== "administrator"/);
+  assert.match(workOrder, /state\.role === "account_manager" \|\| state\.role === "operation_manager" \|\| state\.role === "administrator"/);
+  assert.match(workOrder, /state\.role === "production_manager" \|\| state\.role === "operation_manager" \|\| state\.role === "administrator"/);
+  assert.doesNotMatch(productionApi, /role === "operation_manager"[\s\S]{0,120}pending_operations/);
   assert.match(productionApi, /action: z\.literal\("finalApprove"\)/);
   assert.match(productionApi, /WHERE id = \? AND status = 'pending_production'/);
   assert.match(productionApi, /WHERE id = \? AND status = 'ready_for_operations' AND final_approved_at = ''/);

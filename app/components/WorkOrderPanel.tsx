@@ -352,8 +352,8 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
       ? left.workDate.localeCompare(right.workDate) || right.createdAt.localeCompare(left.createdAt)
       : right.createdAt.localeCompare(left.createdAt));
   }, [dateFrom, dateTo, filter, searchQuery, sortOrder, state.orders]);
-  const canCreate = state.role === "account_manager" || state.role === "administrator";
-  const canComplete = state.role === "production_manager" || state.role === "administrator";
+  const canCreate = state.role === "account_manager" || state.role === "operation_manager" || state.role === "administrator";
+  const canComplete = state.role === "production_manager" || state.role === "operation_manager" || state.role === "administrator";
   const canFinalApprove = state.role === "operation_manager" || state.role === "administrator";
 
   function toggleOrderDetails(orderId: number) {

@@ -429,11 +429,9 @@ async function getProductionState(session: AuthSession): Promise<ProductionState
   const allOrders = ordersResult.results.map(mapOrder);
   const orders = role === "account_manager"
     ? allOrders.filter((order) => order.createdByUserId === session.userId)
-    : role === "operation_manager"
-      ? allOrders.filter((order) => order.status === "pending_operations" || order.status === "final_approved")
-      : role === "viewer"
-        ? []
-        : allOrders;
+    : role === "viewer"
+      ? []
+      : allOrders;
 
   const canManageDirectory = canManageProductionDirectory(role);
   const crew = crewResult.results.map((row): ProductionCrewMember => ({
@@ -664,7 +662,7 @@ export async function POST(request: Request) {
         database.prepare("DELETE FROM production_work_orders WHERE id = ?").bind(payload.id),
       ]);
     } else if (payload.action === "create") {
-      if (role !== "account_manager" && role !== "administrator") return accessDenied("Only an Account Manager can create and submit a work order.");
+      if (role !== "account_manager" && role !== "operation_manager" && role !== "administrator") return accessDenied("Only an Account Manager, Operation Manager, or administrator can create and submit a work order.");
       const { client, bundle, addons } = await resolveScope(payload.data);
       const primaryAddon = addons[0] ?? null;
 
@@ -691,7 +689,7 @@ export async function POST(request: Request) {
         actorUserId: session.userId,
       });
     } else if (payload.action === "complete") {
-      if (role !== "production_manager" && role !== "administrator") return accessDenied("Only a Production Manager can complete and approve this work order.");
+      if (role !== "production_manager" && role !== "operation_manager" && role !== "administrator") return accessDenied("Only a Production Manager, Operation Manager, or administrator can complete and approve this work order.");
       const actorName = displayName(session);
       const options = payload.data.options as ProductionCostOption[];
       const updated = await database.prepare(`UPDATE production_work_orders SET
