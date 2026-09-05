@@ -19,7 +19,7 @@ test("builds the FMG production entrypoint", async () => {
 });
 
 test("ships the complete product, protected access, HR payroll, and Vercel storage adapters", async () => {
-  const [component, clientAccountComponent, accessComponent, requestsComponent, hrComponent, api, clientAccountsApi, clientAccountsLib, usersApi, requestsApi, requestAttachmentApi, hrApi, hrImportApi, hrExportApi, hrExport, hrLib, pdf, pdfApi, authApi, authServer, permissions, database, vercel, migration, authMigration, hrMigration, multiUserMigration, requestsMigration, payrollRulesMigration, quotationCatalogMigration, catalogIoMigration, companyMigration, clientAccountsMigration, policyV2Migration] = await Promise.all([
+  const [component, clientAccountComponent, accessComponent, requestsComponent, hrComponent, api, clientAccountsApi, clientAccountsLib, usersApi, requestsApi, requestAttachmentApi, hrApi, hrImportApi, hrExportApi, hrExport, hrLib, pdf, documentDate, pdfApi, authApi, authServer, permissions, database, vercel, migration, authMigration, hrMigration, multiUserMigration, requestsMigration, payrollRulesMigration, quotationCatalogMigration, catalogIoMigration, companyMigration, clientAccountsMigration, policyV2Migration] = await Promise.all([
     readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
     readFile(new URL("app/components/ClientAccountPanel.tsx", root), "utf8"),
     readFile(new URL("app/components/AccessPanel.tsx", root), "utf8"),
@@ -37,6 +37,7 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
     readFile(new URL("app/lib/hr-export.ts", root), "utf8"),
     readFile(new URL("app/lib/hr.ts", root), "utf8"),
     readFile(new URL("app/lib/pdf.ts", root), "utf8"),
+    readFile(new URL("app/lib/document-date.ts", root), "utf8"),
     readFile(new URL("app/api/pdf/[id]/route.ts", root), "utf8"),
     readFile(new URL("app/api/auth/route.ts", root), "utf8"),
     readFile(new URL("app/lib/auth-server.ts", root), "utf8"),
@@ -216,6 +217,12 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(clientAccountsLib, /outstanding: Math\.max\(0, netBalance\)/);
   assert.match(clientAccountsMigration, /CREATE TABLE `client_financial_transactions`/);
   assert.match(component, /digital-empire-logo\.png/);
+  assert.match(component, /function DocumentDateInput/);
+  assert.match(component, /placeholder="DD\/MM\/YYYY"/);
+  assert.match(component, /formatDocumentDate\(item\.date \|\| draft\.date\)/);
+  assert.match(pdf, /formatDocumentDate\(draft\.date\)/);
+  assert.match(pdf, /formatDocumentDate\(item\.date \|\| draft\.date\)/);
+  assert.match(documentDate, /`\$\{match\[3\]\}\/\$\{match\[2\]\}\/\$\{match\[1\]\}`/);
   assert.match(component, /mediaGuideSelected &&/);
   assert.match(component, /const mediaGuideSelected = isMediaGuideCategory\(category\)/);
   assert.doesNotMatch(component, /const mediaGuideSelected = type === "quotation"/);

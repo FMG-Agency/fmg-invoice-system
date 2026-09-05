@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import type { Category, Client, DocumentDraft } from "../types";
+import { formatDocumentDate } from "./document-date";
 
 const BLACK = "#111111";
 const YELLOW = "#ffdf00";
@@ -156,10 +157,10 @@ function itemRow(doc: jsPDF, draft: DocumentDraft, item: DocumentDraft["items"][
   const invoice = draft.type === "invoice";
   const values = mediaGuideDocument
     ? invoice
-      ? [item.date || draft.date, quotationNameText(item), quotationInputsText(item), quotationOutputsText(item), formatMoney(item.qty * item.unitPrice, draft.currency)]
+      ? [formatDocumentDate(item.date || draft.date), quotationNameText(item), quotationInputsText(item), quotationOutputsText(item), formatMoney(item.qty * item.unitPrice, draft.currency)]
       : [quotationNameText(item), quotationInputsText(item), quotationOutputsText(item), formatMoney(item.qty * item.unitPrice, draft.currency)]
     : invoice
-      ? [String(index + 1), item.date || draft.date, item.description, String(item.qty), formatMoney(item.unitPrice, ""), formatMoney(item.qty * item.unitPrice, "")]
+      ? [String(index + 1), formatDocumentDate(item.date || draft.date), item.description, String(item.qty), formatMoney(item.unitPrice, ""), formatMoney(item.qty * item.unitPrice, "")]
       : [String(index + 1), quotationScopeText(item), String(item.qty), item.unit, formatMoney(item.unitPrice, ""), formatMoney(item.qty * item.unitPrice, "")];
   const rowHeight = itemRowHeight(doc, draft, item, widths, mediaGuideDocument);
   let x = 14;
@@ -284,8 +285,8 @@ export async function generateDocumentPdf(draft: DocumentDraft, client: Client, 
   drawHeader();
   band(doc, `${draft.type === "invoice" ? "INVOICE" : "QUOTATION"} INFORMATION  /`, 39, theme);
   const infoRows: Array<[string, string, string, string]> = [
-    [draft.type === "invoice" ? "INVOICE NO." : "QUOTATION NO.", generatedCode, "DATE", draft.date],
-    ["VALID UNTIL", draft.validUntil || draft.date, "PREPARED BY", draft.preparedBy],
+    [draft.type === "invoice" ? "INVOICE NO." : "QUOTATION NO.", generatedCode, "DATE", formatDocumentDate(draft.date)],
+    ["VALID UNTIL", formatDocumentDate(draft.validUntil || draft.date), "PREPARED BY", draft.preparedBy],
   ];
   if (draft.type === "quotation") infoRows.push(["CURRENCY", draft.currency, "PROJECT", draft.project || category.name]);
   let y = infoGrid(doc, infoRows, 49, theme) + 5;
