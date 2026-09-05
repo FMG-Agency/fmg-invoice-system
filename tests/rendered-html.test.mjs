@@ -427,6 +427,31 @@ test("ships role-targeted in-app and device push notifications", async () => {
   db.close();
 });
 
+test("ships branded FMG install and browser icons", async () => {
+  const layout = await readFile(new URL("app/layout.tsx", root), "utf8");
+  const manifest = JSON.parse(await readFile(new URL("public/manifest.webmanifest", root), "utf8"));
+  const serviceWorker = await readFile(new URL("public/sw.js", root), "utf8");
+  const favicon = await readFile(new URL("public/favicon.svg", root), "utf8");
+
+  assert.match(layout, /app-icon-192\.png/);
+  assert.match(layout, /apple-touch-icon\.png/);
+  assert.deepEqual(manifest.icons.map((icon) => icon.src), [
+    "/app-icon-192.png",
+    "/app-icon-512.png",
+    "/app-icon-maskable-512.png",
+  ]);
+  assert.equal(manifest.icons.at(-1).purpose, "maskable");
+  assert.match(serviceWorker, /icon: "\/app-icon-192\.png"/);
+  assert.match(favicon, /#FFDD00/);
+  await Promise.all([
+    "favicon-32.png",
+    "app-icon-192.png",
+    "app-icon-512.png",
+    "app-icon-maskable-512.png",
+    "apple-touch-icon.png",
+  ].map((file) => access(new URL(`public/${file}`, root))));
+});
+
 test("ships the Production talent and crew directory with work-order pickers", async () => {
   const [component, directory, directoryStyles, workOrder, productionApi, migration] = await Promise.all([
     readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),

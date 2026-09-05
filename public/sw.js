@@ -7,8 +7,8 @@ self.addEventListener("push", (event) => {
   }
   event.waitUntil(self.registration.showNotification(payload.title || "FMG System", {
     body: payload.body || "You have a new update.",
-    icon: "/fmg-logo-dark.png",
-    badge: "/favicon.svg",
+    icon: "/app-icon-192.png",
+    badge: "/favicon-32.png",
     tag: payload.tag || "fmg-system-update",
     renotify: true,
     data: { url: payload.url || "/", id: payload.id || null },

@@ -14,6 +14,15 @@ export async function generateMetadata(): Promise<Metadata> {
     description,
     applicationName: "FMG Agency System",
     manifest: "/manifest.webmanifest",
+    icons: {
+      icon: [
+        { url: "/favicon.svg", type: "image/svg+xml" },
+        { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+        { url: "/app-icon-192.png", sizes: "192x192", type: "image/png" },
+      ],
+      shortcut: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+      apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    },
     appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "FMG System" },
     openGraph: { title, description, type: "website", url: origin, images: [{ url: `${origin}/og.png`, width: 1730, height: 909, alt: "FMG Invoice & Quotation System" }] },
     twitter: { card: "summary_large_image", title, description, images: [`${origin}/og.png`] },
