@@ -219,9 +219,12 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(component, /digital-empire-logo\.png/);
   assert.match(component, /function DocumentDateInput/);
   assert.match(component, /placeholder="DD\/MM\/YYYY"/);
-  assert.match(component, /formatDocumentDate\(item\.date \|\| draft\.date\)/);
+  assert.match(component, /draft\.type === "invoice" && <th>#<\/th>/);
+  assert.match(component, /items\.map\(\(item, index\) => <tr key=\{item\.id\}>\{draft\.type === "invoice" && <td>\{index \+ 1\}<\/td>/);
   assert.match(pdf, /formatDocumentDate\(draft\.date\)/);
-  assert.match(pdf, /formatDocumentDate\(item\.date \|\| draft\.date\)/);
+  assert.doesNotMatch(pdf, /formatDocumentDate\(item\.date \|\| draft\.date\)/);
+  assert.match(pdf, /\["#", addonGroup \? "ADD-ON NAME" : "BUNDLE NAME"/);
+  assert.match(pdf, /\["#", "SERVICE \/ DELIVERABLE", "QTY", "PRICE", "TOTAL"\]/);
   assert.match(documentDate, /`\$\{match\[3\]\}\/\$\{match\[2\]\}\/\$\{match\[1\]\}`/);
   assert.match(component, /mediaGuideSelected &&/);
   assert.match(component, /const mediaGuideSelected = isMediaGuideCategory\(category\)/);
@@ -251,7 +254,7 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(pdf, /item\.includedServices\.length/);
   assert.match(component, /paper-scope-name/);
   assert.doesNotMatch(pdf, /const mediaGuideQuotation = draft\.type === "quotation"/);
-  assert.match(pdf, /\["DATE", addonGroup \? "ADD-ON NAME" : "BUNDLE NAME", "INPUTS", "OUTPUTS"/);
+  assert.match(pdf, /\["#", addonGroup \? "ADD-ON NAME" : "BUNDLE NAME", "INPUTS", "OUTPUTS"/);
   assert.match(pdf, /band\(doc, "PAYMENT & NOTES  \/", y, theme\)/);
   assert.match(pdf, /const showPaymentNotes = draft\.type !== "invoice" \|\| Boolean\(draft\.paymentTerms\.trim\(\) \|\| draft\.notesExclusions\.trim\(\)\)/);
   assert.match(pdf, /const paymentNotesHeight = showPaymentNotes/);

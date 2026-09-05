@@ -93,14 +93,14 @@ function infoGrid(doc: jsPDF, rows: Array<[string, string, string, string]>, y: 
 function itemHeader(doc: jsPDF, draft: DocumentDraft, y: number, mediaGuideDocument: boolean, theme: PdfTheme, addonGroup = false) {
   const invoice = draft.type === "invoice";
   const widths = mediaGuideDocument
-    ? invoice ? [24, 39, 48, 43, 28] : [45, 57, 45, 35]
-    : invoice ? [10, 25, 81, 15, 25, 26] : [10, 76, 18, 22, 26, 30];
+    ? invoice ? [10, 44, 53, 47, 28] : [45, 57, 45, 35]
+    : invoice ? [10, 106, 15, 25, 26] : [10, 76, 18, 22, 26, 30];
   const labels = mediaGuideDocument
     ? invoice
-      ? ["DATE", addonGroup ? "ADD-ON NAME" : "BUNDLE NAME", "INPUTS", "OUTPUTS", `PRICE · ${draft.currency}`]
+      ? ["#", addonGroup ? "ADD-ON NAME" : "BUNDLE NAME", "INPUTS", "OUTPUTS", `PRICE · ${draft.currency}`]
       : [addonGroup ? "ADD-ON NAME" : "BUNDLE NAME", "INPUTS", "OUTPUTS", `PRICE · ${draft.currency}`]
     : invoice
-    ? ["NO.", "DATE", "SERVICE / DELIVERABLE", "QTY", "PRICE", "TOTAL"]
+    ? ["#", "SERVICE / DELIVERABLE", "QTY", "PRICE", "TOTAL"]
     : ["#", "SERVICE / DELIVERABLE", "QTY", "UNIT", "PRICE", "TOTAL"];
   let x = 14;
   labels.forEach((label, index) => {
@@ -157,10 +157,10 @@ function itemRow(doc: jsPDF, draft: DocumentDraft, item: DocumentDraft["items"][
   const invoice = draft.type === "invoice";
   const values = mediaGuideDocument
     ? invoice
-      ? [formatDocumentDate(item.date || draft.date), quotationNameText(item), quotationInputsText(item), quotationOutputsText(item), formatMoney(item.qty * item.unitPrice, draft.currency)]
+      ? [String(index + 1), quotationNameText(item), quotationInputsText(item), quotationOutputsText(item), formatMoney(item.qty * item.unitPrice, draft.currency)]
       : [quotationNameText(item), quotationInputsText(item), quotationOutputsText(item), formatMoney(item.qty * item.unitPrice, draft.currency)]
     : invoice
-      ? [String(index + 1), formatDocumentDate(item.date || draft.date), item.description, String(item.qty), formatMoney(item.unitPrice, ""), formatMoney(item.qty * item.unitPrice, "")]
+      ? [String(index + 1), item.description, String(item.qty), formatMoney(item.unitPrice, ""), formatMoney(item.qty * item.unitPrice, "")]
       : [String(index + 1), quotationScopeText(item), String(item.qty), item.unit, formatMoney(item.unitPrice, ""), formatMoney(item.qty * item.unitPrice, "")];
   const rowHeight = itemRowHeight(doc, draft, item, widths, mediaGuideDocument);
   let x = 14;
@@ -179,7 +179,7 @@ function itemRow(doc: jsPDF, draft: DocumentDraft, item: DocumentDraft["items"][
       const lines = doc.splitTextToSize(processed, widths[cell] - 5) as string[];
       doc.text(lines, x + 2.5, y + 5, { lineHeightFactor: 1.15 });
     } else {
-      const leftAligned = invoice ? cell === 2 : cell === 1;
+      const leftAligned = cell === 1;
       text(doc, value.trim(), leftAligned ? x + 2.5 : x + widths[cell] / 2, y + Math.min(6.2, rowHeight / 2 + 2), {
         align: leftAligned ? "left" : "center",
         fontSize: 7,
