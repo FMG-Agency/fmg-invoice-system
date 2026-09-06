@@ -40,25 +40,29 @@ async function listUsers() {
     LEFT JOIN employees e ON e.id = u.employee_id
     LEFT JOIN clients c ON c.id = u.client_id
     ORDER BY u.is_admin DESC, u.active DESC, u.display_name COLLATE NOCASE`).all<Record<string, unknown>>();
-  return result.results.map((row) => ({
-    id: Number(row.id),
-    username: String(row.username ?? ""),
-    displayName: String(row.displayName ?? ""),
-    roleLabel: String(row.roleLabel ?? "Team Member"),
-    isAdmin: Number(row.isAdmin) === 1,
-    active: Number(row.active) === 1,
-    permissions: effectivePermissions(
+  return result.results.map((row) => {
+    const permissions = effectivePermissions(
       parsePermissions(String(row.permissionsJson ?? "[]")),
       String(row.roleLabel ?? "Team Member"),
       Number(row.isAdmin) === 1,
-    ),
-    employeeId: row.employeeId === null || row.employeeId === undefined ? null : Number(row.employeeId),
-    employeeName: String(row.employeeName ?? ""),
-    clientId: row.clientId === null || row.clientId === undefined ? null : Number(row.clientId),
-    clientName: String(row.clientName ?? ""),
-    createdAt: String(row.createdAt ?? ""),
-    updatedAt: String(row.updatedAt ?? ""),
-  }));
+    );
+    if ((row.clientId === null || row.clientId === undefined) && !permissions.includes("tasks")) permissions.push("tasks");
+    return {
+      id: Number(row.id),
+      username: String(row.username ?? ""),
+      displayName: String(row.displayName ?? ""),
+      roleLabel: String(row.roleLabel ?? "Team Member"),
+      isAdmin: Number(row.isAdmin) === 1,
+      active: Number(row.active) === 1,
+      permissions,
+      employeeId: row.employeeId === null || row.employeeId === undefined ? null : Number(row.employeeId),
+      employeeName: String(row.employeeName ?? ""),
+      clientId: row.clientId === null || row.clientId === undefined ? null : Number(row.clientId),
+      clientName: String(row.clientName ?? ""),
+      createdAt: String(row.createdAt ?? ""),
+      updatedAt: String(row.updatedAt ?? ""),
+    };
+  });
 }
 
 async function listEmployees() {

@@ -141,6 +141,13 @@
       "when": 1788620050286,
       "tag": "0019_odd_doctor_faustus",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1788704086391,
+      "tag": "0020_amazing_virginia_dare",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ export const ACCESS_PERMISSIONS = [
   { key: "attendance", label: "Attendance & payroll", description: "Biometric imports, attendance reviews, payroll, and Excel exports." },
   { key: "requests", label: "Employee Requests", description: "Submit leave, early-leave excuse, and work-mission requests or review assigned requests." },
   { key: "production", label: "Production", description: "Create, complete, receive, and print locked Media Guide production work orders." },
+  { key: "tasks", label: "Tasks", description: "Receive assigned work, submit completed tasks, and track daily delivery." },
   { key: "categories", label: "Categories", description: "Service categories, prefixes, counters, and document footers." },
   { key: "all_data", label: "All Data", description: "Document archive, statuses, downloads, and deletion." },
   { key: "settings", label: "Settings", description: "Personal login credentials; agency defaults remain administrator-only." },
@@ -27,6 +28,7 @@ export const OPERATION_MANAGER_PERMISSIONS: AccessPermission[] = [
   "all_data",
   "requests",
   "production",
+  "tasks",
 ];
 
 export const ACCOUNT_MANAGER_PERMISSIONS: AccessPermission[] = [
@@ -34,11 +36,13 @@ export const ACCOUNT_MANAGER_PERMISSIONS: AccessPermission[] = [
   "clients",
   "client_portal",
   "production",
+  "tasks",
 ];
 
 export const PRODUCTION_MANAGER_PERMISSIONS: AccessPermission[] = [
   "dashboard",
   "production",
+  "tasks",
 ];
 
 const permissionSet = new Set<string>(ALL_ACCESS_PERMISSIONS);

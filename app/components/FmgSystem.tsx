@@ -7,6 +7,7 @@ import {
   CalendarRange,
   Camera,
   Check,
+  CheckCircle2,
   ChevronDown,
   CircleDollarSign,
   ClipboardList,
@@ -57,10 +58,11 @@ import { AttendancePanel, EmployeesPanel, type HrMutation } from "./HrPanels";
 import { LoginCredentialsPanel } from "./LoginCredentialsPanel";
 import { NotificationCenter } from "./NotificationCenter";
 import { RequestsPanel } from "./RequestsPanel";
+import { TasksPanel } from "./TasksPanel";
 import { ProductionDirectoryPanel } from "./ProductionDirectoryPanel";
 import { WorkOrderPanel } from "./WorkOrderPanel";
 
-type View = "dashboard" | "invoice" | "quotation" | "media-guide" | "work-order" | "production-directory" | "clients" | "client-accounts" | "monthly-clients" | "client-portal-admin" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
+type View = "dashboard" | "tasks" | "invoice" | "quotation" | "media-guide" | "work-order" | "production-directory" | "clients" | "client-accounts" | "monthly-clients" | "client-portal-admin" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
 type Mutation = (body: Record<string, unknown>) => Promise<AppState>;
 const companyNames: Record<CompanyKey, string> = { fmg: "FMG Agency", digital_empire: "The Digital Empire" };
 type AuthState = {
@@ -181,6 +183,7 @@ const emptyHrState: HrState = {
 
 const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof LayoutDashboard; permission: AccessPermission | "users" }> = [
   { id: "dashboard", label: "Dashboard", eyebrow: "Overview", icon: LayoutDashboard, permission: "dashboard" },
+  { id: "tasks", label: "Tasks", eyebrow: "Assign, deliver & track", icon: CheckCircle2, permission: "tasks" },
   { id: "invoice", label: "New Invoice", eyebrow: "Create", icon: ReceiptText, permission: "invoices" },
   { id: "quotation", label: "New Quotation", eyebrow: "Create", icon: FilePlus2, permission: "quotations" },
   { id: "media-guide", label: "Media Guide Catalog", eyebrow: "Bundles & add-ons", icon: Sparkles, permission: "quotations" },
@@ -201,11 +204,12 @@ const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof L
 
 type NavGroupId = "production" | "documents" | "clients" | "services" | "people" | "administration";
 type NavSection =
-  | { id: "dashboard"; item: View }
+  | { id: "dashboard" | "tasks"; item: View }
   | { id: NavGroupId; label: string; eyebrow: string; icon: typeof LayoutDashboard; items: View[] };
 
 const navSections: NavSection[] = [
   { id: "dashboard", item: "dashboard" },
+  { id: "tasks", item: "tasks" },
   { id: "production", label: "Production", eyebrow: "Orders, talent & crew", icon: FilePenLine, items: ["work-order", "production-directory"] },
   { id: "documents", label: "Documents", eyebrow: "Create & archive", icon: FileText, items: ["invoice", "quotation", "data"] },
   { id: "clients", label: "Clients", eyebrow: "Directory & experience", icon: UsersRound, items: ["clients", "client-accounts", "monthly-clients", "client-portal-admin"] },
@@ -225,6 +229,7 @@ function navGroupForView(next: View): NavGroupId | null {
 
 const viewCopy: Record<View, { eyebrow: string; title: string; description: string }> = {
   dashboard: { eyebrow: "FMG CONTROL CENTER", title: "Good evening, FMG.", description: "Your agency documents, clients, and activity in one calm workspace." },
+  tasks: { eyebrow: "TEAM DELIVERY", title: "Tasks", description: "Assign daily work, keep briefs and references together, and measure every delivery against its deadline." },
   invoice: { eyebrow: "CREATE DOCUMENT", title: "New invoice", description: "Select a client and category, then add the billable work." },
   quotation: { eyebrow: "CREATE DOCUMENT", title: "New quotation", description: "Turn a scoped project into a polished client proposal." },
   "media-guide": { eyebrow: "MEDIA GUIDE SERVICES", title: "Bundles and add-ons", description: "Manage every reusable Media Guide bundle, included service, add-on, and EGP price." },
@@ -720,6 +725,7 @@ export function FmgSystem() {
           </div>
 
           {view === "dashboard" && <Dashboard state={state} hrState={hrState} chooseView={chooseView} canOpenView={canOpenView} />}
+          {view === "tasks" && <TasksPanel showToast={showToast} />}
           {view === "clients" && <ClientsPanel clients={state.clients} mutate={mutate} busy={busy} showToast={showToast} />}
           {view === "client-accounts" && <ClientFinancePanel mode="accounts" initialClients={state.clients} showToast={showToast} />}
           {view === "monthly-clients" && <ClientFinancePanel mode="monthly" initialClients={state.clients} showToast={showToast} />}
@@ -753,7 +759,7 @@ export function FmgSystem() {
       </main>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {accessibleNavItems.filter((item) => ["dashboard", "invoice", "quotation", "work-order", "client-portal-admin", "employees", "attendance", "requests"].includes(item.id)).slice(0, 5).map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => chooseView(item.id)}><Icon size={19} /><span>{item.label.replace("New ", "")}</span></button>; })}
+        {accessibleNavItems.filter((item) => ["dashboard", "tasks", "invoice", "quotation", "work-order", "client-portal-admin", "employees", "attendance", "requests"].includes(item.id)).slice(0, 5).map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => chooseView(item.id)}><Icon size={19} /><span>{item.label.replace("New ", "")}</span></button>; })}
       </nav>
       {toast && <div className="toast"><Check size={17} /><span>{toast}</span></div>}
     </div>

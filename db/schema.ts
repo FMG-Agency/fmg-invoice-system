@@ -287,6 +287,33 @@ export const authAttempts = sqliteTable("auth_attempts", {
   resetAt: integer("reset_at").notNull(),
 });
 
+export const agencyTasks = sqliteTable("agency_tasks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  details: text("details").notNull().default(""),
+  brief: text("brief").notNull().default(""),
+  gridNotes: text("grid_notes").notNull().default(""),
+  referencesJson: text("references_json").notNull().default("[]"),
+  startAt: text("start_at").notNull(),
+  deadlineAt: text("deadline_at").notNull(),
+  assignedUserId: integer("assigned_user_id").notNull().references(() => authUsers.id),
+  assignedUserName: text("assigned_user_name").notNull(),
+  assignedUserRole: text("assigned_user_role").notNull().default("Team Member"),
+  createdByUserId: integer("created_by_user_id").notNull().references(() => authUsers.id),
+  createdByName: text("created_by_name").notNull(),
+  createdByRole: text("created_by_role").notNull().default("Team Member"),
+  status: text("status", { enum: ["assigned", "submitted"] }).notNull().default("assigned"),
+  submissionUrl: text("submission_url").notNull().default(""),
+  submittedAt: text("submitted_at").notNull().default(""),
+  lateMinutes: integer("late_minutes").notNull().default(0),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("idx_agency_tasks_assignee_status_deadline").on(table.assignedUserId, table.status, table.deadlineAt),
+  index("idx_agency_tasks_schedule").on(table.startAt, table.deadlineAt),
+  index("idx_agency_tasks_creator").on(table.createdByUserId, table.createdAt),
+]);
+
 export const employees = sqliteTable("employees", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   biometricCode: text("biometric_code").notNull().default(""),

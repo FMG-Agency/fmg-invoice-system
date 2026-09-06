@@ -205,13 +205,15 @@ export async function getSession(request: Request): Promise<AuthSession | null> 
     .first<{ userId: number; username: string; displayName: string; roleLabel: string; isAdmin: number; permissionsJson: string; employeeId: number | null; clientId: number | null }>();
   if (!row) return null;
   const isAdmin = Number(row.isAdmin) === 1;
+  const permissions = effectivePermissions(parsePermissions(row.permissionsJson), row.roleLabel, isAdmin);
+  if (row.clientId === null && !permissions.includes("tasks")) permissions.push("tasks");
   return {
     userId: Number(row.userId),
     username: row.username,
     displayName: row.displayName,
     roleLabel: row.roleLabel,
     isAdmin,
-    permissions: effectivePermissions(parsePermissions(row.permissionsJson), row.roleLabel, isAdmin),
+    permissions,
     employeeId: row.employeeId === null || row.employeeId === undefined ? null : Number(row.employeeId),
     clientId: row.clientId === null || row.clientId === undefined ? null : Number(row.clientId),
   };

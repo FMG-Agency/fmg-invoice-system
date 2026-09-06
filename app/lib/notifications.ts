@@ -62,7 +62,7 @@ function mapNotification(row: Record<string, unknown>): SystemNotification {
     type: String(row.type ?? "system"),
     title: String(row.title ?? "FMG System"),
     message: String(row.message ?? ""),
-    targetView: target === "work-order" || target === "requests" ? target : "dashboard",
+    targetView: target === "work-order" || target === "requests" || target === "tasks" ? target : "dashboard",
     entityId: row.entityId === null || row.entityId === undefined ? null : Number(row.entityId),
     read: Boolean(String(row.readAt ?? "")),
     createdAt: String(row.createdAt ?? ""),

@@ -853,3 +853,48 @@ test("adds employee request routing and the employee-account link to an existing
   assert.ok(columns.rows.some((column) => column.name === "employee_id"));
   db.close();
 });
+
+test("ships role-aware task assignment, daily tracking, submission, lateness, and notifications", async () => {
+  const [component, tasksComponent, tasksApi, tasksLib, permissions, notifications, schema, migration] = await Promise.all([
+    readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
+    readFile(new URL("app/components/TasksPanel.tsx", root), "utf8"),
+    readFile(new URL("app/api/tasks/route.ts", root), "utf8"),
+    readFile(new URL("app/lib/tasks.ts", root), "utf8"),
+    readFile(new URL("app/lib/permissions.ts", root), "utf8"),
+    readFile(new URL("app/lib/notifications.ts", root), "utf8"),
+    readFile(new URL("db/schema.ts", root), "utf8"),
+    readFile(new URL("drizzle/0020_amazing_virginia_dare.sql", root), "utf8"),
+  ]);
+  assert.match(component, /TasksPanel/);
+  assert.match(component, /label: "Tasks"/);
+  assert.match(permissions, /key: "tasks"/);
+  assert.match(tasksComponent, /Add reference/);
+  assert.match(tasksComponent, /Brief/);
+  assert.match(tasksComponent, /Grid \/ layout direction/);
+  assert.match(tasksComponent, /Completed work link/);
+  assert.match(tasksComponent, /DAILY DELIVERY BOARD/);
+  assert.match(tasksComponent, /All team members/);
+  assert.match(tasksApi, /Only administrators, Operation Managers, and Account Managers can assign tasks/);
+  assert.match(tasksApi, /Only the assigned user can submit this task/);
+  assert.match(tasksApi, /lateMinutes/);
+  assert.match(tasksApi, /targetView: "tasks"/);
+  assert.match(tasksLib, /role !== "account_manager"/);
+  assert.match(tasksLib, /isAdmin/);
+  assert.match(tasksLib, /operation/);
+  assert.match(tasksLib, /Africa\/Cairo/);
+  assert.match(tasksLib, /Math\.ceil\(\(nowEpoch - deadlineEpoch\) \/ 60_000\)/);
+  assert.match(notifications, /target === "tasks"/);
+  assert.match(schema, /agencyTasks/);
+  assert.match(migration, /CREATE TABLE `agency_tasks`/);
+  assert.match(migration, /idx_agency_tasks_assignee_status_deadline/);
+
+  const db = createClient({ url: "file::memory:" });
+  await db.executeMultiple("CREATE TABLE auth_users (id INTEGER PRIMARY KEY); INSERT INTO auth_users (id) VALUES (1), (2);");
+  await db.executeMultiple(migration);
+  await db.execute(`INSERT INTO agency_tasks
+    (title, details, start_at, deadline_at, assigned_user_id, assigned_user_name, created_by_user_id, created_by_name)
+    VALUES ('Campaign grid', 'Build the September grid', '2026-09-06T11:00', '2026-09-06T19:00', 2, 'Designer', 1, 'Operations')`);
+  const task = await db.execute("SELECT title, status, late_minutes AS lateMinutes FROM agency_tasks");
+  assert.deepEqual(task.rows[0], { title: "Campaign grid", status: "assigned", lateMinutes: 0 });
+  db.close();
+});

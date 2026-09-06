@@ -474,7 +474,7 @@ export type RequestsState = {
   pendingCount: number;
 };
 
-export type NotificationTargetView = "dashboard" | "work-order" | "requests";
+export type NotificationTargetView = "dashboard" | "work-order" | "requests" | "tasks";
 
 export type SystemNotification = {
   id: number;
@@ -492,6 +492,56 @@ export type NotificationsState = {
   unreadCount: number;
   pushConfigured: boolean;
   vapidPublicKey: string;
+};
+
+export type TaskReference = {
+  label: string;
+  url: string;
+};
+
+export type AgencyTaskStatus = "assigned" | "submitted";
+
+export type TaskAssignee = {
+  id: number;
+  displayName: string;
+  username: string;
+  roleLabel: string;
+  employeeId: number | null;
+  employeeTitle: string;
+};
+
+export type AgencyTask = {
+  id: number;
+  title: string;
+  details: string;
+  brief: string;
+  gridNotes: string;
+  references: TaskReference[];
+  startAt: string;
+  deadlineAt: string;
+  assignedUserId: number;
+  assignedUserName: string;
+  assignedUserRole: string;
+  createdByUserId: number;
+  createdByName: string;
+  createdByRole: string;
+  status: AgencyTaskStatus;
+  submissionUrl: string;
+  submittedAt: string;
+  lateMinutes: number;
+  liveLateMinutes: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TasksState = {
+  tasks: AgencyTask[];
+  assignees: TaskAssignee[];
+  userId: number;
+  role: "administrator" | "operation_manager" | "account_manager" | "member";
+  canCreate: boolean;
+  canViewDaily: boolean;
+  currentDate: string;
 };
 
 export type ProductionWorkflowRole = "account_manager" | "production_manager" | "operation_manager" | "administrator" | "viewer";
