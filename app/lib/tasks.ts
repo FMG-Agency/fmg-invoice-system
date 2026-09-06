@@ -35,9 +35,7 @@ const taskSchema = [
 let tasksDatabaseReady: Promise<void> | null = null;
 
 export async function ensureTasksDatabase() {
-  tasksDatabaseReady ??= database.batch(taskSchema.map((statement) => database.prepare(statement))).then(async () => {
-    await database.prepare("PRAGMA optimize").run();
-  });
+  tasksDatabaseReady ??= database.batch(taskSchema.map((statement) => database.prepare(statement))).then(() => undefined);
   try {
     await tasksDatabaseReady;
   } catch (error) {
