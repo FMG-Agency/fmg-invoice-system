@@ -212,6 +212,7 @@ export const productionWorkOrders = sqliteTable("production_work_orders", {
   bundlePrice: real("bundle_price").notNull().default(0),
   bundleInputsJson: text("bundle_inputs_json").notNull().default("[]"),
   bundleOutputsJson: text("bundle_outputs_json").notNull().default("[]"),
+  bundlesJson: text("bundles_json").notNull().default("[]"),
   addonCatalogId: integer("addon_catalog_id").references(() => quotationCatalog.id),
   addonName: text("addon_name").notNull().default(""),
   addonPrice: real("addon_price").notNull().default(0),

@@ -295,7 +295,7 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
 });
 
 test("ships the locked Media Guide production workflow", async () => {
-  const [component, workOrder, workOrderStyles, productionApi, permissions, migration, finalApprovalMigration, costingMigration, multiAddonMigration] = await Promise.all([
+  const [component, workOrder, workOrderStyles, productionApi, permissions, migration, finalApprovalMigration, costingMigration, multiAddonMigration, multiBundleMigration] = await Promise.all([
     readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
     readFile(new URL("app/components/WorkOrderPanel.tsx", root), "utf8"),
     readFile(new URL("app/components/WorkOrderPanel.module.css", root), "utf8"),
@@ -305,6 +305,7 @@ test("ships the locked Media Guide production workflow", async () => {
     readFile(new URL("drizzle/0012_demonic_gunslinger.sql", root), "utf8"),
     readFile(new URL("drizzle/0013_third_mimic.sql", root), "utf8"),
     readFile(new URL("drizzle/0017_brown_goblin_queen.sql", root), "utf8"),
+    readFile(new URL("drizzle/0021_modern_dazzler.sql", root), "utf8"),
   ]);
   assert.match(permissions, /key: "production"/);
   assert.match(component, /label: "Production"/);
@@ -351,8 +352,12 @@ test("ships the locked Media Guide production workflow", async () => {
   assert.match(workOrderStyles, /\.orderGrid \{[^}]*gap: 20px/);
   assert.match(workOrderStyles, /\.optionsTable th:nth-child\(4\) \{ width: 24%; \}/);
   assert.doesNotMatch(workOrderStyles, /\.optionsTable th:nth-child\(3\) \{ width: 55%; \}/);
-  assert.match(workOrder, /Only production options marked Extra cost are added above the bundle price/);
+  assert.match(workOrder, /Only production options marked Extra cost are added above the selected bundle prices/);
   assert.match(workOrder, /Choose more than one or create a custom item/);
+  assert.match(workOrder, /Choose one or more Media Guide bundles/);
+  assert.match(workOrder, /ORDER CREATED/);
+  assert.match(workOrder, /Admin edit/);
+  assert.match(workOrder, /Administrator correction/);
   assert.match(workOrder, /Custom add-on/);
   assert.match(workOrder, /previewOrder\.addons\.map/);
   assert.match(workOrder, /completing\.addons\.map/);
@@ -370,6 +375,11 @@ test("ships the locked Media Guide production workflow", async () => {
   assert.match(productionApi, /option\.billingMode === "extra" \? option\.price : 0/);
   assert.match(productionApi, /input\.options\.filter\(\(option\) => option\.billingMode === "extra"\)/);
   assert.match(productionApi, /addons: z\.array\(addonSelectionSchema\)\.max\(20/);
+  assert.match(productionApi, /bundles: z\.array\(bundleSelectionSchema\)\.min\(1/);
+  assert.match(productionApi, /action: z\.literal\("adminEdit"\)/);
+  assert.match(productionApi, /Only an administrator can edit a work order before final approval/);
+  assert.match(productionApi, /without changing its approval stage/);
+  assert.match(productionApi, /input\.scope\.bundles\.map/);
   assert.match(productionApi, /input\.scope\.addons\.map/);
   assert.match(productionApi, /addons_json/);
   assert.match(productionApi, /Only an administrator can delete production work orders/);
@@ -388,6 +398,7 @@ test("ships the locked Media Guide production workflow", async () => {
   assert.match(multiAddonMigration, /Rana Wagih/);
   assert.match(multiAddonMigration, /Ahmed Attia/);
   assert.match(multiAddonMigration, /Foreign model/);
+  assert.match(multiBundleMigration, /ADD `bundles_json`/);
   assert.match(workOrderStyles, /size: A4 landscape/);
 });
 

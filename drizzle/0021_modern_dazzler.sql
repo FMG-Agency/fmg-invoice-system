@@ -1,0 +1,1 @@
+ALTER TABLE `production_work_orders` ADD `bundles_json` text DEFAULT '[]' NOT NULL;

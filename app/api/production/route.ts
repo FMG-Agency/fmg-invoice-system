@@ -2,7 +2,7 @@ import { z } from "zod";
 import { database } from "../../lib/database";
 import { getSession, requirePermission, type AuthSession } from "../../lib/auth-server";
 import { notifyUsers, workflowRecipientUserIds } from "../../lib/notifications";
-import type { ProductionCostOption, ProductionCrewMember, ProductionState, ProductionWorkflowRole, ProductionWorkOrder, ProductionWorkOrderAddon } from "../../types";
+import type { ProductionCostOption, ProductionCrewMember, ProductionState, ProductionWorkflowRole, ProductionWorkOrder, ProductionWorkOrderAddon, ProductionWorkOrderBundle } from "../../types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -37,6 +37,17 @@ const productionOptionSchema = z.object({
   price: z.number().finite().min(0, "Production option prices cannot be negative."),
   billingMode: z.enum(["included", "extra"]).default("included"),
 });
+const bundleSelectionSchema = z.object({
+  id: z.string().trim().min(1).max(100),
+  catalogId: z.number().int().positive(),
+});
+const storedBundleSchema = bundleSelectionSchema.extend({
+  name: z.string().trim().min(1).max(300),
+  price: z.number().finite().min(0),
+  inputs: z.array(z.string()).max(30),
+  outputs: z.array(z.string()).max(30),
+  bundleTotal: z.number().finite().min(0).nullable().default(null),
+});
 const addonDetail = z.string().trim().min(1).max(300);
 const addonSelectionSchema = z.object({
   id: z.string().trim().min(1).max(100),
@@ -57,7 +68,7 @@ const payloadSchema = z.discriminatedUnion("action", [
     data: z.object({
       documentType: z.literal("media_guide"),
       clientId: z.number().int().positive(),
-      bundleCatalogId: z.number().int().positive(),
+      bundles: z.array(bundleSelectionSchema).min(1, "Choose at least one Media Guide bundle.").max(10, "Choose no more than 10 bundles."),
       addons: z.array(addonSelectionSchema).max(20, "Choose no more than 20 add-ons."),
       workDate: dateValue,
       accountNote: noteValue,
@@ -77,11 +88,26 @@ const payloadSchema = z.discriminatedUnion("action", [
     id: z.number().int().positive(),
     data: z.object({
       clientId: z.number().int().positive(),
-      bundleCatalogId: z.number().int().positive(),
+      bundles: z.array(bundleSelectionSchema).min(1, "Choose at least one Media Guide bundle.").max(10, "Choose no more than 10 bundles."),
       addons: z.array(addonSelectionSchema).max(20, "Choose no more than 20 add-ons."),
       workDate: dateValue,
       callTime: timeValue,
       options: z.array(productionOptionSchema).min(1, "Add at least one production option.").max(30),
+      accountNote: noteValue,
+      productionNote: noteValue,
+      operationNote: noteValue,
+    }),
+  }),
+  z.object({
+    action: z.literal("adminEdit"),
+    id: z.number().int().positive(),
+    data: z.object({
+      clientId: z.number().int().positive(),
+      bundles: z.array(bundleSelectionSchema).min(1, "Choose at least one Media Guide bundle.").max(10, "Choose no more than 10 bundles."),
+      addons: z.array(addonSelectionSchema).max(20, "Choose no more than 20 add-ons."),
+      workDate: dateValue,
+      callTime: z.union([timeValue, z.literal("")]),
+      options: z.array(productionOptionSchema).max(30),
       accountNote: noteValue,
       productionNote: noteValue,
       operationNote: noteValue,
@@ -113,6 +139,7 @@ const productionSchema = [
     bundle_price REAL NOT NULL DEFAULT 0,
     bundle_inputs_json TEXT NOT NULL DEFAULT '[]',
     bundle_outputs_json TEXT NOT NULL DEFAULT '[]',
+    bundles_json TEXT NOT NULL DEFAULT '[]',
     addon_catalog_id INTEGER REFERENCES quotation_catalog(id),
     addon_name TEXT NOT NULL DEFAULT '',
     addon_price REAL NOT NULL DEFAULT 0,
@@ -220,6 +247,7 @@ async function ensureProductionDatabase() {
       ["bundle_price", "ALTER TABLE production_work_orders ADD COLUMN bundle_price REAL NOT NULL DEFAULT 0"],
       ["bundle_inputs_json", "ALTER TABLE production_work_orders ADD COLUMN bundle_inputs_json TEXT NOT NULL DEFAULT '[]'"],
       ["bundle_outputs_json", "ALTER TABLE production_work_orders ADD COLUMN bundle_outputs_json TEXT NOT NULL DEFAULT '[]'"],
+      ["bundles_json", "ALTER TABLE production_work_orders ADD COLUMN bundles_json TEXT NOT NULL DEFAULT '[]'"],
       ["addon_price", "ALTER TABLE production_work_orders ADD COLUMN addon_price REAL NOT NULL DEFAULT 0"],
       ["addon_inputs_json", "ALTER TABLE production_work_orders ADD COLUMN addon_inputs_json TEXT NOT NULL DEFAULT '[]'"],
       ["addon_outputs_json", "ALTER TABLE production_work_orders ADD COLUMN addon_outputs_json TEXT NOT NULL DEFAULT '[]'"],
@@ -269,6 +297,16 @@ async function ensureProductionDatabase() {
       bundle_inputs_json = COALESCE((SELECT inputs_json FROM quotation_catalog WHERE id = bundle_catalog_id), bundle_inputs_json),
       bundle_outputs_json = COALESCE((SELECT outputs_json FROM quotation_catalog WHERE id = bundle_catalog_id), bundle_outputs_json)
       WHERE bundle_inputs_json = '[]'`).run();
+    await database.prepare(`UPDATE production_work_orders SET bundles_json = json_array(json_object(
+        'id', 'legacy-bundle-' || id,
+        'catalogId', bundle_catalog_id,
+        'name', bundle_name,
+        'price', bundle_price,
+        'inputs', json(bundle_inputs_json),
+        'outputs', json(bundle_outputs_json),
+        'bundleTotal', NULL
+      ))
+      WHERE bundles_json = '[]' AND bundle_name <> ''`).run();
     await database.prepare(`UPDATE production_work_orders SET
       addon_price = COALESCE((SELECT price FROM quotation_catalog WHERE id = addon_catalog_id), addon_price),
       addon_inputs_json = COALESCE((SELECT inputs_json FROM quotation_catalog WHERE id = addon_catalog_id), addon_inputs_json),
@@ -324,6 +362,26 @@ function stringArray(value: unknown) {
   }
 }
 
+function workOrderBundles(row: Record<string, unknown>): ProductionWorkOrderBundle[] {
+  try {
+    const parsed = z.array(storedBundleSchema).safeParse(JSON.parse(String(row.bundlesJson ?? "[]")));
+    if (parsed.success && parsed.data.length) return parsed.data;
+  } catch {
+    // Fall through to the legacy single bundle snapshot.
+  }
+  const name = String(row.bundleName ?? "").trim();
+  if (!name) return [];
+  return [{
+    id: `legacy-bundle-${String(row.id ?? "")}`,
+    catalogId: Number(row.bundleCatalogId),
+    name,
+    price: Number(row.bundlePrice ?? 0),
+    inputs: stringArray(row.bundleInputsJson),
+    outputs: stringArray(row.bundleOutputsJson),
+    bundleTotal: null,
+  }];
+}
+
 function workOrderAddons(row: Record<string, unknown>): ProductionWorkOrderAddon[] {
   try {
     const parsed = z.array(storedAddonSchema).safeParse(JSON.parse(String(row.addonsJson ?? "[]")));
@@ -374,7 +432,10 @@ function mapOrder(row: Record<string, unknown>): ProductionWorkOrder {
     ? finalApprovedAt ? "final_approved" : "pending_operations"
     : "pending_production";
   const options = productionOptions(row);
-  const bundlePrice = Number(row.bundlePrice ?? 0);
+  const bundles = workOrderBundles(row);
+  const primaryBundle = bundles[0] ?? null;
+  const bundlePrice = primaryBundle?.price ?? Number(row.bundlePrice ?? 0);
+  const bundlesTotal = bundles.reduce((total, bundle) => total + bundle.price, 0);
   const addons = workOrderAddons(row);
   const primaryAddon = addons[0] ?? null;
   const addonsTotal = addons.reduce((total, addon) => total + addon.price, 0);
@@ -385,11 +446,13 @@ function mapOrder(row: Record<string, unknown>): ProductionWorkOrder {
     documentType: "media_guide",
     clientId: Number(row.clientId),
     clientName: String(row.clientName ?? ""),
-    bundleCatalogId: Number(row.bundleCatalogId),
-    bundleName: String(row.bundleName ?? ""),
+    bundleCatalogId: primaryBundle?.catalogId ?? Number(row.bundleCatalogId),
+    bundleName: primaryBundle?.name ?? String(row.bundleName ?? ""),
     bundlePrice,
-    bundleInputs: stringArray(row.bundleInputsJson),
-    bundleOutputs: stringArray(row.bundleOutputsJson),
+    bundleInputs: primaryBundle?.inputs ?? stringArray(row.bundleInputsJson),
+    bundleOutputs: primaryBundle?.outputs ?? stringArray(row.bundleOutputsJson),
+    bundles,
+    bundlesTotal,
     addonCatalogId: primaryAddon?.catalogId ?? null,
     addonName: primaryAddon?.name ?? "",
     addonPrice: primaryAddon?.price ?? 0,
@@ -407,7 +470,7 @@ function mapOrder(row: Record<string, unknown>): ProductionWorkOrder {
     operationNote: String(row.operationNote ?? ""),
     productionOptions: options,
     productionOptionsTotal,
-    workOrderTotal: bundlePrice + addonsTotal + productionOptionsTotal,
+    workOrderTotal: bundlesTotal + addonsTotal + productionOptionsTotal,
     status,
     createdByUserId: Number(row.createdByUserId),
     createdByName: String(row.createdByName ?? ""),
@@ -431,7 +494,7 @@ async function getProductionState(session: AuthSession): Promise<ProductionState
   const [ordersResult, clientsResult, catalogResult, crewResult, settingsResult] = await Promise.all([
     database.prepare(`SELECT p.id, p.document_type AS documentType, p.client_id AS clientId, p.client_name AS clientName,
         p.bundle_catalog_id AS bundleCatalogId, p.bundle_name AS bundleName, p.bundle_price AS bundlePrice,
-        p.bundle_inputs_json AS bundleInputsJson, p.bundle_outputs_json AS bundleOutputsJson,
+        p.bundle_inputs_json AS bundleInputsJson, p.bundle_outputs_json AS bundleOutputsJson, p.bundles_json AS bundlesJson,
         p.addon_catalog_id AS addonCatalogId, p.addon_name AS addonName, p.addon_price AS addonPrice,
         p.addon_inputs_json AS addonInputsJson, p.addon_outputs_json AS addonOutputsJson, p.addons_json AS addonsJson,
         p.work_date AS workDate, p.call_time AS callTime, p.location, p.model_name AS modelName,
@@ -512,23 +575,29 @@ function accessDenied(message: string) {
   return Response.json({ error: message, code: "PRODUCTION_ROLE_REQUIRED" }, { status: 403 });
 }
 
-async function resolveScope(data: { clientId: number; bundleCatalogId: number; addons: z.infer<typeof addonSelectionSchema>[] }) {
-  const [client, bundleRow] = await Promise.all([
+async function resolveScope(data: { clientId: number; bundles: z.infer<typeof bundleSelectionSchema>[]; addons: z.infer<typeof addonSelectionSchema>[] }) {
+  const bundleCatalogIds = data.bundles.map((bundle) => bundle.catalogId);
+  if (new Set(bundleCatalogIds).size !== bundleCatalogIds.length) throw new Error("The same bundle cannot be selected more than once.");
+  const [client, bundleRows] = await Promise.all([
     database.prepare("SELECT COALESCE(NULLIF(company_name, ''), name) AS name, agency_key AS agencyKey FROM clients WHERE id = ?")
       .bind(data.clientId).first<{ name: string; agencyKey: string }>(),
-    database.prepare(`SELECT id, name, price, inputs_json AS inputsJson, outputs_json AS outputsJson,
-        applies_to AS appliesTo, bundle_total AS bundleTotal
+    Promise.all(bundleCatalogIds.map((catalogId) => database.prepare(`SELECT id, name, price, inputs_json AS inputsJson, outputs_json AS outputsJson,
+        bundle_total AS bundleTotal
       FROM quotation_catalog WHERE id = ? AND kind = 'package' AND active = 1`)
-      .bind(data.bundleCatalogId).first<Record<string, unknown>>(),
+      .bind(catalogId).first<Record<string, unknown>>())),
   ]);
   if (!client) throw new Error("The selected client is no longer available.");
-  if (!bundleRow) throw new Error("The selected Media Guide bundle is no longer available.");
-  const bundle = {
-    id: Number(bundleRow.id), name: String(bundleRow.name ?? ""), price: Number(bundleRow.price ?? 0),
-    inputs: stringArray(bundleRow.inputsJson), outputs: stringArray(bundleRow.outputsJson),
-    appliesTo: String(bundleRow.appliesTo ?? ""),
-    bundleTotal: bundleRow.bundleTotal === null || bundleRow.bundleTotal === undefined ? null : Number(bundleRow.bundleTotal),
-  };
+  if (bundleRows.some((bundleRow) => !bundleRow)) throw new Error("One of the selected Media Guide bundles is no longer available.");
+  const bundles = bundleRows.map((bundleRow, index): ProductionWorkOrderBundle => ({
+    id: data.bundles[index].id,
+    catalogId: Number(bundleRow!.id),
+    name: String(bundleRow!.name ?? ""),
+    price: Number(bundleRow!.price ?? 0),
+    inputs: stringArray(bundleRow!.inputsJson),
+    outputs: stringArray(bundleRow!.outputsJson),
+    bundleTotal: bundleRow!.bundleTotal === null || bundleRow!.bundleTotal === undefined ? null : Number(bundleRow!.bundleTotal),
+  }));
+  const selectedBundleNames = new Set(bundles.map((bundle) => bundle.name.toLowerCase()));
 
   const catalogIds = data.addons.flatMap((addon) => addon.catalogId ? [addon.catalogId] : []);
   if (new Set(catalogIds).size !== catalogIds.length) throw new Error("The same add-on cannot be selected more than once.");
@@ -558,12 +627,12 @@ async function resolveScope(data: { clientId: number; bundleCatalogId: number; a
       appliesTo: String(addonRow.appliesTo ?? ""),
       bundleTotal: addonRow.bundleTotal === null || addonRow.bundleTotal === undefined ? null : Number(addonRow.bundleTotal),
     };
-    if (addon.appliesTo && addon.appliesTo.toLowerCase() !== bundle.name.toLowerCase()) {
-      throw new Error(`${addon.name} is not available for the selected bundle.`);
+    if (addon.appliesTo && !selectedBundleNames.has(addon.appliesTo.toLowerCase())) {
+      throw new Error(`${addon.name} is not available for the selected bundles.`);
     }
     return addon;
   }));
-  return { client, bundle, addons };
+  return { client, bundles, addons };
 }
 
 const productionOptionLabels: Record<ProductionCostOption["type"], string> = {
@@ -606,8 +675,8 @@ async function ensureDraftInvoice(input: {
     unitPrice: price, kind, catalogId, includedServices: inputs, inputs, outputs, appliesTo, bundleTotal,
   });
   const items = [
-    lineItem(`wo-${input.workOrderId}-bundle`, input.scope.bundle.name, input.scope.bundle.price, "package", input.scope.bundle.id,
-      input.scope.bundle.inputs, input.scope.bundle.outputs, "", input.scope.bundle.bundleTotal),
+    ...input.scope.bundles.map((bundle, index) => lineItem(`wo-${input.workOrderId}-bundle-${index + 1}`, bundle.name, bundle.price,
+      "package", bundle.catalogId, bundle.inputs, bundle.outputs, "", bundle.bundleTotal)),
     ...input.scope.addons.map((addon, index) => lineItem(`wo-${input.workOrderId}-addon-${index + 1}`, addon.name, addon.price,
       addon.catalogId ? "addon" : "custom", addon.catalogId, addon.inputs, addon.outputs, addon.appliesTo, addon.bundleTotal)),
     ...input.options.filter((option) => option.billingMode === "extra").map((option, index) => lineItem(`wo-${input.workOrderId}-option-${index + 1}`,
@@ -639,7 +708,7 @@ function errorResponse(error: unknown) {
     ? error.issues[0]?.message ?? "Invalid work order data."
     : error instanceof Error ? error.message : "Unexpected production workflow error.";
   const conflict = /already been completed|no longer pending|already received final approval/i.test(message);
-  const invalidSelection = /selected .+ no longer available|add-on is not available|same add-on cannot be selected/i.test(message);
+  const invalidSelection = /selected .+ no longer available|add-on is not available|same (?:add-on|bundle) cannot be selected|at least one Media Guide bundle/i.test(message);
   return Response.json({ error: message }, { status: conflict ? 409 : error instanceof z.ZodError || invalidSelection ? 400 : 500 });
 }
 
@@ -701,16 +770,17 @@ export async function POST(request: Request) {
       ]);
     } else if (payload.action === "create") {
       if (role !== "account_manager" && role !== "operation_manager" && role !== "administrator") return accessDenied("Only an Account Manager, Operation Manager, or administrator can create and submit a work order.");
-      const { client, bundle, addons } = await resolveScope(payload.data);
+      const { client, bundles, addons } = await resolveScope(payload.data);
+      const bundle = bundles[0];
       const primaryAddon = addons[0] ?? null;
 
       const actorName = displayName(session);
       const inserted = await database.prepare(`INSERT INTO production_work_orders
-        (document_type, client_id, client_name, bundle_catalog_id, bundle_name, bundle_price, bundle_inputs_json, bundle_outputs_json,
+        (document_type, client_id, client_name, bundle_catalog_id, bundle_name, bundle_price, bundle_inputs_json, bundle_outputs_json, bundles_json,
           addon_catalog_id, addon_name, addon_price, addon_inputs_json, addon_outputs_json, addons_json,
           work_date, account_note, status, created_by_user_id, created_by_name, created_by_role)
-        VALUES ('media_guide', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_production', ?, ?, ?)`)
-        .bind(payload.data.clientId, client.name, bundle.id, bundle.name, bundle.price, JSON.stringify(bundle.inputs), JSON.stringify(bundle.outputs),
+        VALUES ('media_guide', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_production', ?, ?, ?)`)
+        .bind(payload.data.clientId, client.name, bundle.catalogId, bundle.name, bundle.price, JSON.stringify(bundle.inputs), JSON.stringify(bundle.outputs), JSON.stringify(bundles),
           primaryAddon?.catalogId ?? null, primaryAddon?.name ?? "", primaryAddon?.price ?? 0, JSON.stringify(primaryAddon?.inputs ?? []), JSON.stringify(primaryAddon?.outputs ?? []), JSON.stringify(addons),
           payload.data.workDate, payload.data.accountNote, session.userId, actorName, session.roleLabel).run();
       const workOrderId = Number(inserted.meta.last_row_id);
@@ -752,10 +822,45 @@ export async function POST(request: Request) {
         entityId: payload.id,
         actorUserId: session.userId,
       });
+    } else if (payload.action === "adminEdit") {
+      if (!session.isAdmin) return accessDenied("Only an administrator can edit a work order before final approval.");
+      const existing = await database.prepare(`SELECT id, status, final_approved_at AS finalApprovedAt,
+          created_by_user_id AS createdByUserId, production_manager_user_id AS productionManagerUserId
+        FROM production_work_orders WHERE id = ?`)
+        .bind(payload.id).first<{ id: number; status: string; finalApprovedAt: string; createdByUserId: number; productionManagerUserId: number | null }>();
+      if (!existing) return Response.json({ error: "Work order not found." }, { status: 404 });
+      if (existing.finalApprovedAt) throw new Error("This work order has already received final approval and is permanently locked.");
+      const { client, bundles, addons } = await resolveScope(payload.data);
+      const bundle = bundles[0];
+      const primaryAddon = addons[0] ?? null;
+      const options = payload.data.options as ProductionCostOption[];
+      const updated = await database.prepare(`UPDATE production_work_orders SET
+          client_id = ?, client_name = ?, bundle_catalog_id = ?, bundle_name = ?, bundle_price = ?, bundle_inputs_json = ?, bundle_outputs_json = ?, bundles_json = ?,
+          addon_catalog_id = ?, addon_name = ?, addon_price = ?, addon_inputs_json = ?, addon_outputs_json = ?, addons_json = ?,
+          work_date = ?, photographer_name = ?, model_name = ?, location = ?, call_time = ?, production_options_json = ?,
+          account_note = ?, production_note = ?, operation_note = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND final_approved_at = ''`)
+        .bind(payload.data.clientId, client.name, bundle.catalogId, bundle.name, bundle.price, JSON.stringify(bundle.inputs), JSON.stringify(bundle.outputs), JSON.stringify(bundles),
+          primaryAddon?.catalogId ?? null, primaryAddon?.name ?? "", primaryAddon?.price ?? 0, JSON.stringify(primaryAddon?.inputs ?? []), JSON.stringify(primaryAddon?.outputs ?? []), JSON.stringify(addons),
+          payload.data.workDate, firstOption(options, "photographer"), firstOption(options, "model"), firstOption(options, "location") || firstOption(options, "studio"),
+          payload.data.callTime, JSON.stringify(options), payload.data.accountNote, payload.data.productionNote, payload.data.operationNote, payload.id).run();
+      if (Number(updated.meta.changes) !== 1) throw new Error("This work order has already received final approval and is permanently locked.");
+      const workflowRecipients = await workflowRecipientUserIds(existing.status === "pending_production" ? "production_manager" : "operation_manager", session.userId);
+      const recipients = [...new Set([existing.createdByUserId, ...(existing.productionManagerUserId ? [existing.productionManagerUserId] : []), ...workflowRecipients])]
+        .filter((userId) => userId !== session.userId);
+      await notifyUsers(recipients, {
+        type: "work_order_admin_edited",
+        title: `${codeFor(payload.id)} updated by Administrator`,
+        message: `${displayName(session)} corrected ${client.name}'s work order without changing its approval stage.`,
+        targetView: "work-order",
+        entityId: payload.id,
+        actorUserId: session.userId,
+      });
     } else {
       if (role !== "operation_manager" && role !== "administrator") return accessDenied("Only an Operation Manager can edit and give final approval to this work order.");
       const scope = await resolveScope(payload.data);
-      const { client, bundle, addons } = scope;
+      const { client, bundles, addons } = scope;
+      const bundle = bundles[0];
       const primaryAddon = addons[0] ?? null;
       const actorName = displayName(session);
       const options = payload.data.options as ProductionCostOption[];
@@ -775,14 +880,14 @@ export async function POST(request: Request) {
         scope,
       });
       const updated = await database.prepare(`UPDATE production_work_orders SET
-          client_id = ?, client_name = ?, bundle_catalog_id = ?, bundle_name = ?, bundle_price = ?, bundle_inputs_json = ?, bundle_outputs_json = ?,
+          client_id = ?, client_name = ?, bundle_catalog_id = ?, bundle_name = ?, bundle_price = ?, bundle_inputs_json = ?, bundle_outputs_json = ?, bundles_json = ?,
           addon_catalog_id = ?, addon_name = ?, addon_price = ?, addon_inputs_json = ?, addon_outputs_json = ?, addons_json = ?,
           work_date = ?, photographer_name = ?, model_name = ?, location = ?, call_time = ?, production_options_json = ?,
           account_note = ?, production_note = ?, operation_note = ?, draft_invoice_id = ?,
           operation_manager_user_id = ?, operation_manager_name = ?, final_approved_at = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ? AND status = 'ready_for_operations' AND final_approved_at = ''`)
-        .bind(payload.data.clientId, client.name, bundle.id, bundle.name, bundle.price, JSON.stringify(bundle.inputs), JSON.stringify(bundle.outputs),
+        .bind(payload.data.clientId, client.name, bundle.catalogId, bundle.name, bundle.price, JSON.stringify(bundle.inputs), JSON.stringify(bundle.outputs), JSON.stringify(bundles),
           primaryAddon?.catalogId ?? null, primaryAddon?.name ?? "", primaryAddon?.price ?? 0, JSON.stringify(primaryAddon?.inputs ?? []), JSON.stringify(primaryAddon?.outputs ?? []), JSON.stringify(addons),
           payload.data.workDate, firstOption(options, "photographer"), firstOption(options, "model"), firstOption(options, "location") || firstOption(options, "studio"),
           payload.data.callTime, JSON.stringify(options), payload.data.accountNote, payload.data.productionNote, payload.data.operationNote, draftInvoice.id,

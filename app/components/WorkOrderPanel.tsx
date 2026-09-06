@@ -18,6 +18,7 @@ import {
   LockKeyhole,
   NotebookPen,
   PackageCheck,
+  Pencil,
   Plus,
   Printer,
   Search,
@@ -28,13 +29,13 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ProductionCatalogOption, ProductionCostOption, ProductionCrewCategory, ProductionOptionType, ProductionState, ProductionWorkOrder, ProductionWorkOrderAddon } from "../types";
+import type { ProductionCatalogOption, ProductionCostOption, ProductionCrewCategory, ProductionOptionType, ProductionState, ProductionWorkOrder, ProductionWorkOrderAddon, ProductionWorkOrderBundle } from "../types";
 import styles from "./WorkOrderPanel.module.css";
 
 type AccountDraft = {
   documentType: "media_guide";
   clientId: number;
-  bundleCatalogId: number;
+  bundles: ProductionWorkOrderBundle[];
   addons: ProductionWorkOrderAddon[];
   workDate: string;
   accountNote: string;
@@ -48,7 +49,7 @@ type ProductionDraft = {
 
 type OperationDraft = {
   clientId: number;
-  bundleCatalogId: number;
+  bundles: ProductionWorkOrderBundle[];
   addons: ProductionWorkOrderAddon[];
   workDate: string;
   callTime: string;
@@ -81,11 +82,19 @@ function cairoToday() {
 }
 
 function blankAccountDraft(): AccountDraft {
-  return { documentType: "media_guide", clientId: 0, bundleCatalogId: 0, addons: [], workDate: cairoToday(), accountNote: "" };
+  return { documentType: "media_guide", clientId: 0, bundles: [], addons: [], workDate: cairoToday(), accountNote: "" };
 }
 
 function blankProductionDraft(): ProductionDraft {
   return { callTime: "", options: [], productionNote: "" };
+}
+
+function productionDraftFrom(order: ProductionWorkOrder): ProductionDraft {
+  return {
+    callTime: order.callTime,
+    options: order.productionOptions.map((option) => ({ ...option, price: productionOptionPrice(option) })),
+    productionNote: order.productionNote,
+  };
 }
 
 function productionOptionPrice(option: ProductionCostOption) {
@@ -95,7 +104,7 @@ function productionOptionPrice(option: ProductionCostOption) {
 function operationDraftFrom(order: ProductionWorkOrder): OperationDraft {
   return {
     clientId: order.clientId,
-    bundleCatalogId: order.bundleCatalogId,
+    bundles: order.bundles.map((bundle) => ({ ...bundle, inputs: [...bundle.inputs], outputs: [...bundle.outputs] })),
     addons: order.addons.map((addon) => ({ ...addon, inputs: [...addon.inputs], outputs: [...addon.outputs] })),
     workDate: order.workDate,
     callTime: order.callTime,
@@ -149,6 +158,53 @@ function CatalogDetails({ label, name, price, inputs, outputs }: { label: string
   </article>;
 }
 
+function bundleFromCatalog(bundle: ProductionCatalogOption): ProductionWorkOrderBundle {
+  return {
+    id: `catalog-bundle-${bundle.id}`,
+    catalogId: bundle.id,
+    name: bundle.name,
+    price: bundle.price,
+    inputs: [...bundle.inputs],
+    outputs: [...bundle.outputs],
+    bundleTotal: bundle.bundleTotal,
+  };
+}
+
+function BundlesEditor({ available, selected, onChange }: {
+  available: ProductionCatalogOption[];
+  selected: ProductionWorkOrderBundle[];
+  onChange: (bundles: ProductionWorkOrderBundle[]) => void;
+}) {
+  const selectedIds = new Set(selected.map((bundle) => bundle.catalogId));
+  const availableIds = new Set(available.map((bundle) => bundle.id));
+  const choices = [...available, ...selected.filter((bundle) => !availableIds.has(bundle.catalogId)).map((bundle): ProductionCatalogOption => ({
+    id: bundle.catalogId,
+    kind: "package",
+    name: bundle.name,
+    price: bundle.price,
+    inputs: bundle.inputs,
+    outputs: bundle.outputs,
+    appliesTo: "",
+    bundleTotal: bundle.bundleTotal,
+  }))];
+  const total = selected.reduce((sum, bundle) => sum + Number(bundle.price || 0), 0);
+  return <section className={styles.addonsEditor}>
+    <header><div><span>BUNDLES</span><strong>Choose one or more Media Guide bundles</strong><small>Each bundle keeps its own inputs, outputs, and price in the final order.</small></div></header>
+    <div className={styles.addonChoices}>{choices.map((bundle) => {
+      const checked = selectedIds.has(bundle.id);
+      const unavailable = !availableIds.has(bundle.id);
+      return <label key={bundle.id} className={checked ? styles.addonChoiceSelected : styles.addonChoice}>
+        <input type="checkbox" checked={checked} disabled={!checked && selected.length >= 10} onChange={(event) => onChange(event.target.checked
+          ? [...selected, bundleFromCatalog(bundle)]
+          : selected.filter((item) => item.catalogId !== bundle.id))} />
+        <span><strong>{bundle.name}</strong><small>{unavailable ? "No longer available · remove or choose another" : bundle.inputs.join(" · ") || "Saved bundle"}</small></span><b>{money(bundle.price)}</b>
+      </label>;
+    })}</div>
+    {!choices.length && <div className={styles.addonsEmpty}>No active Media Guide bundles are available.</div>}
+    <footer><span>{selected.length} bundle{selected.length === 1 ? "" : "s"} selected</span><strong>{money(total)}</strong></footer>
+  </section>;
+}
+
 function addonFromCatalog(addon: ProductionCatalogOption): ProductionWorkOrderAddon {
   return {
     id: `catalog-addon-${addon.id}`,
@@ -193,7 +249,7 @@ function AddonsEditor({ available, selected, bundleSelected, onChange }: {
   const patchCustom = (id: string, values: Partial<ProductionWorkOrderAddon>) => onChange(selected.map((addon) => addon.id === id ? { ...addon, ...values } : addon));
   return <section className={styles.addonsEditor}>
     <header><div><span>ADD-ONS</span><strong>Choose more than one or create a custom item</strong><small>Every selected item is saved separately with its inputs, outputs, and price.</small></div><button type="button" className="secondary-button" disabled={!bundleSelected || selected.length >= 20} onClick={() => onChange([...selected, newCustomAddon()])}><Plus size={15} /> Custom add-on</button></header>
-    {!bundleSelected ? <div className={styles.addonsEmpty}>Choose a bundle first to see its add-ons.</div> : <>
+    {!bundleSelected ? <div className={styles.addonsEmpty}>Choose at least one bundle first to see its add-ons.</div> : <>
       {catalogChoices.length ? <div className={styles.addonChoices}>{catalogChoices.map((addon) => {
         const checked = selectedCatalogIds.has(addon.id);
         const unavailable = !availableIds.has(addon.id);
@@ -203,7 +259,7 @@ function AddonsEditor({ available, selected, bundleSelected, onChange }: {
             : selected.filter((item) => item.catalogId !== addon.id))} />
           <span><strong>{addon.name}</strong><small>{unavailable ? "No longer available · remove or choose another" : addon.inputs.join(" · ") || "Saved add-on"}</small></span><b>{money(addon.price)}</b>
         </label>;
-      })}</div> : <div className={styles.addonsEmpty}>No saved add-ons match this bundle. You can still add a custom one.</div>}
+      })}</div> : <div className={styles.addonsEmpty}>No saved add-ons match the selected bundles. You can still add a custom one.</div>}
       {customAddons.length > 0 && <div className={styles.customAddonList}>{customAddons.map((addon, index) => <div className={styles.customAddonRow} key={addon.id}>
         <span className={styles.customAddonNumber}>CUSTOM {String(index + 1).padStart(2, "0")}</span>
         <label><span>Name</span><input required maxLength={300} value={addon.name} onChange={(event) => patchCustom(addon.id, { name: event.target.value })} placeholder="Custom add-on name" /></label>
@@ -268,6 +324,12 @@ function prettyDate(value: string) {
   return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T12:00:00`));
 }
 
+function createdDate(value: string) {
+  const parsed = new Date(value.includes("T") ? value : `${value.replace(" ", "T")}Z`);
+  if (Number.isNaN(parsed.getTime())) return value.slice(0, 10);
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", day: "2-digit", month: "short", year: "numeric" }).format(parsed);
+}
+
 function statusLabel(order: ProductionWorkOrder) {
   if (order.status === "pending_production") return "Waiting for Production Manager";
   if (order.status === "pending_operations") return "Waiting for Operation Manager";
@@ -306,6 +368,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
   const [createOpen, setCreateOpen] = useState(false);
   const [completing, setCompleting] = useState<ProductionWorkOrder | null>(null);
   const [reviewing, setReviewing] = useState<ProductionWorkOrder | null>(null);
+  const [adminEditing, setAdminEditing] = useState<ProductionWorkOrder | null>(null);
   const [previewOrder, setPreviewOrder] = useState<ProductionWorkOrder | null>(null);
   const [filter, setFilter] = useState<"all" | ProductionWorkOrder["status"]>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -317,6 +380,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
   const [accountDraft, setAccountDraft] = useState<AccountDraft>(blankAccountDraft);
   const [productionDraft, setProductionDraft] = useState<ProductionDraft>(blankProductionDraft);
   const [operationDraft, setOperationDraft] = useState<OperationDraft | null>(null);
+  const [adminDraft, setAdminDraft] = useState<OperationDraft | null>(null);
   const sheetRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -349,10 +413,18 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
 
   const bundles = useMemo(() => state.catalog.filter((item) => item.kind === "package"), [state.catalog]);
   const addons = useMemo(() => state.catalog.filter((item) => item.kind === "addon"), [state.catalog]);
-  const selectedBundle = bundles.find((item) => item.id === accountDraft.bundleCatalogId);
-  const matchingAddons = useMemo(() => addons.filter((item) => !item.appliesTo || item.appliesTo.toLowerCase() === selectedBundle?.name.toLowerCase()), [addons, selectedBundle]);
-  const operationBundle = bundles.find((item) => item.id === operationDraft?.bundleCatalogId);
-  const operationAddons = useMemo(() => addons.filter((item) => !item.appliesTo || item.appliesTo.toLowerCase() === operationBundle?.name.toLowerCase()), [addons, operationBundle]);
+  const matchingAddons = useMemo(() => {
+    const selectedNames = new Set(accountDraft.bundles.map((bundle) => bundle.name.toLowerCase()));
+    return addons.filter((item) => !item.appliesTo || selectedNames.has(item.appliesTo.toLowerCase()));
+  }, [accountDraft.bundles, addons]);
+  const operationAddons = useMemo(() => {
+    const selectedNames = new Set((operationDraft?.bundles ?? []).map((bundle) => bundle.name.toLowerCase()));
+    return addons.filter((item) => !item.appliesTo || selectedNames.has(item.appliesTo.toLowerCase()));
+  }, [addons, operationDraft?.bundles]);
+  const adminAddons = useMemo(() => {
+    const selectedNames = new Set((adminDraft?.bundles ?? []).map((bundle) => bundle.name.toLowerCase()));
+    return addons.filter((item) => !item.appliesTo || selectedNames.has(item.appliesTo.toLowerCase()));
+  }, [addons, adminDraft?.bundles]);
   const visibleOrders = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const matches = state.orders.filter((order) => {
@@ -360,7 +432,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
       if (dateFrom && order.workDate < dateFrom) return false;
       if (dateTo && order.workDate > dateTo) return false;
       if (!query) return true;
-      return [order.code, order.clientName, order.bundleName, order.addons.map((addon) => addon.name).join(" "), order.createdByName, order.productionManagerName, order.operationManagerName]
+      return [order.code, order.clientName, order.bundles.map((bundle) => bundle.name).join(" "), order.addons.map((addon) => addon.name).join(" "), order.createdByName, order.productionManagerName, order.operationManagerName]
         .some((value) => value.toLowerCase().includes(query));
     });
     return [...matches].sort((left, right) => sortOrder === "production_date"
@@ -392,7 +464,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
 
   async function createOrder(event: React.FormEvent) {
     event.preventDefault();
-    if (!accountDraft.clientId || !accountDraft.bundleCatalogId || !accountDraft.workDate) return showToast("Choose the client, bundle, and production date.");
+    if (!accountDraft.clientId || !accountDraft.bundles.length || !accountDraft.workDate) return showToast("Choose the client, at least one bundle, and production date.");
     const confirmed = window.confirm("تأكيد إرسال أمر الشغل؟ بعد الإرسال لن يمكنك تعديله أو إلغاؤه، وسيصل مباشرة إلى Production Manager.\n\nConfirm submission? You cannot edit or cancel this work order after sending it.");
     if (!confirmed) return;
     try {
@@ -408,7 +480,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
 
   function openCompletion(order: ProductionWorkOrder) {
     setCompleting(order);
-    setProductionDraft(blankProductionDraft());
+    setProductionDraft(productionDraftFrom(order));
   }
 
   async function completeOrder(event: React.FormEvent) {
@@ -436,7 +508,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
   async function finalApproveOrder(event: React.FormEvent) {
     event.preventDefault();
     if (!reviewing || !operationDraft) return;
-    if (!operationDraft.clientId || !operationDraft.bundleCatalogId || !operationDraft.workDate) return showToast("Choose the client, bundle, and production date.");
+    if (!operationDraft.clientId || !operationDraft.bundles.length || !operationDraft.workDate) return showToast("Choose the client, at least one bundle, and production date.");
     if (!operationDraft.options.length) return showToast("Add at least one production option before final approval.");
     const confirmed = window.confirm("تأكيد الاعتماد النهائي؟ بعد الاعتماد لن يتمكن أي مستخدم من تعديل أو إلغاء أمر الشغل، وسيصبح جاهزًا للطباعة.\n\nConfirm final approval? No user can edit or cancel this work order afterwards.");
     if (!confirmed) return;
@@ -454,6 +526,27 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
     }
   }
 
+  function openAdminEdit(order: ProductionWorkOrder) {
+    setAdminEditing(order);
+    setAdminDraft(operationDraftFrom(order));
+  }
+
+  async function saveAdminEdit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!adminEditing || !adminDraft) return;
+    if (!adminDraft.clientId || !adminDraft.bundles.length || !adminDraft.workDate) return showToast("Choose the client, at least one bundle, and production date.");
+    const confirmed = window.confirm("Save these administrator corrections? The work order will stay in its current approval stage.");
+    if (!confirmed) return;
+    try {
+      await mutate({ action: "adminEdit", id: adminEditing.id, data: adminDraft });
+      setAdminEditing(null);
+      setAdminDraft(null);
+      showToast(`${adminEditing.code} was corrected by Administrator and remains in its current stage.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not edit the work order.");
+    }
+  }
+
   async function deleteOrder(order: ProductionWorkOrder) {
     const invoiceNote = order.draftInvoiceId ? "\n\nThe linked Draft invoice will remain available in Invoices." : "";
     if (!window.confirm(`Delete ${order.code} for ${order.clientName}? This cannot be undone.${invoiceNote}`)) return;
@@ -462,6 +555,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
       setExpandedOrderIds((current) => current.filter((id) => id !== order.id));
       if (previewOrder?.id === order.id) setPreviewOrder(null);
       if (reviewing?.id === order.id) { setReviewing(null); setOperationDraft(null); }
+      if (adminEditing?.id === order.id) { setAdminEditing(null); setAdminDraft(null); }
       if (completing?.id === order.id) setCompleting(null);
       showToast(`${order.code} was deleted. ${order.draftInvoiceId ? "Its Draft invoice was kept." : ""}`.trim());
     } catch (error) {
@@ -552,7 +646,10 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
           <header className={`${styles.orderCardHeader} ${expanded ? styles.orderCardHeaderOpen : ""}`}>
             <button type="button" className={styles.orderCardToggle} aria-expanded={expanded} aria-controls={`work-order-details-${order.id}`} onClick={() => toggleOrderDetails(order.id)}>
               <div className={styles.orderIdentity}><span className={pending ? styles.statusPending : pendingOperations ? styles.statusOperations : styles.statusReady}>{finalApproved ? <CheckCircle2 size={13} /> : <Clock3 size={13} />}{statusLabel(order)}</span><div><h3>{order.clientName}</h3><span className={styles.orderCode}>{order.code}</span></div><p>Media Guide work order</p></div>
-              <div className={styles.orderSchedule}><CalendarDays size={18} /><span><small>PRODUCTION DATE</small><strong>{prettyDate(order.workDate)}</strong>{!pending && order.callTime && <em><Clock3 size={11} /> {order.callTime}</em>}</span></div>
+              <div className={styles.orderDates}>
+                <div className={styles.orderSchedule}><CalendarDays size={18} /><span><small>PRODUCTION DATE</small><strong>{prettyDate(order.workDate)}</strong>{!pending && order.callTime && <em><Clock3 size={11} /> {order.callTime}</em>}</span></div>
+                <div className={styles.orderSchedule}><NotebookPen size={18} /><span><small>ORDER CREATED</small><strong>{createdDate(order.createdAt)}</strong><em>By {order.createdByName || "Account Manager"}</em></span></div>
+              </div>
               <span className={styles.locked}><LockKeyhole size={14} /> {finalApproved ? "Final locked" : "Stage locked"}</span>
               <span className={styles.expandControl}><span>{expanded ? "Hide details" : "View details"}</span><ChevronDown className={expanded ? styles.chevronOpen : ""} size={18} /></span>
             </button>
@@ -560,7 +657,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
 
           {expanded && <div id={`work-order-details-${order.id}`} className={styles.orderDetails}>
           <div className={styles.orderScope}>
-            <div><PackageCheck size={17} /><span><small>BUNDLE</small><strong>{order.bundleName}</strong><em>{money(order.bundlePrice)}</em></span></div>
+            <div><PackageCheck size={17} /><span><small>BUNDLES</small><strong>{order.bundles.length === 1 ? order.bundles[0].name : `${order.bundles.length} bundles selected`}</strong><em>{money(order.bundlesTotal)}</em></span></div>
             <div><Plus size={17} /><span><small>ADD-ONS</small><strong>{order.addons.length ? `${order.addons.length} selected` : "No add-ons selected"}</strong><em>{order.addons.length ? money(order.addonsTotal) : "Not added"}</em></span></div>
             <div className={styles.totalScope}><CircleDollarSign size={17} /><span><small>WORK ORDER TOTAL</small><strong>{money(order.workOrderTotal)}</strong><em>{order.productionOptionsTotal ? `${money(order.productionOptionsTotal)} extra production` : "No extra production cost"}</em></span></div>
           </div>
@@ -579,6 +676,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
             <div>
               {pending && canComplete && <button className={styles.completeButton} onClick={() => openCompletion(order)}><FileCheck2 size={15} /> Complete & approve</button>}
               {pendingOperations && canFinalApprove && <button className={styles.completeButton} onClick={() => openFinalReview(order)}><FileCheck2 size={15} /> Review & final approve</button>}
+              {state.role === "administrator" && !finalApproved && <button className={styles.previewButton} onClick={() => openAdminEdit(order)}><Pencil size={15} /> Admin edit</button>}
               {finalApproved && <button className={styles.previewButton} onClick={() => setPreviewOrder(order)}><Eye size={15} /> Open final order</button>}
               {finalApproved && order.draftInvoiceId && onOpenDraftInvoice && <button className={styles.completeButton} onClick={() => onOpenDraftInvoice(order.draftInvoiceId!)}><FileCheck2 size={15} /> Open Draft invoice</button>}
               {state.role === "administrator" && <button className={styles.deleteButton} disabled={saving} onClick={() => void deleteOrder(order)}><Trash2 size={15} /> Delete</button>}
@@ -604,7 +702,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
             <section className={styles.formSection}><div className={styles.sectionHeading}><span>02</span><div><strong>Schedule & total</strong><small>Final approved work-order value</small></div></div><div className={styles.detailsGrid}>
               <ValueField label="DATE" value={prettyDate(previewOrder.workDate)} /><ValueField label="CALL TIME" value={previewOrder.callTime} /><ValueField label="TOTAL · EGP" value={money(previewOrder.workOrderTotal)} />
             </div></section>
-            <section className={styles.formSection}><div className={styles.sectionHeading}><span>03</span><div><strong>Scope & pricing</strong><small>Bundle and add-on inputs, outputs, and prices</small></div></div><table className={styles.scopeTable}><thead><tr><th>TYPE</th><th>NAME</th><th>INPUTS</th><th>OUTPUTS</th><th>PRICE · EGP</th></tr></thead><tbody><tr><td>BUNDLE</td><td>{previewOrder.bundleName}</td><td>{previewOrder.bundleInputs.join(" · ") || "—"}</td><td>{previewOrder.bundleOutputs.join(" · ") || "—"}</td><td>{money(previewOrder.bundlePrice)}</td></tr>{previewOrder.addons.map((addon) => <tr key={addon.id}><td>{addon.catalogId ? "ADD-ON" : "CUSTOM"}</td><td>{addon.name}</td><td>{addon.inputs.join(" · ") || "—"}</td><td>{addon.outputs.join(" · ") || "—"}</td><td>{money(addon.price)}</td></tr>)}</tbody></table></section>
+            <section className={styles.formSection}><div className={styles.sectionHeading}><span>03</span><div><strong>Scope & pricing</strong><small>Bundles and add-on inputs, outputs, and prices</small></div></div><table className={styles.scopeTable}><thead><tr><th>TYPE</th><th>NAME</th><th>INPUTS</th><th>OUTPUTS</th><th>PRICE · EGP</th></tr></thead><tbody>{previewOrder.bundles.map((bundle) => <tr key={bundle.id}><td>BUNDLE</td><td>{bundle.name}</td><td>{bundle.inputs.join(" · ") || "—"}</td><td>{bundle.outputs.join(" · ") || "—"}</td><td>{money(bundle.price)}</td></tr>)}{previewOrder.addons.map((addon) => <tr key={addon.id}><td>{addon.catalogId ? "ADD-ON" : "CUSTOM"}</td><td>{addon.name}</td><td>{addon.inputs.join(" · ") || "—"}</td><td>{addon.outputs.join(" · ") || "—"}</td><td>{money(addon.price)}</td></tr>)}</tbody></table></section>
             <section className={styles.formSection}><div className={styles.sectionHeading}><span>04</span><div><strong>Production options</strong><small>Approved resources and their billing treatment</small></div></div><table className={styles.optionsTable}><thead><tr><th>#</th><th>OPTION</th><th>NAME / DETAILS</th><th>TREATMENT</th><th>PRICE · EGP</th></tr></thead><tbody>{previewOrder.productionOptions.map((option, index) => <tr key={option.id}><td>{index + 1}</td><td>{optionLabels[option.type]}</td><td>{option.name}</td><td><span className={option.billingMode === "extra" ? styles.extraTreatment : styles.includedTreatment}>{option.billingMode === "extra" ? "EXTRA COST" : "INCLUDED IN BUNDLE"}</span></td><td>{money(productionOptionPrice(option))}</td></tr>)}</tbody><tfoot><tr><td colSpan={4}>EXTRA PRODUCTION CHARGES</td><td>{money(previewOrder.productionOptionsTotal)}</td></tr></tfoot></table></section>
             <section className={`${styles.formSection} ${styles.notesSection}`}><div className={styles.sectionHeading}><span>05</span><div><strong>Additional notes</strong><small>Final instructions approved by Operations</small></div></div><div className={styles.finalNotes}><span>NOTES</span><p><strong>Account Manager:</strong> {previewOrder.accountNote || "—"}</p><p><strong>Production Manager:</strong> {previewOrder.productionNote || "—"}</p><p className={styles.operationNote}><strong>Operation Manager:</strong> {previewOrder.operationNote || "—"}</p></div></section>
           </div>
@@ -619,10 +717,9 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
         <div className={styles.formGrid}>
           <label><span>Work order type</span><select value={accountDraft.documentType} disabled><option value="media_guide">Media Guide work order</option></select></label>
           <label><span>Client</span><select required value={accountDraft.clientId || ""} onChange={(event) => setAccountDraft({ ...accountDraft, clientId: Number(event.target.value) })}><option value="">Choose client</option>{state.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
-          <label><span>Bundle</span><select required value={accountDraft.bundleCatalogId || ""} onChange={(event) => setAccountDraft({ ...accountDraft, bundleCatalogId: Number(event.target.value), addons: [] })}><option value="">Choose Media Guide bundle</option>{bundles.map((bundle) => <option key={bundle.id} value={bundle.id}>{bundle.name} · {money(bundle.price)}</option>)}</select></label>
           <label><span>Production date</span><input required type="date" min={cairoToday()} value={accountDraft.workDate} onChange={(event) => setAccountDraft({ ...accountDraft, workDate: event.target.value })} /></label>
-          {selectedBundle && <div className={styles.wide}><CatalogDetails label="SELECTED BUNDLE" name={selectedBundle.name} price={selectedBundle.price} inputs={selectedBundle.inputs} outputs={selectedBundle.outputs} /></div>}
-          <div className={styles.wide}><AddonsEditor available={matchingAddons} selected={accountDraft.addons} bundleSelected={Boolean(selectedBundle)} onChange={(selectedAddons) => setAccountDraft({ ...accountDraft, addons: selectedAddons })} /></div>
+          <div className={styles.wide}><BundlesEditor available={bundles} selected={accountDraft.bundles} onChange={(selectedBundles) => setAccountDraft({ ...accountDraft, bundles: selectedBundles, addons: [] })} /></div>
+          <div className={styles.wide}><AddonsEditor available={matchingAddons} selected={accountDraft.addons} bundleSelected={Boolean(accountDraft.bundles.length)} onChange={(selectedAddons) => setAccountDraft({ ...accountDraft, addons: selectedAddons })} /></div>
           <label className={styles.wide}><span>Account Manager note <small>Optional</small></span><textarea rows={4} maxLength={5000} value={accountDraft.accountNote} onChange={(event) => setAccountDraft({ ...accountDraft, accountNote: event.target.value })} placeholder="Add client instructions, references, or anything Production should know." /></label>
         </div>
         <div className={styles.finalWarning}><LockKeyhole size={18} /><span><strong>Final submission</strong><small>After approval, you cannot edit or cancel this work order.</small></span></div>
@@ -630,12 +727,12 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
       </form>
     </WorkflowModal>}
 
-    {completing && <WorkflowModal title={`Complete ${completing.code}`} description={`${completing.clientName} · ${completing.bundleName} · ${prettyDate(completing.workDate)}`} onClose={() => !saving && setCompleting(null)}>
-      <div className={styles.lockedScope}><LockKeyhole size={16} /><span><strong>Account Manager fields are locked</strong><small>{completing.bundleName}{completing.addons.length ? ` + ${completing.addons.length} add-on${completing.addons.length === 1 ? "" : "s"}` : ""} · {money(completing.bundlePrice + completing.addonsTotal)}</small></span></div>
+    {completing && <WorkflowModal title={`Complete ${completing.code}`} description={`${completing.clientName} · ${completing.bundles.length} bundle${completing.bundles.length === 1 ? "" : "s"} · ${prettyDate(completing.workDate)}`} onClose={() => !saving && setCompleting(null)}>
+      <div className={styles.lockedScope}><LockKeyhole size={16} /><span><strong>Account Manager fields are locked</strong><small>{completing.bundles.length} bundle{completing.bundles.length === 1 ? "" : "s"}{completing.addons.length ? ` + ${completing.addons.length} add-on${completing.addons.length === 1 ? "" : "s"}` : ""} · {money(completing.bundlesTotal + completing.addonsTotal)}</small></span></div>
       <form className={styles.workflowForm} onSubmit={completeOrder}>
         <div className={styles.formGrid}>
           <label><span>Call time</span><input required type="time" value={productionDraft.callTime} onChange={(event) => setProductionDraft({ ...productionDraft, callTime: event.target.value })} /></label>
-          <div className={styles.wide}><CatalogDetails label="BUNDLE SCOPE" name={completing.bundleName} price={completing.bundlePrice} inputs={completing.bundleInputs} outputs={completing.bundleOutputs} /></div>
+          {completing.bundles.map((bundle, index) => <div className={styles.wide} key={bundle.id}><CatalogDetails label={`BUNDLE ${index + 1}`} name={bundle.name} price={bundle.price} inputs={bundle.inputs} outputs={bundle.outputs} /></div>)}
           {completing.addons.map((addon, index) => <div className={styles.wide} key={addon.id}><CatalogDetails label={addon.catalogId ? `ADD-ON ${index + 1}` : `CUSTOM ${index + 1}`} name={addon.name} price={addon.price} inputs={addon.inputs} outputs={addon.outputs} /></div>)}
           <div className={styles.wide}><ProductionOptionsEditor options={productionDraft.options} crew={state.crew} modelCatalogUrl={state.modelCatalogUrl} onChange={(options) => setProductionDraft({ ...productionDraft, options })} /></div>
           <label className={styles.wide}><span>Production Manager note <small>Optional</small></span><textarea rows={4} maxLength={5000} value={productionDraft.productionNote} onChange={(event) => setProductionDraft({ ...productionDraft, productionNote: event.target.value })} placeholder="Add production instructions, equipment notes, or special arrangements." /></label>
@@ -645,22 +742,40 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
       </form>
     </WorkflowModal>}
 
+    {adminEditing && adminDraft && <WorkflowModal title={`Administrator edit · ${adminEditing.code}`} description={`Correct Account, Production, or Operations data while keeping ${statusLabel(adminEditing)} as the current workflow stage.`} onClose={() => !saving && setAdminEditing(null)}>
+      <form className={styles.workflowForm} onSubmit={saveAdminEdit}>
+        <div className={styles.formGrid}>
+          <label><span>Work order type</span><select value="media_guide" disabled><option value="media_guide">Media Guide work order</option></select></label>
+          <label><span>Client</span><select required value={adminDraft.clientId || ""} onChange={(event) => setAdminDraft({ ...adminDraft, clientId: Number(event.target.value) })}><option value="">Choose client</option>{state.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
+          <label><span>Production date</span><input required type="date" value={adminDraft.workDate} onChange={(event) => setAdminDraft({ ...adminDraft, workDate: event.target.value })} /></label>
+          <label><span>Call time <small>Optional before Production completes</small></span><input type="time" value={adminDraft.callTime} onChange={(event) => setAdminDraft({ ...adminDraft, callTime: event.target.value })} /></label>
+          <div className={styles.wide}><BundlesEditor available={bundles} selected={adminDraft.bundles} onChange={(selectedBundles) => setAdminDraft({ ...adminDraft, bundles: selectedBundles, addons: [] })} /></div>
+          <div className={styles.wide}><AddonsEditor available={adminAddons} selected={adminDraft.addons} bundleSelected={Boolean(adminDraft.bundles.length)} onChange={(selectedAddons) => setAdminDraft({ ...adminDraft, addons: selectedAddons })} /></div>
+          <div className={styles.wide}><ProductionOptionsEditor options={adminDraft.options} crew={state.crew} modelCatalogUrl={state.modelCatalogUrl} onChange={(options) => setAdminDraft({ ...adminDraft, options })} /></div>
+          <label className={styles.wide}><span>Account Manager note <small>Editable by Administrator</small></span><textarea rows={3} maxLength={5000} value={adminDraft.accountNote} onChange={(event) => setAdminDraft({ ...adminDraft, accountNote: event.target.value })} /></label>
+          <label className={styles.wide}><span>Production Manager note <small>Editable by Administrator</small></span><textarea rows={3} maxLength={5000} value={adminDraft.productionNote} onChange={(event) => setAdminDraft({ ...adminDraft, productionNote: event.target.value })} /></label>
+          <label className={styles.wide}><span>Operation Manager note <small>Editable by Administrator</small></span><textarea rows={3} maxLength={5000} value={adminDraft.operationNote} onChange={(event) => setAdminDraft({ ...adminDraft, operationNote: event.target.value })} /></label>
+        </div>
+        <div className={styles.finalWarning}><Pencil size={18} /><span><strong>Administrator correction</strong><small>Saving updates the order details without sending it forward or changing its current approval stage.</small></span></div>
+        <footer><button type="button" className="secondary-button" onClick={() => setAdminEditing(null)} disabled={saving}>Back</button><button className="primary-button" disabled={saving}>{saving ? <><LoaderCircle size={16} /> Saving…</> : <><CheckCircle2 size={16} /> Save corrections</>}</button></footer>
+      </form>
+    </WorkflowModal>}
+
     {reviewing && operationDraft && <WorkflowModal title={`Final review · ${reviewing.code}`} description="Operation Manager stage · review and edit every work-order field before the final lock." onClose={() => !saving && setReviewing(null)}>
       <form className={styles.workflowForm} onSubmit={finalApproveOrder}>
         <div className={styles.formGrid}>
           <label><span>Work order type</span><select value="media_guide" disabled><option value="media_guide">Media Guide work order</option></select></label>
           <label><span>Client</span><select required value={operationDraft.clientId || ""} onChange={(event) => setOperationDraft({ ...operationDraft, clientId: Number(event.target.value) })}><option value="">Choose client</option>{state.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
-          <label><span>Bundle</span><select required value={operationDraft.bundleCatalogId || ""} onChange={(event) => setOperationDraft({ ...operationDraft, bundleCatalogId: Number(event.target.value), addons: [] })}><option value="">Choose Media Guide bundle</option>{bundles.map((bundle) => <option key={bundle.id} value={bundle.id}>{bundle.name} · {money(bundle.price)}</option>)}</select></label>
           <label><span>Production date</span><input required type="date" value={operationDraft.workDate} onChange={(event) => setOperationDraft({ ...operationDraft, workDate: event.target.value })} /></label>
           <label><span>Call time</span><input required type="time" value={operationDraft.callTime} onChange={(event) => setOperationDraft({ ...operationDraft, callTime: event.target.value })} /></label>
-          {operationBundle && <div className={styles.wide}><CatalogDetails label="BUNDLE SCOPE" name={operationBundle.name} price={operationBundle.price} inputs={operationBundle.inputs} outputs={operationBundle.outputs} /></div>}
-          <div className={styles.wide}><AddonsEditor available={operationAddons} selected={operationDraft.addons} bundleSelected={Boolean(operationBundle)} onChange={(selectedAddons) => setOperationDraft({ ...operationDraft, addons: selectedAddons })} /></div>
+          <div className={styles.wide}><BundlesEditor available={bundles} selected={operationDraft.bundles} onChange={(selectedBundles) => setOperationDraft({ ...operationDraft, bundles: selectedBundles, addons: [] })} /></div>
+          <div className={styles.wide}><AddonsEditor available={operationAddons} selected={operationDraft.addons} bundleSelected={Boolean(operationDraft.bundles.length)} onChange={(selectedAddons) => setOperationDraft({ ...operationDraft, addons: selectedAddons })} /></div>
           <div className={styles.wide}><ProductionOptionsEditor options={operationDraft.options} crew={state.crew} modelCatalogUrl={state.modelCatalogUrl} onChange={(options) => setOperationDraft({ ...operationDraft, options })} /></div>
           <label className={styles.wide}><span>Account Manager note <small>Editable by Operations</small></span><textarea rows={3} maxLength={5000} value={operationDraft.accountNote} onChange={(event) => setOperationDraft({ ...operationDraft, accountNote: event.target.value })} /></label>
           <label className={styles.wide}><span>Production Manager note <small>Editable by Operations</small></span><textarea rows={3} maxLength={5000} value={operationDraft.productionNote} onChange={(event) => setOperationDraft({ ...operationDraft, productionNote: event.target.value })} /></label>
           <label className={styles.wide}><span>Operation Manager note <small>Optional</small></span><textarea rows={3} maxLength={5000} value={operationDraft.operationNote} onChange={(event) => setOperationDraft({ ...operationDraft, operationNote: event.target.value })} placeholder="Add the final operational instruction or approval note." /></label>
         </div>
-        <div className={styles.finalWarning}><LockKeyhole size={18} /><span><strong>Final approval, permanent lock & Draft invoice</strong><small>After final approval, nobody can edit or cancel this order. Only production options marked Extra cost are added above the bundle price.</small></span></div>
+        <div className={styles.finalWarning}><LockKeyhole size={18} /><span><strong>Final approval, permanent lock & Draft invoice</strong><small>After final approval, nobody can edit or cancel this order. Only production options marked Extra cost are added above the selected bundle prices.</small></span></div>
         <footer><button type="button" className="secondary-button" onClick={() => setReviewing(null)} disabled={saving}>Back</button><button className="primary-button" disabled={saving}>{saving ? <><LoaderCircle size={16} /> Finalizing…</> : <><CheckCircle2 size={16} /> Final approve & lock</>}</button></footer>
       </form>
     </WorkflowModal>}

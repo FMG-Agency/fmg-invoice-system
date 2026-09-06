@@ -79,7 +79,9 @@
 .statusPending { background: color-mix(in srgb, #f5b83c 19%, var(--surface)); color: color-mix(in srgb, #8a5d00 88%, var(--ink)); }
 .statusOperations { background: color-mix(in srgb, #4a78dc 16%, var(--surface)); color: color-mix(in srgb, #2758b7 82%, var(--ink)); }
 .statusReady { background: color-mix(in srgb, #33a768 16%, var(--surface)); color: color-mix(in srgb, #176f42 82%, var(--ink)); }
+.orderDates { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(152px, 1fr)); gap: 8px; }
 .orderSchedule { min-width: 178px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); display: flex; align-items: center; gap: 9px; }
+.orderDates .orderSchedule { min-width: 0; }
 .orderSchedule > svg { color: var(--yellow-ink); }
 .orderSchedule span { display: flex; flex-direction: column; gap: 2px; }
 .orderSchedule small { color: var(--muted); font-size: 7px; font-weight: 900; letter-spacing: .7px; }
@@ -327,7 +329,7 @@
   .resultCount { justify-self: end; }
   .orderGrid { padding: 9px; gap: 16px; }
   .orderCardToggle { grid-template-columns: minmax(0, 1fr) auto; gap: 11px; }
-  .orderSchedule { grid-column: 1 / -1; grid-row: 2; min-width: 0; }
+  .orderDates { grid-column: 1 / -1; grid-row: 2; }
   .locked { grid-column: 2; grid-row: 1; align-self: start; }
   .expandControl { grid-column: 1 / -1; grid-row: 3; width: 100%; }
   .orderScope { grid-template-columns: 1fr; }
@@ -370,6 +372,7 @@
 
 @media (max-width: 520px) {
   .stageStats { grid-template-columns: 1fr; }
+  .orderDates { grid-template-columns: 1fr; }
   .inboxPanel { padding: 12px; }
   .orderToolbar { grid-template-columns: 1fr; }
   .dateRange { overflow-x: auto; }

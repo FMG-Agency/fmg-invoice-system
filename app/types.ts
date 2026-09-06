@@ -591,6 +591,16 @@ export type ProductionCostOption = {
   billingMode: "included" | "extra";
 };
 
+export type ProductionWorkOrderBundle = {
+  id: string;
+  catalogId: number;
+  name: string;
+  price: number;
+  inputs: string[];
+  outputs: string[];
+  bundleTotal: number | null;
+};
+
 export type ProductionWorkOrderAddon = {
   id: string;
   catalogId: number | null;
@@ -613,6 +623,8 @@ export type ProductionWorkOrder = {
   bundlePrice: number;
   bundleInputs: string[];
   bundleOutputs: string[];
+  bundles: ProductionWorkOrderBundle[];
+  bundlesTotal: number;
   addonCatalogId: number | null;
   addonName: string;
   addonPrice: number;
