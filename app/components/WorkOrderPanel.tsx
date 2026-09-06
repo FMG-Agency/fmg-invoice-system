@@ -170,37 +170,35 @@ function bundleFromCatalog(bundle: ProductionCatalogOption): ProductionWorkOrder
   };
 }
 
+function newBundleSelection(): ProductionWorkOrderBundle {
+  return { id: crypto.randomUUID(), catalogId: 0, name: "", price: 0, inputs: [], outputs: [], bundleTotal: null };
+}
+
 function BundlesEditor({ available, selected, onChange }: {
   available: ProductionCatalogOption[];
   selected: ProductionWorkOrderBundle[];
   onChange: (bundles: ProductionWorkOrderBundle[]) => void;
 }) {
-  const selectedIds = new Set(selected.map((bundle) => bundle.catalogId));
-  const availableIds = new Set(available.map((bundle) => bundle.id));
-  const choices = [...available, ...selected.filter((bundle) => !availableIds.has(bundle.catalogId)).map((bundle): ProductionCatalogOption => ({
-    id: bundle.catalogId,
-    kind: "package",
-    name: bundle.name,
-    price: bundle.price,
-    inputs: bundle.inputs,
-    outputs: bundle.outputs,
-    appliesTo: "",
-    bundleTotal: bundle.bundleTotal,
-  }))];
+  const selectedIds = new Set(selected.filter((bundle) => bundle.catalogId > 0).map((bundle) => bundle.catalogId));
   const total = selected.reduce((sum, bundle) => sum + Number(bundle.price || 0), 0);
+  const patchBundle = (id: string, values: Partial<ProductionWorkOrderBundle>) => onChange(selected.map((bundle) => bundle.id === id ? { ...bundle, ...values } : bundle));
   return <section className={styles.addonsEditor}>
-    <header><div><span>BUNDLES</span><strong>Choose one or more Media Guide bundles</strong><small>Each bundle keeps its own inputs, outputs, and price in the final order.</small></div></header>
-    <div className={styles.addonChoices}>{choices.map((bundle) => {
-      const checked = selectedIds.has(bundle.id);
-      const unavailable = !availableIds.has(bundle.id);
-      return <label key={bundle.id} className={checked ? styles.addonChoiceSelected : styles.addonChoice}>
-        <input type="checkbox" checked={checked} disabled={!checked && selected.length >= 10} onChange={(event) => onChange(event.target.checked
-          ? [...selected, bundleFromCatalog(bundle)]
-          : selected.filter((item) => item.catalogId !== bundle.id))} />
-        <span><strong>{bundle.name}</strong><small>{unavailable ? "No longer available · remove or choose another" : bundle.inputs.join(" · ") || "Saved bundle"}</small></span><b>{money(bundle.price)}</b>
-      </label>;
-    })}</div>
-    {!choices.length && <div className={styles.addonsEmpty}>No active Media Guide bundles are available.</div>}
+    <header><div><span>BUNDLE BUILDER</span><strong>Add bundles, then customize every detail</strong><small>Choose from your saved bundles and freely edit the name, price, inputs, and outputs for this work order.</small></div><button type="button" className="secondary-button" disabled={!available.some((bundle) => !selectedIds.has(bundle.id)) || selected.length >= 10} onClick={() => onChange([...selected, newBundleSelection()])}><Plus size={15} /> Add new bundle</button></header>
+    {selected.length ? <div className={styles.bundleBuilderList}>{selected.map((bundle, index) => {
+      const currentAvailable = available.some((item) => item.id === bundle.catalogId);
+      return <article className={styles.bundleBuilderRow} key={bundle.id}>
+        <span className={styles.customAddonNumber}>BUNDLE {String(index + 1).padStart(2, "0")}</span>
+        <label className={styles.bundlePicker}><span>Choose saved bundle</span><select required value={bundle.catalogId || ""} onChange={(event) => {
+          const catalogBundle = available.find((item) => item.id === Number(event.target.value));
+          if (catalogBundle) onChange(selected.map((item) => item.id === bundle.id ? { ...bundleFromCatalog(catalogBundle), id: bundle.id } : item));
+        }}><option value="">Select bundle</option>{!currentAvailable && bundle.catalogId > 0 && <option value={bundle.catalogId}>{bundle.name} · unavailable</option>}{available.map((item) => <option key={item.id} value={item.id} disabled={item.id !== bundle.catalogId && selectedIds.has(item.id)}>{item.name} · {money(item.price)}</option>)}</select></label>
+        <label><span>Bundle name</span><input required maxLength={300} value={bundle.name} onChange={(event) => patchBundle(bundle.id, { name: event.target.value })} placeholder="Bundle name" /></label>
+        <label><span>Price · EGP</span><input required type="number" min="0" step="0.01" value={Number.isFinite(bundle.price) ? bundle.price : ""} onChange={(event) => patchBundle(bundle.id, { price: Number(event.target.value) })} placeholder="0" /></label>
+        <label><span>Inputs <small>One per line</small></span><textarea rows={4} maxLength={3000} value={bundle.inputs.join("\n")} onChange={(event) => patchBundle(bundle.id, { inputs: detailLines(event.target.value) })} placeholder="Photographer&#10;Camera&#10;Model" /></label>
+        <label><span>Outputs <small>One per line</small></span><textarea rows={4} maxLength={3000} value={bundle.outputs.join("\n")} onChange={(event) => patchBundle(bundle.id, { outputs: detailLines(event.target.value) })} placeholder="10 edited photos&#10;4 videos" /></label>
+        <button type="button" onClick={() => onChange(selected.filter((item) => item.id !== bundle.id))} aria-label={`Remove bundle ${index + 1}`}><Trash2 size={16} /></button>
+      </article>;
+    })}</div> : <div className={styles.addonsEmpty}>Click “Add new bundle” to choose your first saved bundle.</div>}
     <footer><span>{selected.length} bundle{selected.length === 1 ? "" : "s"} selected</span><strong>{money(total)}</strong></footer>
   </section>;
 }
@@ -224,6 +222,18 @@ function newCustomAddon(): ProductionWorkOrderAddon {
 
 function detailLines(value: string) {
   return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+function selectedBundleNames(selected: ProductionWorkOrderBundle[], available: ProductionCatalogOption[]) {
+  return new Set(selected.flatMap((bundle) => [
+    bundle.name.trim().toLowerCase(),
+    available.find((item) => item.id === bundle.catalogId)?.name.trim().toLowerCase() ?? "",
+  ]).filter(Boolean));
+}
+
+function compatibleAddons(selected: ProductionWorkOrderAddon[], bundles: ProductionWorkOrderBundle[], available: ProductionCatalogOption[]) {
+  const names = selectedBundleNames(bundles, available);
+  return selected.filter((addon) => !addon.appliesTo || names.has(addon.appliesTo.trim().toLowerCase()));
 }
 
 function AddonsEditor({ available, selected, bundleSelected, onChange }: {
@@ -414,17 +424,17 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
   const bundles = useMemo(() => state.catalog.filter((item) => item.kind === "package"), [state.catalog]);
   const addons = useMemo(() => state.catalog.filter((item) => item.kind === "addon"), [state.catalog]);
   const matchingAddons = useMemo(() => {
-    const selectedNames = new Set(accountDraft.bundles.map((bundle) => bundle.name.toLowerCase()));
+    const selectedNames = selectedBundleNames(accountDraft.bundles, bundles);
     return addons.filter((item) => !item.appliesTo || selectedNames.has(item.appliesTo.toLowerCase()));
-  }, [accountDraft.bundles, addons]);
+  }, [accountDraft.bundles, addons, bundles]);
   const operationAddons = useMemo(() => {
-    const selectedNames = new Set((operationDraft?.bundles ?? []).map((bundle) => bundle.name.toLowerCase()));
+    const selectedNames = selectedBundleNames(operationDraft?.bundles ?? [], bundles);
     return addons.filter((item) => !item.appliesTo || selectedNames.has(item.appliesTo.toLowerCase()));
-  }, [addons, operationDraft?.bundles]);
+  }, [addons, bundles, operationDraft?.bundles]);
   const adminAddons = useMemo(() => {
-    const selectedNames = new Set((adminDraft?.bundles ?? []).map((bundle) => bundle.name.toLowerCase()));
+    const selectedNames = selectedBundleNames(adminDraft?.bundles ?? [], bundles);
     return addons.filter((item) => !item.appliesTo || selectedNames.has(item.appliesTo.toLowerCase()));
-  }, [addons, adminDraft?.bundles]);
+  }, [addons, adminDraft?.bundles, bundles]);
   const visibleOrders = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const matches = state.orders.filter((order) => {
@@ -442,6 +452,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
   const canCreate = state.role === "account_manager" || state.role === "operation_manager" || state.role === "administrator";
   const canComplete = state.role === "production_manager" || state.role === "operation_manager" || state.role === "administrator";
   const canFinalApprove = state.role === "operation_manager" || state.role === "administrator";
+  const canManagerEdit = state.role === "operation_manager" || state.role === "administrator";
 
   function toggleOrderDetails(orderId: number) {
     setExpandedOrderIds((current) => current.includes(orderId)
@@ -535,13 +546,16 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
     event.preventDefault();
     if (!adminEditing || !adminDraft) return;
     if (!adminDraft.clientId || !adminDraft.bundles.length || !adminDraft.workDate) return showToast("Choose the client, at least one bundle, and production date.");
-    const confirmed = window.confirm("Save these administrator corrections? The work order will stay in its current approval stage.");
+    const confirmed = window.confirm("Save these manager corrections? The work order will stay in its current approval stage.");
     if (!confirmed) return;
     try {
-      await mutate({ action: "adminEdit", id: adminEditing.id, data: adminDraft });
+      const nextState = await mutate({ action: "managerEdit", id: adminEditing.id, data: adminDraft });
+      const editedOrder = nextState.orders.find((order) => order.id === adminEditing.id);
+      if (adminEditing.status === "final_approved") await onWorkspaceChanged?.();
+      if (previewOrder?.id === adminEditing.id && editedOrder) setPreviewOrder(editedOrder);
       setAdminEditing(null);
       setAdminDraft(null);
-      showToast(`${adminEditing.code} was corrected by Administrator and remains in its current stage.`);
+      showToast(`${adminEditing.code} was updated and remains ${statusLabel(adminEditing)}.${adminEditing.status === "final_approved" ? " Its linked Draft invoice was synchronized." : ""}`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Could not edit the work order.");
     }
@@ -606,7 +620,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
 
   return <section className={styles.workspace}>
     <div className={styles.workflowHeader}>
-      <div className={styles.roleCard}><span><FileCheck2 size={18} /></span><div><small>YOUR WORKFLOW ROLE</small><strong>{roleLabel(state.role)}</strong><p>Every submitted stage is permanently locked.</p></div></div>
+      <div className={styles.roleCard}><span><FileCheck2 size={18} /></span><div><small>YOUR WORKFLOW ROLE</small><strong>{roleLabel(state.role)}</strong><p>Submitted stages stay locked for their sender; Operations and Admin can correct them.</p></div></div>
       <div className={styles.stageStats}>
         <article><span className={styles.pendingDot} /><div><small>PRODUCTION INBOX</small><strong>{state.pendingProductionCount}</strong></div></article>
         <article><span className={styles.operationsDot} /><div><small>OPERATIONS REVIEW</small><strong>{state.pendingOperationsCount}</strong></div></article>
@@ -650,7 +664,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
                 <div className={styles.orderSchedule}><CalendarDays size={18} /><span><small>PRODUCTION DATE</small><strong>{prettyDate(order.workDate)}</strong>{!pending && order.callTime && <em><Clock3 size={11} /> {order.callTime}</em>}</span></div>
                 <div className={styles.orderSchedule}><NotebookPen size={18} /><span><small>ORDER CREATED</small><strong>{createdDate(order.createdAt)}</strong><em>By {order.createdByName || "Account Manager"}</em></span></div>
               </div>
-              <span className={styles.locked}><LockKeyhole size={14} /> {finalApproved ? "Final locked" : "Stage locked"}</span>
+              <span className={styles.locked}><LockKeyhole size={14} /> {finalApproved ? canManagerEdit ? "Final · editable" : "Final locked" : "Stage locked"}</span>
               <span className={styles.expandControl}><span>{expanded ? "Hide details" : "View details"}</span><ChevronDown className={expanded ? styles.chevronOpen : ""} size={18} /></span>
             </button>
           </header>
@@ -676,7 +690,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
             <div>
               {pending && canComplete && <button className={styles.completeButton} onClick={() => openCompletion(order)}><FileCheck2 size={15} /> Complete & approve</button>}
               {pendingOperations && canFinalApprove && <button className={styles.completeButton} onClick={() => openFinalReview(order)}><FileCheck2 size={15} /> Review & final approve</button>}
-              {state.role === "administrator" && !finalApproved && <button className={styles.previewButton} onClick={() => openAdminEdit(order)}><Pencil size={15} /> Admin edit</button>}
+              {canManagerEdit && <button className={styles.previewButton} onClick={() => openAdminEdit(order)}><Pencil size={15} /> Edit work order</button>}
               {finalApproved && <button className={styles.previewButton} onClick={() => setPreviewOrder(order)}><Eye size={15} /> Open final order</button>}
               {finalApproved && order.draftInvoiceId && onOpenDraftInvoice && <button className={styles.completeButton} onClick={() => onOpenDraftInvoice(order.draftInvoiceId!)}><FileCheck2 size={15} /> Open Draft invoice</button>}
               {state.role === "administrator" && <button className={styles.deleteButton} disabled={saving} onClick={() => void deleteOrder(order)}><Trash2 size={15} /> Delete</button>}
@@ -718,7 +732,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
           <label><span>Work order type</span><select value={accountDraft.documentType} disabled><option value="media_guide">Media Guide work order</option></select></label>
           <label><span>Client</span><select required value={accountDraft.clientId || ""} onChange={(event) => setAccountDraft({ ...accountDraft, clientId: Number(event.target.value) })}><option value="">Choose client</option>{state.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
           <label><span>Production date</span><input required type="date" min={cairoToday()} value={accountDraft.workDate} onChange={(event) => setAccountDraft({ ...accountDraft, workDate: event.target.value })} /></label>
-          <div className={styles.wide}><BundlesEditor available={bundles} selected={accountDraft.bundles} onChange={(selectedBundles) => setAccountDraft({ ...accountDraft, bundles: selectedBundles, addons: [] })} /></div>
+          <div className={styles.wide}><BundlesEditor available={bundles} selected={accountDraft.bundles} onChange={(selectedBundles) => setAccountDraft((current) => ({ ...current, bundles: selectedBundles, addons: compatibleAddons(current.addons, selectedBundles, bundles) }))} /></div>
           <div className={styles.wide}><AddonsEditor available={matchingAddons} selected={accountDraft.addons} bundleSelected={Boolean(accountDraft.bundles.length)} onChange={(selectedAddons) => setAccountDraft({ ...accountDraft, addons: selectedAddons })} /></div>
           <label className={styles.wide}><span>Account Manager note <small>Optional</small></span><textarea rows={4} maxLength={5000} value={accountDraft.accountNote} onChange={(event) => setAccountDraft({ ...accountDraft, accountNote: event.target.value })} placeholder="Add client instructions, references, or anything Production should know." /></label>
         </div>
@@ -742,21 +756,21 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
       </form>
     </WorkflowModal>}
 
-    {adminEditing && adminDraft && <WorkflowModal title={`Administrator edit · ${adminEditing.code}`} description={`Correct Account, Production, or Operations data while keeping ${statusLabel(adminEditing)} as the current workflow stage.`} onClose={() => !saving && setAdminEditing(null)}>
+    {adminEditing && adminDraft && <WorkflowModal title={`${state.role === "administrator" ? "Administrator" : "Operations"} edit · ${adminEditing.code}`} description={`Correct Account, Production, or Operations data while keeping ${statusLabel(adminEditing)} as the current workflow stage.${adminEditing.status === "final_approved" ? " The linked Draft invoice will be synchronized." : ""}`} onClose={() => !saving && setAdminEditing(null)}>
       <form className={styles.workflowForm} onSubmit={saveAdminEdit}>
         <div className={styles.formGrid}>
           <label><span>Work order type</span><select value="media_guide" disabled><option value="media_guide">Media Guide work order</option></select></label>
           <label><span>Client</span><select required value={adminDraft.clientId || ""} onChange={(event) => setAdminDraft({ ...adminDraft, clientId: Number(event.target.value) })}><option value="">Choose client</option>{state.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
           <label><span>Production date</span><input required type="date" value={adminDraft.workDate} onChange={(event) => setAdminDraft({ ...adminDraft, workDate: event.target.value })} /></label>
           <label><span>Call time <small>Optional before Production completes</small></span><input type="time" value={adminDraft.callTime} onChange={(event) => setAdminDraft({ ...adminDraft, callTime: event.target.value })} /></label>
-          <div className={styles.wide}><BundlesEditor available={bundles} selected={adminDraft.bundles} onChange={(selectedBundles) => setAdminDraft({ ...adminDraft, bundles: selectedBundles, addons: [] })} /></div>
+          <div className={styles.wide}><BundlesEditor available={bundles} selected={adminDraft.bundles} onChange={(selectedBundles) => setAdminDraft((current) => current ? ({ ...current, bundles: selectedBundles, addons: compatibleAddons(current.addons, selectedBundles, bundles) }) : current)} /></div>
           <div className={styles.wide}><AddonsEditor available={adminAddons} selected={adminDraft.addons} bundleSelected={Boolean(adminDraft.bundles.length)} onChange={(selectedAddons) => setAdminDraft({ ...adminDraft, addons: selectedAddons })} /></div>
           <div className={styles.wide}><ProductionOptionsEditor options={adminDraft.options} crew={state.crew} modelCatalogUrl={state.modelCatalogUrl} onChange={(options) => setAdminDraft({ ...adminDraft, options })} /></div>
-          <label className={styles.wide}><span>Account Manager note <small>Editable by Administrator</small></span><textarea rows={3} maxLength={5000} value={adminDraft.accountNote} onChange={(event) => setAdminDraft({ ...adminDraft, accountNote: event.target.value })} /></label>
-          <label className={styles.wide}><span>Production Manager note <small>Editable by Administrator</small></span><textarea rows={3} maxLength={5000} value={adminDraft.productionNote} onChange={(event) => setAdminDraft({ ...adminDraft, productionNote: event.target.value })} /></label>
-          <label className={styles.wide}><span>Operation Manager note <small>Editable by Administrator</small></span><textarea rows={3} maxLength={5000} value={adminDraft.operationNote} onChange={(event) => setAdminDraft({ ...adminDraft, operationNote: event.target.value })} /></label>
+          <label className={styles.wide}><span>Account Manager note <small>Manager correction</small></span><textarea rows={3} maxLength={5000} value={adminDraft.accountNote} onChange={(event) => setAdminDraft({ ...adminDraft, accountNote: event.target.value })} /></label>
+          <label className={styles.wide}><span>Production Manager note <small>Manager correction</small></span><textarea rows={3} maxLength={5000} value={adminDraft.productionNote} onChange={(event) => setAdminDraft({ ...adminDraft, productionNote: event.target.value })} /></label>
+          <label className={styles.wide}><span>Operation Manager note <small>Manager correction</small></span><textarea rows={3} maxLength={5000} value={adminDraft.operationNote} onChange={(event) => setAdminDraft({ ...adminDraft, operationNote: event.target.value })} /></label>
         </div>
-        <div className={styles.finalWarning}><Pencil size={18} /><span><strong>Administrator correction</strong><small>Saving updates the order details without sending it forward or changing its current approval stage.</small></span></div>
+        <div className={styles.finalWarning}><Pencil size={18} /><span><strong>Authorized manager correction</strong><small>Saving updates the order without changing its approval stage.{adminEditing.status === "final_approved" ? " The linked Draft invoice updates automatically." : ""}</small></span></div>
         <footer><button type="button" className="secondary-button" onClick={() => setAdminEditing(null)} disabled={saving}>Back</button><button className="primary-button" disabled={saving}>{saving ? <><LoaderCircle size={16} /> Saving…</> : <><CheckCircle2 size={16} /> Save corrections</>}</button></footer>
       </form>
     </WorkflowModal>}
@@ -768,7 +782,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
           <label><span>Client</span><select required value={operationDraft.clientId || ""} onChange={(event) => setOperationDraft({ ...operationDraft, clientId: Number(event.target.value) })}><option value="">Choose client</option>{state.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
           <label><span>Production date</span><input required type="date" value={operationDraft.workDate} onChange={(event) => setOperationDraft({ ...operationDraft, workDate: event.target.value })} /></label>
           <label><span>Call time</span><input required type="time" value={operationDraft.callTime} onChange={(event) => setOperationDraft({ ...operationDraft, callTime: event.target.value })} /></label>
-          <div className={styles.wide}><BundlesEditor available={bundles} selected={operationDraft.bundles} onChange={(selectedBundles) => setOperationDraft({ ...operationDraft, bundles: selectedBundles, addons: [] })} /></div>
+          <div className={styles.wide}><BundlesEditor available={bundles} selected={operationDraft.bundles} onChange={(selectedBundles) => setOperationDraft((current) => current ? ({ ...current, bundles: selectedBundles, addons: compatibleAddons(current.addons, selectedBundles, bundles) }) : current)} /></div>
           <div className={styles.wide}><AddonsEditor available={operationAddons} selected={operationDraft.addons} bundleSelected={Boolean(operationDraft.bundles.length)} onChange={(selectedAddons) => setOperationDraft({ ...operationDraft, addons: selectedAddons })} /></div>
           <div className={styles.wide}><ProductionOptionsEditor options={operationDraft.options} crew={state.crew} modelCatalogUrl={state.modelCatalogUrl} onChange={(options) => setOperationDraft({ ...operationDraft, options })} /></div>
           <label className={styles.wide}><span>Account Manager note <small>Editable by Operations</small></span><textarea rows={3} maxLength={5000} value={operationDraft.accountNote} onChange={(event) => setOperationDraft({ ...operationDraft, accountNote: event.target.value })} /></label>

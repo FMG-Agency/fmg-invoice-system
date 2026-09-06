@@ -198,6 +198,15 @@
 .addonChoice small, .addonChoiceSelected small { overflow: hidden; color: var(--muted); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
 .addonChoice b, .addonChoiceSelected b { color: var(--yellow-ink); font-size: 8px; white-space: nowrap; }
 .addonsEmpty { min-height: 62px; padding: 15px; color: var(--muted); font-size: 9px; display: grid; place-items: center; text-align: center; }
+.bundleBuilderList { padding: 10px; display: flex; flex-direction: column; gap: 9px; }
+.bundleBuilderRow { padding: 10px; border: 1px solid color-mix(in srgb, var(--yellow) 48%, var(--line)); border-radius: 10px; background: color-mix(in srgb, var(--yellow) 6%, var(--surface)); display: grid; grid-template-columns: auto minmax(190px, 1.2fr) minmax(165px, 1fr) minmax(120px, .55fr) 34px; align-items: end; gap: 9px; }
+.bundleBuilderRow label { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.bundleBuilderRow label > span { font-size: 8px; font-weight: 800; }
+.bundleBuilderRow label > span small { margin-left: 4px; color: var(--muted); font-size: 7px; font-weight: 600; }
+.bundleBuilderRow label:nth-of-type(4) { grid-column: 2 / 4; grid-row: 2; }
+.bundleBuilderRow label:nth-of-type(5) { grid-column: 4 / 6; grid-row: 2; }
+.bundleBuilderRow textarea { min-height: 72px; }
+.bundleBuilderRow > button { width: 34px; height: 42px; grid-column: 5; grid-row: 1; border: 1px solid color-mix(in srgb, #d04d4d 40%, var(--line)); border-radius: 8px; background: color-mix(in srgb, #d04d4d 8%, var(--surface)); color: #bd3434; display: grid; place-items: center; cursor: pointer; }
 .customAddonList { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 8px; }
 .customAddonRow { padding: 10px; border: 1px solid color-mix(in srgb, var(--yellow) 48%, var(--line)); border-radius: 9px; background: color-mix(in srgb, var(--yellow) 7%, var(--surface)); display: grid; grid-template-columns: auto minmax(180px, 1.2fr) minmax(125px, .55fr) minmax(160px, 1fr) minmax(160px, 1fr) 34px; align-items: end; gap: 8px; }
 .customAddonNumber { height: 42px; padding: 0 9px; border-radius: 7px; background: var(--ink); color: var(--surface); font-size: 7px; font-weight: 850; display: grid; place-items: center; white-space: nowrap; }
@@ -358,6 +367,9 @@
   .catalogDetails > header, .catalogDetails > div { grid-template-columns: 1fr; }
   .addonsEditor > header { align-items: stretch; flex-direction: column; }
   .addonChoices { grid-template-columns: 1fr; }
+  .bundleBuilderRow { grid-template-columns: 70px minmax(0, 1fr) 34px; align-items: start; }
+  .bundleBuilderRow label, .bundleBuilderRow label:nth-of-type(4), .bundleBuilderRow label:nth-of-type(5) { grid-column: 2; grid-row: auto; }
+  .bundleBuilderRow > button { grid-column: 3; grid-row: 1 / 7; height: 100%; }
   .customAddonRow { grid-template-columns: 70px 1fr 34px; }
   .customAddonRow label { grid-column: 2; }
   .customAddonNumber { grid-row: 1 / 5; height: 100%; }

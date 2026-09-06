@@ -37,25 +37,23 @@ const productionOptionSchema = z.object({
   price: z.number().finite().min(0, "Production option prices cannot be negative."),
   billingMode: z.enum(["included", "extra"]).default("included"),
 });
+const scopeDetail = z.string().trim().min(1).max(300);
 const bundleSelectionSchema = z.object({
   id: z.string().trim().min(1).max(100),
   catalogId: z.number().int().positive(),
-});
-const storedBundleSchema = bundleSelectionSchema.extend({
   name: z.string().trim().min(1).max(300),
   price: z.number().finite().min(0),
-  inputs: z.array(z.string()).max(30),
-  outputs: z.array(z.string()).max(30),
+  inputs: z.array(scopeDetail).max(30),
+  outputs: z.array(scopeDetail).max(30),
   bundleTotal: z.number().finite().min(0).nullable().default(null),
 });
-const addonDetail = z.string().trim().min(1).max(300);
 const addonSelectionSchema = z.object({
   id: z.string().trim().min(1).max(100),
   catalogId: z.number().int().positive().nullable(),
   name: z.string().trim().min(1, "Enter a name for every custom add-on.").max(300),
   price: z.number().finite().min(0, "Add-on prices cannot be negative."),
-  inputs: z.array(addonDetail).max(30),
-  outputs: z.array(addonDetail).max(30),
+  inputs: z.array(scopeDetail).max(30),
+  outputs: z.array(scopeDetail).max(30),
 });
 const storedAddonSchema = addonSelectionSchema.extend({
   appliesTo: z.string().trim().max(300).default(""),
@@ -99,7 +97,7 @@ const payloadSchema = z.discriminatedUnion("action", [
     }),
   }),
   z.object({
-    action: z.literal("adminEdit"),
+    action: z.literal("managerEdit"),
     id: z.number().int().positive(),
     data: z.object({
       clientId: z.number().int().positive(),
@@ -364,7 +362,7 @@ function stringArray(value: unknown) {
 
 function workOrderBundles(row: Record<string, unknown>): ProductionWorkOrderBundle[] {
   try {
-    const parsed = z.array(storedBundleSchema).safeParse(JSON.parse(String(row.bundlesJson ?? "[]")));
+    const parsed = z.array(bundleSelectionSchema).safeParse(JSON.parse(String(row.bundlesJson ?? "[]")));
     if (parsed.success && parsed.data.length) return parsed.data;
   } catch {
     // Fall through to the legacy single bundle snapshot.
@@ -591,13 +589,16 @@ async function resolveScope(data: { clientId: number; bundles: z.infer<typeof bu
   const bundles = bundleRows.map((bundleRow, index): ProductionWorkOrderBundle => ({
     id: data.bundles[index].id,
     catalogId: Number(bundleRow!.id),
-    name: String(bundleRow!.name ?? ""),
-    price: Number(bundleRow!.price ?? 0),
-    inputs: stringArray(bundleRow!.inputsJson),
-    outputs: stringArray(bundleRow!.outputsJson),
-    bundleTotal: bundleRow!.bundleTotal === null || bundleRow!.bundleTotal === undefined ? null : Number(bundleRow!.bundleTotal),
+    name: data.bundles[index].name,
+    price: data.bundles[index].price,
+    inputs: data.bundles[index].inputs,
+    outputs: data.bundles[index].outputs,
+    bundleTotal: data.bundles[index].bundleTotal,
   }));
-  const selectedBundleNames = new Set(bundles.map((bundle) => bundle.name.toLowerCase()));
+  const selectedBundleNames = new Set([
+    ...bundles.map((bundle) => bundle.name.toLowerCase()),
+    ...bundleRows.map((bundleRow) => String(bundleRow!.name ?? "").toLowerCase()),
+  ]);
 
   const catalogIds = data.addons.flatMap((addon) => addon.catalogId ? [addon.catalogId] : []);
   if (new Set(catalogIds).size !== catalogIds.length) throw new Error("The same add-on cannot be selected more than once.");
@@ -647,7 +648,7 @@ const productionOptionLabels: Record<ProductionCostOption["type"], string> = {
   stylist: "Stylist",
 };
 
-async function ensureDraftInvoice(input: {
+type DraftInvoiceInput = {
   workOrderId: number;
   clientId: number;
   workDate: string;
@@ -656,19 +657,9 @@ async function ensureDraftInvoice(input: {
   operationNote: string;
   options: ProductionCostOption[];
   scope: Awaited<ReturnType<typeof resolveScope>>;
-}) {
-  const existing = await database.prepare("SELECT id, generated_code AS generatedCode FROM documents WHERE production_work_order_id = ?")
-    .bind(input.workOrderId).first<{ id: number; generatedCode: string }>();
-  if (existing) return existing;
+};
 
-  const category = await database.prepare(`UPDATE categories SET counter = counter + 1, updated_at = CURRENT_TIMESTAMP
-    WHERE LOWER(TRIM(name)) = 'media guide' RETURNING id, prefix, counter`)
-    .first<{ id: number; prefix: string; counter: number }>();
-  if (!category) throw new Error("The Media Guide category is required before a draft invoice can be created.");
-  const settings = await database.prepare("SELECT prepared_by AS preparedBy, default_payment_terms AS paymentTerms FROM settings WHERE id = 1")
-    .first<{ preparedBy: string; paymentTerms: string }>();
-  const clientPart = input.scope.client.name.trim().replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, "-").replace(/^-|-$/g, "") || "CLIENT";
-  const generatedCode = `${clientPart}-${category.prefix}${String(category.counter).padStart(4, "0")}`;
+function draftInvoiceContent(input: DraftInvoiceInput) {
   const lineItem = (id: string, description: string, price: number, kind: "package" | "addon" | "custom", catalogId: number | null,
     inputs: string[], outputs: string[], appliesTo = "", bundleTotal: number | null = null) => ({
     id, date: input.workDate, description, qty: 1, unit: kind === "package" ? "Package" : kind === "addon" ? "Add-on" : "Service",
@@ -689,14 +680,41 @@ async function ensureDraftInvoice(input: {
     input.productionNote ? `Production note: ${input.productionNote}` : "",
     input.operationNote ? `Operation note: ${input.operationNote}` : "",
   ].filter(Boolean).join("\n");
+  return { items, subtotal, notes };
+}
+
+async function ensureDraftInvoice(input: DraftInvoiceInput) {
+  const companyKey = input.scope.client.agencyKey === "digital_empire" ? "digital_empire" : "fmg";
+  const content = draftInvoiceContent(input);
+  const existing = await database.prepare("SELECT id, generated_code AS generatedCode, status FROM documents WHERE production_work_order_id = ?")
+    .bind(input.workOrderId).first<{ id: number; generatedCode: string; status: string }>();
+  if (existing) {
+    if (existing.status === "Draft") {
+      await database.prepare(`UPDATE documents SET company_key = ?, client_id = ?, date = ?, project = ?, items_json = ?,
+          subtotal = ?, total = ? - COALESCE(discount, 0) + COALESCE(tax, 0), notes_exclusions = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`)
+        .bind(companyKey, input.clientId, input.workDate, `Media Guide · ${codeFor(input.workOrderId)}`,
+          JSON.stringify(content.items), content.subtotal, content.subtotal, content.notes, existing.id).run();
+    }
+    return existing;
+  }
+
+  const category = await database.prepare(`UPDATE categories SET counter = counter + 1, updated_at = CURRENT_TIMESTAMP
+    WHERE LOWER(TRIM(name)) = 'media guide' RETURNING id, prefix, counter`)
+    .first<{ id: number; prefix: string; counter: number }>();
+  if (!category) throw new Error("The Media Guide category is required before a draft invoice can be created.");
+  const settings = await database.prepare("SELECT prepared_by AS preparedBy, default_payment_terms AS paymentTerms FROM settings WHERE id = 1")
+    .first<{ preparedBy: string; paymentTerms: string }>();
+  const clientPart = input.scope.client.name.trim().replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, "-").replace(/^-|-$/g, "") || "CLIENT";
+  const generatedCode = `${clientPart}-${category.prefix}${String(category.counter).padStart(4, "0")}`;
   await database.prepare(`INSERT OR IGNORE INTO documents
     (type, company_key, generated_code, client_id, category_id, date, valid_until, prepared_by, currency, project,
       status, items_json, subtotal, discount, tax, total, payment_terms, notes_exclusions, pdf_key, production_work_order_id)
     VALUES ('invoice', ?, ?, ?, ?, ?, '', ?, 'EGP', ?, 'Draft', ?, ?, 0, 0, ?, ?, ?, '', ?)`)
-    .bind(input.scope.client.agencyKey === "digital_empire" ? "digital_empire" : "fmg", generatedCode,
+    .bind(companyKey, generatedCode,
       input.clientId, category.id, input.workDate,
       settings?.preparedBy || "Finance Department", `Media Guide · ${codeFor(input.workOrderId)}`,
-      JSON.stringify(items), subtotal, subtotal, settings?.paymentTerms || "", notes, input.workOrderId).run();
+      JSON.stringify(content.items), content.subtotal, content.subtotal, settings?.paymentTerms || "", content.notes, input.workOrderId).run();
   const created = await database.prepare("SELECT id, generated_code AS generatedCode FROM documents WHERE production_work_order_id = ?")
     .bind(input.workOrderId).first<{ id: number; generatedCode: string }>();
   if (!created) throw new Error("The work order was approved, but its draft invoice could not be created.");
@@ -822,35 +840,47 @@ export async function POST(request: Request) {
         entityId: payload.id,
         actorUserId: session.userId,
       });
-    } else if (payload.action === "adminEdit") {
-      if (!session.isAdmin) return accessDenied("Only an administrator can edit a work order before final approval.");
+    } else if (payload.action === "managerEdit") {
+      if (role !== "operation_manager" && role !== "administrator") return accessDenied("Only an Operation Manager or administrator can edit work orders.");
       const existing = await database.prepare(`SELECT id, status, final_approved_at AS finalApprovedAt,
           created_by_user_id AS createdByUserId, production_manager_user_id AS productionManagerUserId
         FROM production_work_orders WHERE id = ?`)
         .bind(payload.id).first<{ id: number; status: string; finalApprovedAt: string; createdByUserId: number; productionManagerUserId: number | null }>();
       if (!existing) return Response.json({ error: "Work order not found." }, { status: 404 });
-      if (existing.finalApprovedAt) throw new Error("This work order has already received final approval and is permanently locked.");
-      const { client, bundles, addons } = await resolveScope(payload.data);
+      const scope = await resolveScope(payload.data);
+      const { client, bundles, addons } = scope;
       const bundle = bundles[0];
       const primaryAddon = addons[0] ?? null;
       const options = payload.data.options as ProductionCostOption[];
+      const syncedDraftInvoice = existing.finalApprovedAt ? await ensureDraftInvoice({
+        workOrderId: payload.id,
+        clientId: payload.data.clientId,
+        workDate: payload.data.workDate,
+        accountNote: payload.data.accountNote,
+        productionNote: payload.data.productionNote,
+        operationNote: payload.data.operationNote,
+        options,
+        scope,
+      }) : null;
       const updated = await database.prepare(`UPDATE production_work_orders SET
           client_id = ?, client_name = ?, bundle_catalog_id = ?, bundle_name = ?, bundle_price = ?, bundle_inputs_json = ?, bundle_outputs_json = ?, bundles_json = ?,
           addon_catalog_id = ?, addon_name = ?, addon_price = ?, addon_inputs_json = ?, addon_outputs_json = ?, addons_json = ?,
           work_date = ?, photographer_name = ?, model_name = ?, location = ?, call_time = ?, production_options_json = ?,
-          account_note = ?, production_note = ?, operation_note = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND final_approved_at = ''`)
+          account_note = ?, production_note = ?, operation_note = ?, draft_invoice_id = COALESCE(draft_invoice_id, ?), updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`)
         .bind(payload.data.clientId, client.name, bundle.catalogId, bundle.name, bundle.price, JSON.stringify(bundle.inputs), JSON.stringify(bundle.outputs), JSON.stringify(bundles),
           primaryAddon?.catalogId ?? null, primaryAddon?.name ?? "", primaryAddon?.price ?? 0, JSON.stringify(primaryAddon?.inputs ?? []), JSON.stringify(primaryAddon?.outputs ?? []), JSON.stringify(addons),
           payload.data.workDate, firstOption(options, "photographer"), firstOption(options, "model"), firstOption(options, "location") || firstOption(options, "studio"),
-          payload.data.callTime, JSON.stringify(options), payload.data.accountNote, payload.data.productionNote, payload.data.operationNote, payload.id).run();
-      if (Number(updated.meta.changes) !== 1) throw new Error("This work order has already received final approval and is permanently locked.");
-      const workflowRecipients = await workflowRecipientUserIds(existing.status === "pending_production" ? "production_manager" : "operation_manager", session.userId);
+          payload.data.callTime, JSON.stringify(options), payload.data.accountNote, payload.data.productionNote, payload.data.operationNote, syncedDraftInvoice?.id ?? null, payload.id).run();
+      if (Number(updated.meta.changes) !== 1) return Response.json({ error: "Work order not found." }, { status: 404 });
+      const workflowRecipients = existing.finalApprovedAt
+        ? []
+        : await workflowRecipientUserIds(existing.status === "pending_production" ? "production_manager" : "operation_manager", session.userId);
       const recipients = [...new Set([existing.createdByUserId, ...(existing.productionManagerUserId ? [existing.productionManagerUserId] : []), ...workflowRecipients])]
         .filter((userId) => userId !== session.userId);
       await notifyUsers(recipients, {
-        type: "work_order_admin_edited",
-        title: `${codeFor(payload.id)} updated by Administrator`,
+        type: "work_order_manager_edited",
+        title: `${codeFor(payload.id)} updated by ${role === "administrator" ? "Administrator" : "Operations"}`,
         message: `${displayName(session)} corrected ${client.name}'s work order without changing its approval stage.`,
         targetView: "work-order",
         entityId: payload.id,
