@@ -660,7 +660,7 @@ export function FmgSystem() {
 
   if (auth.checking || (auth.authenticated && loading)) return <div className="app-loader"><Image src="/fmg-logo-light.png" alt="FMG Agency" width={380} height={130} unoptimized /><span /><p>Preparing your agency workspace…</p></div>;
   if (!auth.authenticated) return <AuthScreen setupRequired={auth.setupRequired} onAuthenticated={handleAuthenticated} />;
-  if (auth.clientId !== null) return <ClientPortalShell displayName={auth.displayName || auth.username} dark={dark} onToggleTheme={toggleTheme} onLogout={logout} />;
+  if (auth.clientId !== null) return <><ClientPortalShell displayName={auth.displayName || auth.username} dark={dark} onToggleTheme={toggleTheme} onLogout={logout} showToast={showToast} />{toast && <div className="toast" role="status">{toast}</div>}</>;
 
   return (
     <div className="app-shell" dir="ltr">

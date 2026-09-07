@@ -122,7 +122,7 @@ async function sendPush(userId: number, notificationId: number, input: Notificat
   const rows = await database.prepare(`SELECT id, endpoint, p256dh, auth, expiration_time AS expirationTime
       FROM push_subscriptions WHERE user_id = ? AND active = 1`).bind(userId)
     .all<{ id: number; endpoint: string; p256dh: string; auth: string; expirationTime: number | null }>();
-  await Promise.allSettled(rows.results.map(async (row) => {
+  const deliveries = await Promise.allSettled(rows.results.map(async (row) => {
     const subscription: PushSubscription = {
       endpoint: row.endpoint,
       expirationTime: row.expirationTime,
@@ -138,12 +138,20 @@ async function sendPush(userId: number, notificationId: number, input: Notificat
       }),
       options: { ttl: 60 * 60 * 24, urgency: "high" },
     }, subscription, { subject, publicKey, privateKey });
-    const response = await fetch(row.endpoint, payload);
+    const response = await fetch(row.endpoint, { ...payload, signal: AbortSignal.timeout(10_000) });
     if (response.status === 404 || response.status === 410) {
       await database.prepare("UPDATE push_subscriptions SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
         .bind(row.id).run();
+    } else if (!response.ok) {
+      // Do not log endpoints, credentials, response bodies, or notification content.
+      console.error("Push service rejected delivery", { notificationId, subscriptionId: row.id, status: response.status });
     }
   }));
+  deliveries.forEach((delivery, index) => {
+    if (delivery.status === "rejected") {
+      console.error("Push delivery failed", { notificationId, subscriptionId: rows.results[index].id });
+    }
+  });
 }
 
 export async function notifyUsers(userIds: number[], input: NotificationInput) {
@@ -158,7 +166,7 @@ export async function notifyUsers(userIds: number[], input: NotificationInput) {
       const notificationId = Number(result.meta.last_row_id);
       await sendPush(userId, notificationId, input);
     }
-  } catch (error) {
-    console.error("Notification delivery failed", error);
+  } catch {
+    console.error("Notification delivery failed");
   }
 }

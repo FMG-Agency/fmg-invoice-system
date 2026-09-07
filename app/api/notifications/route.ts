@@ -16,6 +16,7 @@ const subscriptionSchema = z.object({
 });
 
 const payloadSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("subscriptionStatus"), endpoint: z.string().url() }),
   z.object({ action: z.literal("subscribe"), subscription: subscriptionSchema }),
   z.object({ action: z.literal("unsubscribe"), endpoint: z.string().url() }),
   z.object({ action: z.literal("read"), id: z.number().int().positive() }),
@@ -36,7 +37,6 @@ export async function GET(request: Request) {
   try {
     const session = await getSession(request);
     if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
-    if (session.clientId !== null) return Response.json({ error: "Notifications are available to FMG staff accounts." }, { status: 403 });
     return Response.json(await getNotificationsState(session.userId));
   } catch (error) {
     return responseError(error);
@@ -48,9 +48,14 @@ export async function POST(request: Request) {
     if (!sameOrigin(request)) return Response.json({ error: "Invalid request origin." }, { status: 403 });
     const session = await getSession(request);
     if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
-    if (session.clientId !== null) return Response.json({ error: "Notifications are available to FMG staff accounts." }, { status: 403 });
     await ensureNotificationsDatabase();
     const payload = payloadSchema.parse(await request.json());
+
+    if (payload.action === "subscriptionStatus") {
+      const subscription = await database.prepare("SELECT id FROM push_subscriptions WHERE user_id = ? AND endpoint = ? AND active = 1")
+        .bind(session.userId, payload.endpoint).first();
+      return Response.json({ subscribed: Boolean(subscription) });
+    }
 
     if (payload.action === "subscribe") {
       const subscription = payload.subscription;
@@ -65,7 +70,7 @@ export async function POST(request: Request) {
       await notifyUsers([session.userId], {
         type: "push_enabled",
         title: "FMG notifications are active",
-        message: "This device will now receive new work orders and employee-request updates.",
+        message: "This device is registered for updates addressed to your account.",
         targetView: "dashboard",
       });
     } else if (payload.action === "unsubscribe") {

@@ -48,7 +48,7 @@ export function NotificationCenter({
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const rootRef = useRef<HTMLDivElement>(null);
   const supported = typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
-  const isIos = typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isIos = typeof navigator !== "undefined" && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
   const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
   const iphoneInstallNeeded = isIos && !isStandalone;
 
@@ -59,7 +59,14 @@ export function NotificationCenter({
       if (supported) {
         setPermission(window.Notification.permission);
         const registration = await navigator.serviceWorker.getRegistration();
-        setPushEnabled(Boolean(await registration?.pushManager.getSubscription()));
+        const subscription = await registration?.pushManager.getSubscription();
+        const status = subscription ? await fetch("/api/notifications", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "subscriptionStatus", endpoint: subscription.endpoint }),
+        }) : null;
+        const saved = status?.ok ? await status.json() as { subscribed: boolean } : null;
+        setPushEnabled(window.Notification.permission === "granted" && Boolean(saved?.subscribed));
       }
     } catch (error) {
       if (!quiet) showToast(error instanceof Error ? error.message : "Could not load notifications.");
@@ -100,9 +107,9 @@ export function NotificationCenter({
     try {
       const nextPermission = await window.Notification.requestPermission();
       setPermission(nextPermission);
-      if (nextPermission !== "granted") throw new Error("Notification permission was not allowed in this browser.");
-      const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-      await navigator.serviceWorker.ready;
+      if (nextPermission !== "granted") throw new Error(nextPermission === "denied" ? "Notifications are blocked. Open this site's browser settings, allow Notifications, then try Enable again." : "Notification permission was dismissed. Tap Enable and choose Allow to try again.");
+      await navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.ready;
       const existing = await registration.pushManager.getSubscription();
       const subscription = existing ?? await registration.pushManager.subscribe({
         userVisibleOnly: true,
@@ -172,8 +179,8 @@ export function NotificationCenter({
       </header>
       <div className="push-control">
         <span className={pushEnabled ? "push-icon active" : "push-icon"}>{pushEnabled ? <BellRing size={18} /> : <Smartphone size={18} />}</span>
-        <span><strong>{pushEnabled ? "Device alerts are on" : "Get alerts on this device"}</strong><small>{permissionBlocked ? "Allow notifications from your browser settings first." : iphoneInstallNeeded ? "On iPhone: use Share → Add to Home Screen, then open FMG System from its icon." : pushEnabled ? "You can close the site and still receive workflow updates." : "Works on desktop and supported mobile browsers."}</small></span>
-        {pushEnabled ? <button onClick={disablePush} disabled={busy} className="push-toggle off"><BellOff size={15} /> Off</button> : <button onClick={enablePush} disabled={busy || permissionBlocked || !state.pushConfigured || iphoneInstallNeeded} className="push-toggle">{iphoneInstallNeeded ? "Install first" : "Enable"}</button>}
+        <span><strong>{pushEnabled ? "Device alerts are on" : "Get alerts on this device"}</strong><small>{permissionBlocked ? "Notifications are blocked. Allow Notifications in this site's browser settings and your device settings, then return here." : iphoneInstallNeeded ? "On iPhone or iPad (iOS/iPadOS 16.4+): open in Safari, use Share → Add to Home Screen, then open FMG System from its icon and tap Enable." : !supported ? "This browser does not support device alerts. Use a supported browser; your updates remain in this bell." : !state.pushConfigured ? "Device alerts are unavailable in this environment. Your updates remain in this bell." : pushEnabled ? "Device alerts are enabled. Delivery also depends on your device's notification and Focus settings." : "Tap Enable, then choose Allow when your browser asks."}</small></span>
+        {pushEnabled ? <button onClick={disablePush} disabled={busy} className="push-toggle off"><BellOff size={15} /> Off</button> : <button onClick={enablePush} disabled={busy || permissionBlocked || !supported || !state.pushConfigured || iphoneInstallNeeded} className="push-toggle">{iphoneInstallNeeded ? "Install first" : "Enable"}</button>}
       </div>
       <div className="notification-list">
         {state.notifications.length ? state.notifications.map((notification) => <button key={notification.id} className={notification.read ? "notification-item" : "notification-item unread"} onClick={() => void openNotification(notification)}>

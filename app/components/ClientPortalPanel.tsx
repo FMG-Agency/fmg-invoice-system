@@ -23,6 +23,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Client, ClientPortalPlanPart, ClientPortalState } from "../types";
 import styles from "./ClientPortalPanel.module.css";
+import { NotificationCenter } from "./NotificationCenter";
 
 const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -79,7 +80,7 @@ function MonthPicker({ year, selected, plans, onSelect }: { year: number; select
   })}</div>;
 }
 
-export function ClientPortalShell({ displayName, dark, onToggleTheme, onLogout }: { displayName: string; dark: boolean; onToggleTheme: () => void; onLogout: () => Promise<void> }) {
+export function ClientPortalShell({ displayName, dark, onToggleTheme, onLogout, showToast }: { displayName: string; dark: boolean; onToggleTheme: () => void; onLogout: () => Promise<void>; showToast: (message: string) => void }) {
   const [state, setState] = useState<ClientPortalState | null>(null);
   const [year, setYear] = useState(currentYear());
   const [month, setMonth] = useState(currentMonth());
@@ -108,7 +109,7 @@ export function ClientPortalShell({ displayName, dark, onToggleTheme, onLogout }
     <header className={styles.portalHeader}>
       <div className={styles.portalBrand}><Image src="/fmg-logo-light.png" alt="FMG Agency" width={380} height={130} unoptimized /><span>CLIENT PORTAL</span></div>
       <nav aria-label="Client portal navigation"><button className={tab === "invoices" ? styles.activeTab : ""} onClick={() => setTab("invoices")}><ReceiptText size={17} /> Invoices</button><button className={tab === "plans" ? styles.activeTab : ""} onClick={() => setTab("plans")}><CalendarDays size={17} /> Monthly plans</button></nav>
-      <div className={styles.portalUser}><button onClick={onToggleTheme} aria-label="Toggle theme">{dark ? <Sun size={17} /> : <Moon size={17} />}</button><span><ClientBrandMark key={`header-${state?.client?.id}-${state?.client?.portalLogoUpdatedAt}`} client={state?.client} title={title} className={styles.portalUserMark} /><span><strong>{title}</strong><small>{displayName}</small></span></span><button onClick={() => void onLogout()} aria-label="Sign out"><LogOut size={17} /></button></div>
+      <div className={styles.portalUser}><NotificationCenter onNavigate={() => setTab("invoices")} showToast={showToast} /><button onClick={onToggleTheme} aria-label="Toggle theme">{dark ? <Sun size={17} /> : <Moon size={17} />}</button><span><ClientBrandMark key={`header-${state?.client?.id}-${state?.client?.portalLogoUpdatedAt}`} client={state?.client} title={title} className={styles.portalUserMark} /><span><strong>{title}</strong><small>{displayName}</small></span></span><button onClick={() => void onLogout()} aria-label="Sign out"><LogOut size={17} /></button></div>
     </header>
 
     <main className={styles.portalMain}>
