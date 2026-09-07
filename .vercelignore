@@ -1,7 +1,6 @@
 .git
 .next
 .vercel
-.openai
 .env*
 node_modules
 work
