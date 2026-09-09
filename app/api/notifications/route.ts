@@ -22,6 +22,8 @@ const payloadSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("unsubscribe"), endpoint: z.string().url() }),
   z.object({ action: z.literal("read"), id: z.number().int().positive() }),
   z.object({ action: z.literal("readAll") }),
+  z.object({ action: z.literal("delete"), id: z.number().int().positive() }),
+  z.object({ action: z.literal("clearAll") }),
 ]);
 
 function sameOrigin(request: Request) {
@@ -82,6 +84,12 @@ export async function POST(request: Request) {
     } else if (payload.action === "read") {
       await database.prepare("UPDATE system_notifications SET read_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ? AND read_at = ''")
         .bind(payload.id, session.userId).run();
+    } else if (payload.action === "delete") {
+      await database.prepare("DELETE FROM system_notifications WHERE id = ? AND user_id = ?")
+        .bind(payload.id, session.userId).run();
+    } else if (payload.action === "clearAll") {
+      await database.prepare("DELETE FROM system_notifications WHERE user_id = ?")
+        .bind(session.userId).run();
     } else {
       await database.prepare("UPDATE system_notifications SET read_at = CURRENT_TIMESTAMP WHERE user_id = ? AND read_at = ''")
         .bind(session.userId).run();

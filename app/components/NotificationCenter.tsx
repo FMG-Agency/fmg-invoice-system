@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BellOff, BellRing, CheckCheck, Smartphone, X } from "lucide-react";
+import { Bell, BellOff, BellRing, CheckCheck, Smartphone, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { NotificationsState, NotificationTargetView, SystemNotification } from "../types";
 
@@ -44,7 +44,6 @@ export function NotificationCenter({
   const [state, setState] = useState<NotificationsState>(emptyState);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [testResult, setTestResult] = useState("");
   const [pushEnabled, setPushEnabled] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -168,16 +167,15 @@ export function NotificationCenter({
 
   const permissionBlocked = permission === "denied";
 
-  async function testDevices() {
+  async function removeNotifications(id?: number) {
+    if (id === undefined && !window.confirm("Clear all notifications from your account?")) return;
     setBusy(true);
-    setTestResult("");
     try {
-      const response = await fetch("/api/notifications", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "testPush" }) });
-      const result = await response.json() as { configured: boolean; accepted: number; failed: number; statuses: number[] };
-      if (!response.ok) throw new Error("Could not test device notifications. Please try again.");
-      setTestResult(!result.configured ? "Device push is not configured in this environment." : !result.statuses.length ? "No devices registered for your account. Open FMG on your device and choose Enable first." : `Push service accepted ${result.accepted} delivery attempt(s); ${result.failed} failed. ${result.failed ? `Status: ${result.statuses.join(", ")} (0 means encryption or network failure). ` : ""}Check your device outside this page; acceptance does not confirm display.`);
-    } catch (error) { setTestResult(error instanceof Error ? error.message : "Device test failed."); }
-    finally { setBusy(false); }
+      setState(await post(id === undefined ? { action: "clearAll" } : { action: "delete", id }));
+      showToast(id === undefined ? "All notifications cleared." : "Notification deleted.");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not delete notifications.");
+    } finally { setBusy(false); }
   }
 
   return <div className="notification-center" ref={rootRef}>
@@ -188,7 +186,7 @@ export function NotificationCenter({
     {open && <section className="notification-popover" aria-label="System notifications">
       <header className="notification-heading">
         <div><span>NOTIFICATIONS</span><strong>Updates for you</strong></div>
-        <div>{state.unreadCount > 0 && <button onClick={readAll} disabled={busy} title="Mark all as read"><CheckCheck size={17} /></button>}<button onClick={() => setOpen(false)} title="Close"><X size={17} /></button></div>
+        <div>{state.notifications.length > 0 && <button className="notification-clear" onClick={() => void removeNotifications()} disabled={busy}>Clear all</button>}{state.unreadCount > 0 && <button onClick={readAll} disabled={busy} title="Mark all as read"><CheckCheck size={17} /></button>}<button onClick={() => setOpen(false)} title="Close"><X size={17} /></button></div>
       </header>
       <div className="push-control">
         <span className={pushEnabled ? "push-icon active" : "push-icon"}>{pushEnabled ? <BellRing size={18} /> : <Smartphone size={18} />}</span>
@@ -196,11 +194,10 @@ export function NotificationCenter({
         {pushEnabled ? <button onClick={disablePush} disabled={busy} className="push-toggle off"><BellOff size={15} /> Off</button> : <button onClick={enablePush} disabled={busy || permissionBlocked || !supported || !state.pushConfigured || iphoneInstallNeeded} className="push-toggle">{iphoneInstallNeeded ? "Install first" : "Enable"}</button>}
       </div>
       <div className="notification-list">
-        <div className="push-control"><button className="push-toggle" disabled={busy || !state.pushConfigured} onClick={testDevices}>Test my devices</button><small role="status">{testResult || "Sends a test to devices registered to your account."}</small></div>
-        {state.notifications.length ? state.notifications.map((notification) => <button key={notification.id} className={notification.read ? "notification-item" : "notification-item unread"} onClick={() => void openNotification(notification)}>
+        {state.notifications.length ? state.notifications.map((notification) => <div key={notification.id} className="notification-row"><button disabled={busy} className={notification.read ? "notification-item" : "notification-item unread"} onClick={() => void openNotification(notification)}>
           <span className="notification-dot" />
           <span><strong>{notification.title}</strong><p>{notification.message}</p><small>{relativeTime(notification.createdAt)}</small></span>
-        </button>) : <div className="notification-empty"><Bell size={22} /><strong>You’re all caught up</strong><span>New work orders and employee-request updates will appear here.</span></div>}
+        </button><button className="notification-delete" disabled={busy} onClick={() => void removeNotifications(notification.id)} aria-label={`Delete notification: ${notification.title}`} title="Delete notification"><Trash2 size={16} /></button></div>) : <div className="notification-empty"><Bell size={22} /><strong>You’re all caught up</strong><span>New work orders and employee-request updates will appear here.</span></div>}
       </div>
     </section>}
   </div>;

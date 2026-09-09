@@ -83,6 +83,21 @@ test('isolated Account Manager work order reaches only Production Manager; devic
     delete process.env.VAPID_PRIVATE_KEY;
     delete process.env.VAPID_PUBLIC_KEY;
   }
+  await app.notifyUsers([101], { type: 'task_assigned', title: 'Other account', message: 'Fixture', targetView: 'tasks' });
+  const otherId = (await app.getNotificationsState(101)).notifications[0].id;
+  assert.equal((await app.notificationAction(request({ action: 'delete', id: otherId }))).status, 200);
+  assert.equal((await app.getNotificationsState(101)).notifications.length, 1);
+  const ownId = (await app.getNotificationsState(102)).notifications[0].id;
+  const deleted = await (await app.notificationAction(request({ action: 'delete', id: ownId }))).json();
+  assert.equal(deleted.notifications.length, 2);
+  assert.equal(deleted.unreadCount, 2);
+  const cleared = await (await app.notificationAction(request({ action: 'clearAll' }))).json();
+  assert.equal(cleared.notifications.length, 0);
+  assert.equal(cleared.unreadCount, 0);
+  assert.equal((await app.getNotificationsState(101)).notifications.length, 1);
+  assert.equal((await db.prepare('SELECT COUNT(*) AS total FROM push_subscriptions').first()).total, 1);
+  globalThis.fmgTestSession = null;
+  assert.equal((await app.notificationAction(request({ action: 'clearAll' }))).status, 401);
 });
 
 test('service worker displays push and keeps notification navigation on the application origin', async () => {
