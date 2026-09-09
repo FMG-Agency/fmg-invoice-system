@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getSession } from "../../lib/auth-server";
 import { database } from "../../lib/database";
-import { ensureNotificationsDatabase, getNotificationsState, notifyUsers } from "../../lib/notifications";
+import { ensureNotificationsDatabase, getNotificationsState, notifyUsers, testDevicePush } from "../../lib/notifications";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,6 +16,7 @@ const subscriptionSchema = z.object({
 });
 
 const payloadSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("testPush") }),
   z.object({ action: z.literal("subscriptionStatus"), endpoint: z.string().url() }),
   z.object({ action: z.literal("subscribe"), subscription: subscriptionSchema }),
   z.object({ action: z.literal("unsubscribe"), endpoint: z.string().url() }),
@@ -50,6 +51,8 @@ export async function POST(request: Request) {
     if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
     await ensureNotificationsDatabase();
     const payload = payloadSchema.parse(await request.json());
+
+    if (payload.action === "testPush") return Response.json(await testDevicePush(session.userId));
 
     if (payload.action === "subscriptionStatus") {
       const subscription = await database.prepare("SELECT id FROM push_subscriptions WHERE user_id = ? AND endpoint = ? AND active = 1")

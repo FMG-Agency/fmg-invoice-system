@@ -113,11 +113,11 @@ export async function workflowRecipientUserIds(role: WorkflowRole, excludeUserId
     .filter((id) => id !== excludeUserId);
 }
 
-async function sendPush(userId: number, notificationId: number, input: NotificationInput) {
+async function sendPush(userId: number, notificationId: number, input: NotificationInput, testOnly = false) {
   const publicKey = process.env.VAPID_PUBLIC_KEY?.trim();
   const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
   const subject = process.env.VAPID_SUBJECT?.trim() || "mailto:fmgagency9@gmail.com";
-  if (!publicKey || !privateKey) return;
+  if (!publicKey || !privateKey) return { configured: false, accepted: 0, failed: 0, statuses: [] as number[] };
 
   const rows = await database.prepare(`SELECT id, endpoint, p256dh, auth, expiration_time AS expirationTime
       FROM push_subscriptions WHERE user_id = ? AND active = 1`).bind(userId)
@@ -139,19 +139,27 @@ async function sendPush(userId: number, notificationId: number, input: Notificat
       options: { ttl: 60 * 60 * 24, urgency: "high" },
     }, subscription, { subject, publicKey, privateKey });
     const response = await fetch(row.endpoint, { ...payload, signal: AbortSignal.timeout(10_000) });
-    if (response.status === 404 || response.status === 410) {
+    if ((response.status === 404 || response.status === 410) && !testOnly) {
       await database.prepare("UPDATE push_subscriptions SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
         .bind(row.id).run();
     } else if (!response.ok) {
       // Do not log endpoints, credentials, response bodies, or notification content.
       console.error("Push service rejected delivery", { notificationId, subscriptionId: row.id, status: response.status });
     }
+    return response.status;
   }));
   deliveries.forEach((delivery, index) => {
     if (delivery.status === "rejected") {
       console.error("Push delivery failed", { notificationId, subscriptionId: rows.results[index].id });
     }
   });
+  const statuses = deliveries.map((delivery) => delivery.status === "fulfilled" ? delivery.value : 0);
+  return { configured: true, accepted: statuses.filter((status) => status >= 200 && status < 300).length, failed: statuses.filter((status) => status < 200 || status >= 300).length, statuses };
+}
+
+export async function testDevicePush(userId: number) {
+  // Diagnostic only: no work orders, inbox entries, or subscription changes.
+  return sendPush(userId, 0, { type: "device_test", title: "FMG device notification test", message: "If this appears outside FMG, device push is working.", targetView: "dashboard" }, true);
 }
 
 export async function notifyUsers(userIds: number[], input: NotificationInput) {

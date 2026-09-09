@@ -60,6 +60,14 @@ test('isolated Account Manager work order reaches only Production Manager; devic
   process.env.VAPID_PRIVATE_KEY = 'mock-only';
   process.env.VAPID_PUBLIC_KEY = 'mock-only';
   try {
+    globalThis.fetch = async () => new Response('', { status: 201 });
+    const testResult = await app.testDevicePush(102);
+    assert.equal(testResult.accepted, 1);
+    assert.equal((await app.getNotificationsState(102)).notifications.length, 1);
+    globalThis.fetch = async () => new Response('', { status: 410 });
+    assert.equal((await app.testDevicePush(102)).failed, 1);
+    assert.equal((await db.prepare('SELECT active FROM push_subscriptions').first()).active, 1);
+    logs.length = 0;
     globalThis.fetch = async () => new Response('', { status: 503 });
     await app.notifyUsers([102], { type: 'task_assigned', title: 'Task', message: 'Fixture', targetView: 'tasks' });
     assert.equal(logs[0][1].status, 503);

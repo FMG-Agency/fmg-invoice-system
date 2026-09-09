@@ -44,6 +44,7 @@ export function NotificationCenter({
   const [state, setState] = useState<NotificationsState>(emptyState);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [testResult, setTestResult] = useState("");
   const [pushEnabled, setPushEnabled] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -167,6 +168,18 @@ export function NotificationCenter({
 
   const permissionBlocked = permission === "denied";
 
+  async function testDevices() {
+    setBusy(true);
+    setTestResult("");
+    try {
+      const response = await fetch("/api/notifications", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "testPush" }) });
+      const result = await response.json() as { configured: boolean; accepted: number; failed: number; statuses: number[] };
+      if (!response.ok) throw new Error("Could not test device notifications. Please try again.");
+      setTestResult(!result.configured ? "Device push is not configured in this environment." : !result.statuses.length ? "No devices registered for your account. Open FMG on your device and choose Enable first." : `Push service accepted ${result.accepted} delivery attempt(s); ${result.failed} failed. ${result.failed ? `Status: ${result.statuses.join(", ")} (0 means encryption or network failure). ` : ""}Check your device outside this page; acceptance does not confirm display.`);
+    } catch (error) { setTestResult(error instanceof Error ? error.message : "Device test failed."); }
+    finally { setBusy(false); }
+  }
+
   return <div className="notification-center" ref={rootRef}>
     <button className="icon-button notification-button" aria-label={`Notifications${state.unreadCount ? `, ${state.unreadCount} unread` : ""}`} aria-expanded={open} onClick={() => { setOpen((current) => !current); void load(true); }}>
       <Bell size={18} />
@@ -183,6 +196,7 @@ export function NotificationCenter({
         {pushEnabled ? <button onClick={disablePush} disabled={busy} className="push-toggle off"><BellOff size={15} /> Off</button> : <button onClick={enablePush} disabled={busy || permissionBlocked || !supported || !state.pushConfigured || iphoneInstallNeeded} className="push-toggle">{iphoneInstallNeeded ? "Install first" : "Enable"}</button>}
       </div>
       <div className="notification-list">
+        <div className="push-control"><button className="push-toggle" disabled={busy || !state.pushConfigured} onClick={testDevices}>Test my devices</button><small role="status">{testResult || "Sends a test to devices registered to your account."}</small></div>
         {state.notifications.length ? state.notifications.map((notification) => <button key={notification.id} className={notification.read ? "notification-item" : "notification-item unread"} onClick={() => void openNotification(notification)}>
           <span className="notification-dot" />
           <span><strong>{notification.title}</strong><p>{notification.message}</p><small>{relativeTime(notification.createdAt)}</small></span>
