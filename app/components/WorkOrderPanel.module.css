@@ -412,3 +412,8 @@
   :global(body.work-order-printing) .sheetHeader { padding: 6mm 12mm; }
   :global(body.work-order-printing) .sheetBody { padding: 7mm 12mm 5mm; }
 }
+
+@media (max-width: 620px) {
+  .workflowForm input:not([type="checkbox"]):not([type="radio"]), .workflowForm select, .workflowForm textarea { font-size: 16px; }
+  .modalCard { max-height: calc(100dvh - 20px); overscroll-behavior: contain; }
+}

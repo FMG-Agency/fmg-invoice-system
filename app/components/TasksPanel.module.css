@@ -1,16 +1,16 @@
 .workspace { display: flex; flex-direction: column; gap: 18px; }
 
 .hero { padding: 21px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; }
-.heroCopy > span, .dailyPanel > header > div:first-child > span, .taskPanel > header > div:first-child > span { color: var(--yellow-ink); font-size: 8px; font-weight: 900; letter-spacing: 1px; display: flex; align-items: center; gap: 6px; }
+.heroCopy > span, .dailyPanel > header > div:first-child > span, .taskPanel > header > div:first-child > span { color: var(--yellow-ink); font-size: 11px; font-weight: 900; letter-spacing: 1px; display: flex; align-items: center; gap: 6px; }
 .heroCopy h2 { margin: 7px 0 4px; font-size: 23px; letter-spacing: -.5px; }
-.heroCopy p { max-width: 680px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
-.createButton, .saveButton { min-height: 42px; padding: 0 15px; border: 0; border-radius: 10px; background: var(--yellow); color: #111; font: inherit; font-size: 9px; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer; }
+.heroCopy p { max-width: 680px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.createButton, .saveButton { min-height: 42px; padding: 0 15px; border: 0; border-radius: 10px; background: var(--yellow); color: #111; font: inherit; font-size: 11px; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer; }
 .createButton { align-self: start; }
 .stats { grid-column: 1 / -1; padding-top: 17px; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
 .stats article { min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); display: flex; align-items: center; gap: 10px; }
 .stats article > span { width: 35px; height: 35px; flex: 0 0 auto; border-radius: 9px; background: color-mix(in srgb, var(--yellow) 19%, var(--surface)); color: var(--yellow-ink); display: grid; place-items: center; }
 .stats article div { display: flex; flex-direction: column; gap: 1px; }
-.stats small { color: var(--muted); font-size: 7px; font-weight: 900; letter-spacing: .65px; }
+.stats small { color: var(--muted); font-size: 11px; font-weight: 900; letter-spacing: .65px; }
 .stats strong { font-size: 18px; }
 .stats .dangerStat { border-color: color-mix(in srgb, #d94b43 35%, var(--line)); background: color-mix(in srgb, #d94b43 7%, var(--surface)); }
 .stats .dangerStat > span { background: color-mix(in srgb, #d94b43 15%, var(--surface)); color: #c23d37; }
@@ -18,31 +18,31 @@
 .dailyPanel, .taskPanel { padding: 21px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
 .dailyPanel > header, .taskPanel > header { display: flex; align-items: end; justify-content: space-between; gap: 18px; }
 .dailyPanel h2, .taskPanel h2 { margin: 5px 0 3px; font-size: 19px; letter-spacing: -.25px; }
-.dailyPanel header p, .taskPanel header p { margin: 0; color: var(--muted); font-size: 9px; }
+.dailyPanel header p, .taskPanel header p { margin: 0; color: var(--muted); font-size: 11px; }
 .dailyFilters { display: flex; align-items: center; gap: 7px; }
 .dailyFilters label { height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); display: flex; align-items: center; gap: 7px; }
 .dailyFilters label > svg { color: var(--yellow-ink); }
-.dailyFilters label > span { color: var(--muted); font-size: 7px; font-weight: 900; letter-spacing: .6px; }
-.dailyFilters input, .dailyFilters select { min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 9px; font-weight: 800; }
+.dailyFilters label > span { color: var(--muted); font-size: 11px; font-weight: 900; letter-spacing: .6px; }
+.dailyFilters input, .dailyFilters select { min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 11px; font-weight: 800; }
 .dailySummary { margin: 16px 0 12px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); display: flex; flex-wrap: wrap; gap: 9px; }
-.dailySummary span { padding-right: 9px; border-right: 1px solid var(--line); color: var(--muted); font-size: 8px; }
+.dailySummary span { padding-right: 9px; border-right: 1px solid var(--line); color: var(--muted); font-size: 11px; }
 .dailySummary span:last-child { padding-right: 0; border-right: 0; }
-.dailySummary strong { color: var(--ink); font-size: 10px; }
+.dailySummary strong { color: var(--ink); font-size: 11px; }
 .dailyGroups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
 .dailyPerson { min-width: 0; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-2); overflow: hidden; }
 .dailyPerson > header { padding: 11px 12px; border-bottom: 1px solid var(--line); background: var(--surface); display: flex; align-items: center; gap: 9px; }
-.personAvatar { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 9px; background: #111; color: var(--yellow); font-size: 9px; font-weight: 900; display: grid; place-items: center; }
+.personAvatar { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 9px; background: #111; color: var(--yellow); font-size: 11px; font-weight: 900; display: grid; place-items: center; }
 .dailyPerson header div { min-width: 0; flex: 1; }
 .dailyPerson h3 { margin: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.dailyPerson header p { margin: 2px 0 0; font-size: 7px; }
-.dailyPerson header > strong { color: var(--muted); font-size: 7.5px; }
+.dailyPerson header p { margin: 2px 0 0; font-size: 11px; }
+.dailyPerson header > strong { color: var(--muted); font-size: 11px; }
 .dailyPerson > div { padding: 5px; display: flex; flex-direction: column; gap: 4px; }
 .dailyPerson > div > button { width: 100%; min-width: 0; padding: 8px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: inherit; text-align: left; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; cursor: pointer; }
 .dailyPerson > div > button:hover { background: var(--surface); }
 .dailyPerson button > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.dailyPerson button strong { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.dailyPerson button small { color: var(--muted); font-size: 7px; }
-.dailyPerson button em { font-size: 7px; font-style: normal; font-weight: 850; white-space: nowrap; }
+.dailyPerson button strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.dailyPerson button small { color: var(--muted); font-size: 11px; }
+.dailyPerson button em { font-size: 11px; font-style: normal; font-weight: 850; white-space: nowrap; }
 .doneDot, .lateDot, .openDot { width: 8px; height: 8px; border-radius: 50%; }
 .doneDot { background: #2fa56a; }
 .lateDot { background: #d94b43; }
@@ -50,13 +50,13 @@
 .emptyDaily, .emptyTasks, .loading { min-height: 180px; color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 5px; }
 .emptyDaily svg, .emptyTasks svg, .loading svg { color: var(--yellow-ink); }
 .emptyDaily strong, .emptyTasks strong, .loading strong { color: var(--ink); font-size: 11px; }
-.emptyDaily span, .emptyTasks span { font-size: 8px; }
+.emptyDaily span, .emptyTasks span { font-size: 11px; }
 .loading svg { animation: spin 1s linear infinite; }
 
 .taskPanel > header { margin-bottom: 15px; }
 .scopeFilters { padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); display: flex; gap: 3px; }
-.scopeFilters button { min-height: 32px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: inherit; font-size: 8px; font-weight: 800; display: flex; align-items: center; gap: 5px; cursor: pointer; }
-.scopeFilters button span { min-width: 19px; padding: 2px 5px; border-radius: 999px; background: var(--line); color: var(--ink); font-size: 7px; }
+.scopeFilters button { min-height: 32px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; font-weight: 800; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.scopeFilters button span { min-width: 19px; padding: 2px 5px; border-radius: 999px; background: var(--line); color: var(--ink); font-size: 11px; }
 .scopeFilters .activeFilter { background: var(--surface); color: var(--ink); box-shadow: 0 2px 8px rgba(0,0,0,.06); }
 .taskList { padding: 11px; border: 1px solid var(--line); border-radius: 14px; background: color-mix(in srgb, var(--surface-2) 88%, var(--line)); display: flex; flex-direction: column; gap: 10px; }
 .taskCard { min-width: 0; border: 1px solid var(--line-strong); border-radius: 13px; background: var(--surface); overflow: hidden; box-shadow: 0 7px 20px rgba(17,17,17,.055); }
@@ -67,31 +67,31 @@
 .lateIcon { background: color-mix(in srgb, #d94b43 13%, var(--surface)); color: #c23d37; }
 .progressIcon { background: color-mix(in srgb, var(--yellow) 18%, var(--surface)); color: var(--yellow-ink); }
 .taskIdentity { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.taskIdentity small { color: var(--yellow-ink); font-size: 7px; font-weight: 900; letter-spacing: .4px; }
+.taskIdentity small { color: var(--yellow-ink); font-size: 11px; font-weight: 900; letter-spacing: .4px; }
 .taskIdentity strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.taskIdentity em { color: var(--muted); font-size: 7.5px; font-style: normal; }
+.taskIdentity em { color: var(--muted); font-size: 11px; font-style: normal; }
 .schedule { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .schedule small { color: var(--muted); font-size: 6.5px; font-weight: 900; letter-spacing: .65px; }
 .schedule strong { font-size: 8.5px; }
-.statusBadge { padding: 5px 7px; border-radius: 999px; font-size: 7px; font-weight: 900; white-space: nowrap; }
+.statusBadge { padding: 5px 7px; border-radius: 999px; font-size: 11px; font-weight: 900; white-space: nowrap; }
 .doneText { background: color-mix(in srgb, #2fa56a 13%, var(--surface)); color: color-mix(in srgb, #187547 90%, var(--ink)); }
 .lateText { background: color-mix(in srgb, #d94b43 13%, var(--surface)); color: color-mix(in srgb, #a92d28 90%, var(--ink)); }
 .openText { background: color-mix(in srgb, var(--yellow) 17%, var(--surface)); color: color-mix(in srgb, #8a7000 88%, var(--ink)); }
-.expandLabel { min-width: 69px; color: var(--muted); font-size: 7px; font-weight: 850; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.expandLabel { min-width: 69px; color: var(--muted); font-size: 11px; font-weight: 850; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
 .expandLabel svg { transition: transform .18s ease; }
 .rotated { transform: rotate(180deg); }
 .taskDetails { border-top: 1px solid var(--line); animation: reveal .18s ease-out; }
 .detailGrid { padding: 13px 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 .detailGrid section { min-width: 0; min-height: 92px; padding: 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
-.detailGrid section > span { color: var(--yellow-ink); font-size: 7px; font-weight: 900; letter-spacing: .6px; display: flex; align-items: center; gap: 5px; }
+.detailGrid section > span { color: var(--yellow-ink); font-size: 11px; font-weight: 900; letter-spacing: .6px; display: flex; align-items: center; gap: 5px; }
 .detailGrid p { margin: 8px 0 0; color: var(--ink); font-size: 8.5px; line-height: 1.65; white-space: pre-wrap; }
 .referenceList { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 5px; }
-.referenceList a { max-width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font-size: 7.5px; font-weight: 800; text-decoration: none; display: flex; align-items: center; gap: 6px; }
+.referenceList a { max-width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font-size: 11px; font-weight: 800; text-decoration: none; display: flex; align-items: center; gap: 6px; }
 .referenceList a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .taskDetails > footer { padding: 10px 14px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .taskDetails > footer > div { margin-right: auto; display: flex; flex-direction: column; gap: 2px; }
-.taskDetails > footer > div span { color: var(--muted); font-size: 7.5px; }
-.taskDetails > footer a, .taskDetails > footer button { min-height: 34px; padding: 0 10px; border-radius: 8px; font: inherit; font-size: 8px; font-weight: 850; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+.taskDetails > footer > div span { color: var(--muted); font-size: 11px; }
+.taskDetails > footer a, .taskDetails > footer button { min-height: 34px; padding: 0 10px; border-radius: 8px; font: inherit; font-size: 11px; font-weight: 850; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
 .taskDetails > footer a { border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); }
 .taskDetails > footer button { border: 0; background: #111; color: #fff; cursor: pointer; }
 :global(:root[data-theme="dark"]) .taskDetails > footer button { background: var(--yellow); color: #111; }
@@ -99,16 +99,16 @@
 .modalLayer { position: fixed; inset: 0; z-index: 100; padding: 20px; background: rgba(8,8,8,.63); backdrop-filter: blur(7px); display: grid; place-items: center; }
 .modalCard { width: min(870px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: 0 30px 100px rgba(0,0,0,.36); }
 .modalCard > header { padding: 18px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 16px; }
-.modalCard > header span { color: var(--yellow-ink); font-size: 8px; font-weight: 900; letter-spacing: 1px; }
+.modalCard > header span { color: var(--yellow-ink); font-size: 11px; font-weight: 900; letter-spacing: 1px; }
 .modalCard > header h2 { margin: 5px 0 3px; font-size: 19px; }
-.modalCard > header p { margin: 0; color: var(--muted); font-size: 9px; }
+.modalCard > header p { margin: 0; color: var(--muted); font-size: 11px; }
 .modalCard > header button { width: 34px; height: 34px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); color: var(--ink); display: grid; place-items: center; cursor: pointer; }
 .taskForm, .submitForm { padding: 19px 20px; }
 .formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .formGrid label, .submitForm > label { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.formGrid label > span, .submitForm > label > span { font-size: 9px; font-weight: 850; }
-.formGrid label small, .submitForm label small { color: var(--muted); font-size: 7px; font-weight: 650; }
-.formGrid input, .formGrid select, .formGrid textarea, .referenceRow input, .submitForm input { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 9px; outline: 0; background: var(--surface-2); color: var(--ink); font: inherit; font-size: 10px; }
+.formGrid label > span, .submitForm > label > span { font-size: 11px; font-weight: 850; }
+.formGrid label small, .submitForm label small { color: var(--muted); font-size: 11px; font-weight: 650; }
+.formGrid input, .formGrid select, .formGrid textarea, .referenceRow input, .submitForm input { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 9px; outline: 0; background: var(--surface-2); color: var(--ink); font: inherit; font-size: 11px; }
 .formGrid input, .formGrid select { height: 42px; padding: 0 11px; }
 .formGrid textarea { padding: 10px 11px; resize: vertical; line-height: 1.5; }
 .formGrid input:focus, .formGrid select:focus, .formGrid textarea:focus, .referenceRow input:focus, .submitForm input:focus { border-color: #bda600; box-shadow: 0 0 0 3px rgba(255,223,0,.15); }
@@ -118,29 +118,29 @@
 .referencesEditor > header > div { display: flex; align-items: center; gap: 7px; }
 .referencesEditor > header svg { color: var(--yellow-ink); }
 .referencesEditor header span { display: flex; flex-direction: column; gap: 1px; }
-.referencesEditor header strong { font-size: 9px; }
-.referencesEditor header small { color: var(--muted); font-size: 7px; }
-.referencesEditor header button { min-height: 31px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--ink); font: inherit; font-size: 8px; font-weight: 850; display: flex; align-items: center; gap: 5px; cursor: pointer; }
-.referencesEditor > p { margin: 0; padding: 15px; color: var(--muted); font-size: 8px; text-align: center; }
+.referencesEditor header strong { font-size: 11px; }
+.referencesEditor header small { color: var(--muted); font-size: 11px; }
+.referencesEditor header button { min-height: 31px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--ink); font: inherit; font-size: 11px; font-weight: 850; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.referencesEditor > p { margin: 0; padding: 15px; color: var(--muted); font-size: 11px; text-align: center; }
 .referencesEditor > div { padding: 9px; display: flex; flex-direction: column; gap: 6px; }
 .referenceRow { display: grid; grid-template-columns: 24px minmax(130px, .6fr) minmax(220px, 1.4fr) 30px; gap: 6px; align-items: center; }
-.referenceRow > span { width: 24px; height: 24px; border-radius: 7px; background: #111; color: var(--yellow); font-size: 8px; font-weight: 900; display: grid; place-items: center; }
+.referenceRow > span { width: 24px; height: 24px; border-radius: 7px; background: #111; color: var(--yellow); font-size: 11px; font-weight: 900; display: grid; place-items: center; }
 .referenceRow input { height: 37px; padding: 0 9px; }
 .referenceRow button { width: 30px; height: 30px; border: 0; border-radius: 7px; background: color-mix(in srgb, #d94b43 12%, var(--surface)); color: #be3933; display: grid; place-items: center; cursor: pointer; }
 .taskForm > footer, .submitForm > footer { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
-.cancelButton { min-height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--ink); font: inherit; font-size: 9px; font-weight: 850; cursor: pointer; }
+.cancelButton { min-height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--ink); font: inherit; font-size: 11px; font-weight: 850; cursor: pointer; }
 .cancelButton:disabled, .saveButton:disabled { opacity: .58; cursor: wait; }
 .submitForm { display: flex; flex-direction: column; gap: 14px; }
 .submitSummary { padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); display: flex; align-items: center; gap: 10px; }
 .submitSummary > span { width: 38px; height: 38px; border-radius: 10px; background: color-mix(in srgb, var(--yellow) 18%, var(--surface)); color: var(--yellow-ink); display: grid; place-items: center; }
 .submitSummary div { display: flex; flex-direction: column; gap: 2px; }
-.submitSummary small { color: var(--muted); font-size: 7px; font-weight: 900; letter-spacing: .7px; }
-.submitSummary strong { font-size: 10px; }
-.submitSummary p { margin: 0; color: var(--muted); font-size: 8px; }
+.submitSummary small { color: var(--muted); font-size: 11px; font-weight: 900; letter-spacing: .7px; }
+.submitSummary strong { font-size: 11px; }
+.submitSummary p { margin: 0; color: var(--muted); font-size: 11px; }
 .submitForm label > div { height: 43px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); display: flex; align-items: center; gap: 8px; }
 .submitForm label > div svg { color: var(--yellow-ink); }
 .submitForm label > div input { height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.confirmNote { margin: 0; padding: 9px 10px; border-radius: 9px; background: color-mix(in srgb, #2fa56a 10%, var(--surface)); color: var(--muted); font-size: 8px; display: flex; align-items: center; gap: 6px; }
+.confirmNote { margin: 0; padding: 9px 10px; border-radius: 9px; background: color-mix(in srgb, #2fa56a 10%, var(--surface)); color: var(--muted); font-size: 11px; display: flex; align-items: center; gap: 6px; }
 .confirmNote svg { color: #268a5a; }
 
 @keyframes reveal { from { opacity: 0; transform: translateY(-4px); } }
@@ -183,4 +183,10 @@
   .modalLayer { padding: 8px; }
   .modalCard { max-height: calc(100vh - 16px); border-radius: 14px; }
   .taskForm > footer, .submitForm > footer { display: grid; grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .formGrid input, .formGrid select, .formGrid textarea, .referenceRow input, .submitForm input, .dailyFilters input, .dailyFilters select { font-size: 16px; }
+  .modalCard { max-height: calc(100dvh - 16px); }
+  .scopeFilters { max-width: 100%; }
 }
