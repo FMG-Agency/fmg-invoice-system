@@ -1184,3 +1184,9 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; -
   .modal-layer input:not([type="checkbox"]):not([type="radio"]), .modal-layer select, .modal-layer textarea,
   .auth-field input { font-size: 16px; }
 }
+
+.document-row-number { color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; }
+.document-actions .linked-work-order { width: auto; min-height: 36px; padding: 0 9px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 11px; border-color: var(--line-strong); }
+
+.document-origin { margin: 12px 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; }
+.document-origin strong { color: var(--ink); }

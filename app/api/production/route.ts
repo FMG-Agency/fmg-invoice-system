@@ -1,3 +1,4 @@
+import { ensureDocumentMetadata, reserveWorkOrderNumber } from "../../lib/document-metadata";
 import { z } from "zod";
 import { database } from "../../lib/database";
 import { getSession, requirePermission, type AuthSession } from "../../lib/auth-server";
@@ -281,6 +282,7 @@ async function ensureProductionDatabase() {
     await database.prepare(`UPDATE production_crew_members
       SET model_nationality = CASE WHEN LOWER(notes) LIKE '%foreign%' THEN 'foreign' ELSE 'egyptian' END
       WHERE category = 'model' AND model_nationality IS NULL`).run();
+    await ensureDocumentMetadata();
     const documentColumns = await database.prepare("PRAGMA table_info(documents)").all<{ name: string }>();
     if (!documentColumns.results.some((column) => column.name === "production_work_order_id")) {
       try {
@@ -650,6 +652,8 @@ const productionOptionLabels: Record<ProductionCostOption["type"], string> = {
 
 type DraftInvoiceInput = {
   workOrderId: number;
+  createdByUserId: number;
+  createdByName: string;
   clientId: number;
   workDate: string;
   accountNote: string;
@@ -699,22 +703,21 @@ async function ensureDraftInvoice(input: DraftInvoiceInput) {
     return existing;
   }
 
-  const category = await database.prepare(`UPDATE categories SET counter = counter + 1, updated_at = CURRENT_TIMESTAMP
+  const category = await database.prepare(`UPDATE categories SET counter = MAX(counter, ?), updated_at = CURRENT_TIMESTAMP
     WHERE LOWER(TRIM(name)) = 'media guide' RETURNING id, prefix, counter`)
-    .first<{ id: number; prefix: string; counter: number }>();
+    .bind(input.workOrderId).first<{ id: number; prefix: string; counter: number }>();
   if (!category) throw new Error("The Media Guide category is required before a draft invoice can be created.");
   const settings = await database.prepare("SELECT prepared_by AS preparedBy, default_payment_terms AS paymentTerms FROM settings WHERE id = 1")
     .first<{ preparedBy: string; paymentTerms: string }>();
-  const clientPart = input.scope.client.name.trim().replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, "-").replace(/^-|-$/g, "") || "CLIENT";
-  const generatedCode = `${clientPart}-${category.prefix}${String(category.counter).padStart(4, "0")}`;
+  const generatedCode = `${category.prefix}-${String(input.workOrderId).padStart(4, "0")}`;
   await database.prepare(`INSERT OR IGNORE INTO documents
     (type, company_key, generated_code, client_id, category_id, date, valid_until, prepared_by, currency, project,
-      status, items_json, subtotal, discount, tax, total, payment_terms, notes_exclusions, pdf_key, production_work_order_id)
-    VALUES ('invoice', ?, ?, ?, ?, ?, '', ?, 'EGP', ?, 'Draft', ?, ?, 0, 0, ?, ?, ?, '', ?)`)
+      status, items_json, subtotal, discount, tax, total, payment_terms, notes_exclusions, pdf_key, production_work_order_id, created_by_user_id, created_by_name)
+    VALUES ('invoice', ?, ?, ?, ?, ?, '', ?, 'EGP', ?, 'Draft', ?, ?, 0, 0, ?, ?, ?, '', ?, ?, ?)`)
     .bind(companyKey, generatedCode,
       input.clientId, category.id, input.workDate,
       settings?.preparedBy || "Finance Department", `Media Guide · ${codeFor(input.workOrderId)}`,
-      JSON.stringify(content.items), content.subtotal, content.subtotal, settings?.paymentTerms || "", content.notes, input.workOrderId).run();
+      JSON.stringify(content.items), content.subtotal, content.subtotal, settings?.paymentTerms || "", content.notes, input.workOrderId, input.createdByUserId, input.createdByName).run();
   const created = await database.prepare("SELECT id, generated_code AS generatedCode FROM documents WHERE production_work_order_id = ?")
     .bind(input.workOrderId).first<{ id: number; generatedCode: string }>();
   if (!created) throw new Error("The work order was approved, but its draft invoice could not be created.");
@@ -793,12 +796,13 @@ export async function POST(request: Request) {
       const primaryAddon = addons[0] ?? null;
 
       const actorName = displayName(session);
+      const reservedNumber = await reserveWorkOrderNumber();
       const inserted = await database.prepare(`INSERT INTO production_work_orders
-        (document_type, client_id, client_name, bundle_catalog_id, bundle_name, bundle_price, bundle_inputs_json, bundle_outputs_json, bundles_json,
+        (id, document_type, client_id, client_name, bundle_catalog_id, bundle_name, bundle_price, bundle_inputs_json, bundle_outputs_json, bundles_json,
           addon_catalog_id, addon_name, addon_price, addon_inputs_json, addon_outputs_json, addons_json,
           work_date, account_note, status, created_by_user_id, created_by_name, created_by_role)
-        VALUES ('media_guide', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_production', ?, ?, ?)`)
-        .bind(payload.data.clientId, client.name, bundle.catalogId, bundle.name, bundle.price, JSON.stringify(bundle.inputs), JSON.stringify(bundle.outputs), JSON.stringify(bundles),
+        VALUES (?, 'media_guide', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_production', ?, ?, ?)`)
+        .bind(reservedNumber, payload.data.clientId, client.name, bundle.catalogId, bundle.name, bundle.price, JSON.stringify(bundle.inputs), JSON.stringify(bundle.outputs), JSON.stringify(bundles),
           primaryAddon?.catalogId ?? null, primaryAddon?.name ?? "", primaryAddon?.price ?? 0, JSON.stringify(primaryAddon?.inputs ?? []), JSON.stringify(primaryAddon?.outputs ?? []), JSON.stringify(addons),
           payload.data.workDate, payload.data.accountNote, session.userId, actorName, session.roleLabel).run();
       const workOrderId = Number(inserted.meta.last_row_id);
@@ -854,6 +858,8 @@ export async function POST(request: Request) {
       const options = payload.data.options as ProductionCostOption[];
       const syncedDraftInvoice = existing.finalApprovedAt ? await ensureDraftInvoice({
         workOrderId: payload.id,
+        createdByUserId: session.userId,
+        createdByName: displayName(session),
         clientId: payload.data.clientId,
         workDate: payload.data.workDate,
         accountNote: payload.data.accountNote,
@@ -901,6 +907,8 @@ export async function POST(request: Request) {
       if (!pendingOrder) throw new Error("This work order has already received final approval or is no longer pending Operations.");
       const draftInvoice = await ensureDraftInvoice({
         workOrderId: payload.id,
+        createdByUserId: session.userId,
+        createdByName: displayName(session),
         clientId: payload.data.clientId,
         workDate: payload.data.workDate,
         accountNote: payload.data.accountNote,

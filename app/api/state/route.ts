@@ -1,5 +1,6 @@
 import { del, put } from "@vercel/blob";
 import { z } from "zod";
+import { ensureDocumentMetadata } from "../../lib/document-metadata";
 import { database } from "../../lib/database";
 import { ensureClientFinanceDatabase, importClientWorkbookData } from "../../lib/client-finance";
 import { getSession, requireAuth, type AuthSession } from "../../lib/auth-server";
@@ -239,6 +240,7 @@ async function ensureDatabase() {
     }
   }
   await database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_production_work_order ON documents(production_work_order_id)").run();
+  await ensureDocumentMetadata();
   const categoryCount = await database.prepare("SELECT COUNT(*) AS count FROM categories").first<{ count: number }>();
   if (!categoryCount?.count) {
     await database.batch([
@@ -302,6 +304,7 @@ async function getState() {
       d.total, d.payment_terms AS paymentTerms, d.notes_exclusions AS notesExclusions,
       d.pdf_key AS pdfKey, d.production_work_order_id AS productionWorkOrderId,
       d.created_at AS createdAt, d.updated_at AS updatedAt,
+      d.created_by_user_id AS createdByUserId, d.created_by_name AS createdByName,
       c.name AS clientName, c.company_name AS companyName, c.owner_name AS ownerName, c.phone,
       c.email, c.address, cat.name AS categoryName, cat.prefix AS categoryPrefix,
       cat.footer_text_1 AS footerText1, cat.footer_text_2 AS footerText2
@@ -556,9 +559,9 @@ export async function POST(request: Request) {
         await database.prepare(`UPDATE documents SET company_key = ?, client_id = ?, category_id = ?, date = ?, valid_until = ?, prepared_by = ?, currency = ?, project = ?, status = ?, items_json = ?, subtotal = ?, discount = ?, tax = ?, total = ?, payment_terms = ?, notes_exclusions = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
           .bind(data.companyKey, data.clientId, data.categoryId, data.date, data.validUntil, data.preparedBy, data.currency, data.project, data.status, JSON.stringify(data.items), math.subtotal, data.discount, data.tax, math.total, data.paymentTerms, data.notesExclusions, data.id).run();
       } else {
-        await database.prepare(`INSERT INTO documents (type, company_key, generated_code, client_id, category_id, date, valid_until, prepared_by, currency, project, status, items_json, subtotal, discount, tax, total, payment_terms, notes_exclusions, pdf_key)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-          .bind(data.type, data.companyKey, generatedCode, data.clientId, data.categoryId, data.date, data.validUntil, data.preparedBy, data.currency, data.project, data.status, JSON.stringify(data.items), math.subtotal, data.discount, data.tax, math.total, data.paymentTerms, data.notesExclusions, pdfKey).run();
+        await database.prepare(`INSERT INTO documents (type, company_key, generated_code, client_id, category_id, date, valid_until, prepared_by, currency, project, status, items_json, subtotal, discount, tax, total, payment_terms, notes_exclusions, pdf_key, created_by_user_id, created_by_name)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .bind(data.type, data.companyKey, generatedCode, data.clientId, data.categoryId, data.date, data.validUntil, data.preparedBy, data.currency, data.project, data.status, JSON.stringify(data.items), math.subtotal, data.discount, data.tax, math.total, data.paymentTerms, data.notesExclusions, pdfKey, session.userId, session.displayName || session.username).run();
       }
     }
 

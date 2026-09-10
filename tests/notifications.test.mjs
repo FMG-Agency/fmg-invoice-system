@@ -32,6 +32,7 @@ test('isolated Account Manager work order reaches only Production Manager; devic
   // The existing application adds this client-finance field at first use.
   await db.prepare("ALTER TABLE clients ADD COLUMN agency_key TEXT NOT NULL DEFAULT 'fmg'").run();
   await db.prepare("INSERT INTO clients (id, name, owner_name, phone) VALUES (1, 'Isolated client', 'Fixture', '')").run();
+  await db.prepare("INSERT INTO categories (name, prefix) VALUES ('Media Guide', 'MG')").run();
   for (const [id, role, admin, client] of [[101, 'Account Manager', 0, null], [102, 'Production Manager', 0, null], [103, 'Operation Manager', 0, null], [104, 'Administrator', 1, null], [105, 'Client', 0, 1]]) {
     await db.prepare('INSERT INTO auth_users (id, username, role_label, password_hash, password_salt, password_iterations, is_admin, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(id, 'test-' + id, role, 'fixture', 'fixture', 1, admin, client).run();
   }

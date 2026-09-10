@@ -102,6 +102,8 @@ export type DocumentRecord = {
   createdAt: string;
   updatedAt: string;
   productionWorkOrderId?: number | null;
+  createdByUserId?: number | null;
+  createdByName?: string;
 };
 
 export type Settings = {

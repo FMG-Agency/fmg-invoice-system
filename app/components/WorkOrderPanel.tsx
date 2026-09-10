@@ -367,7 +367,8 @@ function ValueField({ label, value, icon }: { label: string; value: string; icon
   return <div className={styles.valueField}><span>{icon}{label}</span><strong>{value || "—"}</strong></div>;
 }
 
-export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoice }: {
+export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoice, initialOrderId }: {
+  initialOrderId?: number | null;
   showToast: (message: string) => void;
   onWorkspaceChanged?: () => Promise<void>;
   onOpenDraftInvoice?: (invoiceId: number) => void;
@@ -398,7 +399,15 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
     void fetch("/api/production", { cache: "no-store" }).then(async (response) => {
       const result = await response.json() as ProductionState | { error?: string };
       if (!response.ok) throw new Error("error" in result && result.error ? result.error : "Could not load production work orders.");
-      if (!cancelled) setState(result as ProductionState);
+      if (!cancelled) {
+        const next = result as ProductionState;
+        setState(next);
+        if (initialOrderId) {
+          const linked = next.orders.find((order) => order.id === initialOrderId);
+          if (linked) { setSearchQuery(linked.code); setExpandedOrderIds([linked.id]); setPreviewOrder(linked); }
+          else showToast("The linked work order is unavailable or outside your account access.");
+        }
+      }
     }).catch((error: unknown) => {
       if (!cancelled) showToast(error instanceof Error ? error.message : "Could not load production work orders.");
     }).finally(() => { if (!cancelled) setLoading(false); });
