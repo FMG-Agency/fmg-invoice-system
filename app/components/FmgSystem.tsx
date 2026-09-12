@@ -21,6 +21,7 @@ import {
   FileText,
   FolderKanban,
   LayoutDashboard,
+  House,
   KeyRound,
   LockKeyhole,
   LogOut,
@@ -63,7 +64,7 @@ import { ProductionDirectoryPanel } from "./ProductionDirectoryPanel";
 import { DocumentPdfPreview } from "./DocumentPdfPreview";
 import { WorkOrderPanel } from "./WorkOrderPanel";
 
-type View = "dashboard" | "tasks" | "invoice" | "quotation" | "media-guide" | "work-order" | "production-directory" | "clients" | "client-accounts" | "monthly-clients" | "client-portal-admin" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
+type View = "home" | "dashboard" | "tasks" | "invoice" | "quotation" | "media-guide" | "work-order" | "production-directory" | "clients" | "client-accounts" | "monthly-clients" | "client-portal-admin" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
 type Mutation = (body: Record<string, unknown>) => Promise<AppState>;
 const companyNames: Record<CompanyKey, string> = { fmg: "FMG Agency", digital_empire: "The Digital Empire" };
 type AuthState = {
@@ -183,6 +184,7 @@ const emptyHrState: HrState = {
 };
 
 const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof LayoutDashboard; permission: AccessPermission | "users" }> = [
+  { id: "home", label: "Home", eyebrow: "Your workspace", icon: House, permission: "dashboard" },
   { id: "dashboard", label: "Dashboard", eyebrow: "Overview", icon: LayoutDashboard, permission: "dashboard" },
   { id: "tasks", label: "Tasks", eyebrow: "Assign, deliver & track", icon: CheckCircle2, permission: "tasks" },
   { id: "invoice", label: "New Invoice", eyebrow: "Create", icon: ReceiptText, permission: "invoices" },
@@ -205,10 +207,11 @@ const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof L
 
 type NavGroupId = "production" | "documents" | "clients" | "services" | "people" | "administration";
 type NavSection =
-  | { id: "dashboard" | "tasks"; item: View }
+  | { id: "home" | "dashboard" | "tasks"; item: View }
   | { id: NavGroupId; label: string; eyebrow: string; icon: typeof LayoutDashboard; items: View[] };
 
 const navSections: NavSection[] = [
+  { id: "home", item: "home" },
   { id: "dashboard", item: "dashboard" },
   { id: "tasks", item: "tasks" },
   { id: "production", label: "Production", eyebrow: "Orders, talent & crew", icon: FilePenLine, items: ["work-order", "production-directory"] },
@@ -229,6 +232,7 @@ function navGroupForView(next: View): NavGroupId | null {
 }
 
 const viewCopy: Record<View, { eyebrow: string; title: string; description: string }> = {
+  home: { eyebrow: "WELCOME TO FMG", title: "Make great work happen.", description: "Your people, projects and next steps. One place to begin." },
   dashboard: { eyebrow: "FMG CONTROL CENTER", title: "Good evening, FMG.", description: "Your agency documents, clients, and activity in one calm workspace." },
   tasks: { eyebrow: "TEAM DELIVERY", title: "Tasks", description: "Assign daily work, keep briefs and references together, and measure every delivery against its deadline." },
   invoice: { eyebrow: "CREATE DOCUMENT", title: "New invoice", description: "Select a client and category, then add the billable work." },
@@ -441,7 +445,7 @@ export function FmgSystem() {
   const [hrState, setHrState] = useState<HrState>(emptyHrState);
   const [auth, setAuth] = useState<AuthState>({ ...signedOutAuth, checking: true });
   const [linkedWorkOrderId, setLinkedWorkOrderId] = useState<number | null>(null);
-  const [view, setView] = useState<View>("dashboard");
+  const [view, setView] = useState<View>("home");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -506,6 +510,7 @@ export function FmgSystem() {
     const item = navItems.find((entry) => entry.id === next);
     if (!item) return false;
     if (next === "data") return canOpenDocumentArchive(access);
+    if (next === "home") return access.authenticated && access.clientId === null;
     if (next === "settings") return access.authenticated && access.clientId === null;
     return item.permission === "users" ? access.isAdmin : canAccess(access.permissions, item.permission, access.isAdmin);
   }
@@ -620,7 +625,7 @@ export function FmgSystem() {
       setState(emptyState);
       setHrState(emptyHrState);
       setViewHistory([]);
-      setView("dashboard");
+      setView("home");
       setAuth(signedOutAuth);
       setMenuOpen(false);
     }
@@ -758,6 +763,7 @@ export function FmgSystem() {
             {view === "dashboard" && (canOpenView("invoice") || canOpenView("quotation")) && <button className="primary-button" onClick={() => chooseView(canOpenView("invoice") ? "invoice" : "quotation")}><Plus size={17} /> Create document</button>}
           </div>
 
+          {view === "home" && <HomePage name={auth.displayName || auth.username} role={auth.roleLabel} chooseView={chooseView} canOpenView={canOpenView} />}
           {view === "dashboard" && <Dashboard state={state} hrState={hrState} chooseView={chooseView} canOpenView={canOpenView} />}
           {view === "tasks" && <TasksPanel showToast={showToast} />}
           {view === "clients" && <ClientsPanel clients={state.clients} mutate={mutate} busy={busy} showToast={showToast} />}
@@ -795,11 +801,24 @@ export function FmgSystem() {
       </main>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {accessibleNavItems.filter((item) => ["dashboard", "tasks", "invoice", "quotation", "work-order", "client-portal-admin", "employees", "attendance", "requests"].includes(item.id)).slice(0, 5).map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => chooseView(item.id)}><Icon size={19} /><span>{item.label.replace("New ", "")}</span></button>; })}
+        {accessibleNavItems.filter((item) => ["home", "dashboard", "tasks", "invoice", "quotation", "work-order", "client-portal-admin", "employees", "attendance", "requests"].includes(item.id)).slice(0, 5).map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => chooseView(item.id)}><Icon size={19} /><span>{item.label.replace("New ", "")}</span></button>; })}
       </nav>
       {toast && <div className="toast"><Check size={17} /><span>{toast}</span></div>}
     </div>
   );
+}
+
+function HomePage({ name, role, chooseView, canOpenView }: { name: string; role: string; chooseView: (view: View) => void; canOpenView: (view: View) => boolean }) {
+  const shortcuts = navItems.filter((item) => ["tasks", "work-order", "invoice", "quotation", "data", "clients", "requests", "attendance"].includes(item.id) && canOpenView(item.id));
+  const primary = shortcuts[0];
+  return <div className="home-page">
+    <section className="home-hero">
+      <div className="home-hero-copy"><span className="home-kicker"><span /> FMG AGENCY · THE WORKSPACE</span><p className="home-welcome">Welcome back, {name}.</p><h2>Big ideas.<br />Great people.<br /><em>Exceptional work.</em></h2><p className="home-intro">A little focus. A lot of possibility. Bring your next project to life with the team behind it.</p><div className="home-hero-actions">{primary && <button className="primary-button" onClick={() => chooseView(primary.id)}>Open {primary.label.toLowerCase()} <ArrowLeft size={17} /></button>}{canOpenView("dashboard") && <button className="home-dashboard-link" onClick={() => chooseView("dashboard")}>View dashboard <LayoutDashboard size={16} /></button>}</div><div className="home-person"><span>{name.slice(0, 1).toUpperCase()}</span><div><strong>{name}</strong><small>{role}</small></div></div></div>
+      <div className="home-art" aria-hidden="true"><div className="home-orbit home-orbit-one" /><div className="home-orbit home-orbit-two" /><span className="home-art-label">SUPERHEROES WHO CREATE</span><div className="home-monogram">FMG<span>IDEAS INTO IMPACT.</span></div><div className="home-art-star"><Sparkles size={42} /></div><span className="home-art-bottom">CREATE. COLLABORATE. DELIVER.</span></div>
+    </section>
+    <section className="home-launchpad" aria-label="Workspace shortcuts"><header><div><span className="eyebrow">YOUR NEXT MOVE</span><h2>Where shall we start?</h2></div><span>Made for your workflow</span></header><div className="home-shortcuts">{shortcuts.map((item, index) => { const Icon = item.icon; return <button key={item.id} onClick={() => chooseView(item.id)}><div><span className="home-shortcut-icon"><Icon size={22} /></span><small>{String(index + 1).padStart(2, "0")}</small></div><h3>{item.label}</h3><p>{item.eyebrow}</p><ArrowLeft className="home-shortcut-arrow" size={18} /></button>; })}</div></section>
+    <footer className="home-footer"><Sparkles size={18} /><span>Good work starts with a clear next step.</span><strong>LET’S MAKE IT HAPPEN.</strong></footer>
+  </div>;
 }
 
 function Dashboard({ state, hrState, chooseView, canOpenView }: { state: AppState; hrState: HrState; chooseView: (view: View) => void; canOpenView: (view: View) => boolean }) {
