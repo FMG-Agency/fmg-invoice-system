@@ -444,6 +444,8 @@ export function FmgSystem() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [desktopMenuClosed, setDesktopMenuClosed] = useState(false);
+  const [viewHistory, setViewHistory] = useState<Array<{ view: View; editing: DocumentRecord | null; companyKey: CompanyKey; orderId: number | null }>>([]);
   const [openNavGroup, setOpenNavGroup] = useState<NavGroupId | null>(null);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -509,11 +511,31 @@ export function FmgSystem() {
 
   function chooseView(next: View) {
     if (!canOpenView(next)) return showToast("You do not have access to this area.");
+    if (next !== view) rememberCurrentView();
     setLinkedWorkOrderId(null);
     if (next !== "invoice" && next !== "quotation") setEditingDocument(null);
     const group = navGroupForView(next);
     if (group) setOpenNavGroup(group);
     setView(next);
+    setMenuOpen(false);
+    setSearchOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function rememberCurrentView() {
+    setViewHistory((history) => [...history.slice(-49), { view, editing: editingDocument, companyKey, orderId: linkedWorkOrderId }]);
+  }
+
+  function goBack() {
+    const index = viewHistory.findLastIndex((entry) => canOpenView(entry.view));
+    if (index < 0) return;
+    const previous = viewHistory[index];
+    setViewHistory((history) => history.slice(0, index));
+    setView(previous.view);
+    setEditingDocument(previous.editing);
+    setCompanyKey(previous.companyKey);
+    setLinkedWorkOrderId(previous.orderId);
+    setOpenNavGroup(navGroupForView(previous.view));
     setMenuOpen(false);
     setSearchOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -596,6 +618,7 @@ export function FmgSystem() {
     } finally {
       setState(emptyState);
       setHrState(emptyHrState);
+      setViewHistory([]);
       setView("dashboard");
       setAuth(signedOutAuth);
       setMenuOpen(false);
@@ -671,11 +694,11 @@ export function FmgSystem() {
   if (auth.clientId !== null) return <><ClientPortalShell displayName={auth.displayName || auth.username} dark={dark} onToggleTheme={toggleTheme} onLogout={logout} showToast={showToast} />{toast && <div className="toast" role="status">{toast}</div>}</>;
 
   return (
-    <div className="app-shell" dir="ltr">
-      <aside className={cx("sidebar", menuOpen && "sidebar-open")} dir="ltr">
+    <div className={cx("app-shell", desktopMenuClosed && "desktop-menu-closed")} dir="ltr">
+      <aside id="workspace-sidebar" className={cx("sidebar", menuOpen && "sidebar-open")} dir="ltr">
         <div className="brand-block">
           <Image src="/fmg-logo-light.png" alt="FMG Agency" width={380} height={130} unoptimized />
-          <button className="mobile-close" onClick={() => setMenuOpen(false)} aria-label="Close menu"><X size={20} /></button>
+          <button className="mobile-close" onClick={() => { setMenuOpen(false); setDesktopMenuClosed(true); }} aria-label="Close menu"><X size={20} /></button>
         </div>
         <p className="side-label">Agency workspace</p>
         <nav aria-label="Main navigation">
@@ -708,7 +731,8 @@ export function FmgSystem() {
 
       <main className="main-area" dir="ltr">
         <header className="topbar">
-          <button className="menu-button" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={21} /></button>
+          <button className="desktop-menu-toggle icon-button" onClick={() => setDesktopMenuClosed((closed) => !closed)} aria-label={desktopMenuClosed ? "Open sidebar" : "Close sidebar"} aria-expanded={!desktopMenuClosed} aria-controls="workspace-sidebar"><Menu size={21} /></button>
+          <button className="menu-button" aria-expanded={menuOpen} aria-controls="workspace-sidebar" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={21} /></button>
           <label className={cx("company-switcher", companyKey === "digital_empire" && "digital-empire")}><Building2 size={17} /><span>Company</span><select value={companyKey} onChange={(event) => switchCompany(event.target.value as CompanyKey)} aria-label="Select company"><option value="fmg">FMG Agency</option><option value="digital_empire">The Digital Empire</option></select><ChevronDown size={14} /></label>
           <div className="global-search">
             <Search size={18} />
@@ -727,6 +751,7 @@ export function FmgSystem() {
         </header>
 
         <div className="page-wrap">
+          <button className="workspace-back secondary-button" onClick={goBack} disabled={!viewHistory.some((entry) => canOpenView(entry.view))} title="Return to the previous section"><ArrowLeft size={17} /> Back</button>
           <div className="page-heading">
             <div><span className="eyebrow">{copy.eyebrow}</span><h1>{copy.title}</h1><p>{copy.description}</p></div>
             {view === "dashboard" && (canOpenView("invoice") || canOpenView("quotation")) && <button className="primary-button" onClick={() => chooseView(canOpenView("invoice") ? "invoice" : "quotation")}><Plus size={17} /> Create document</button>}
@@ -748,6 +773,7 @@ export function FmgSystem() {
             const invoice = state.documents.find((document) => document.id === invoiceId);
             if (!invoice) return showToast("Reload the workspace to open this Draft invoice.");
             if (!canOpenView("invoice")) return showToast("This account does not have access to invoices.");
+            rememberCurrentView();
             setEditingDocument(invoice);
             setCompanyKey(invoice.companyKey || "fmg");
             setView("invoice");
@@ -755,6 +781,7 @@ export function FmgSystem() {
           {(view === "invoice" || view === "quotation") && <DocumentEditor openWorkOrder={openLinkedWorkOrder} key={`${view}-${editingDocument?.id ?? companyKey}`} type={view} companyKey={companyKey} state={state} mutate={mutate} busy={busy} editing={editingDocument} onDone={() => { setEditingDocument(null); chooseView("data"); }} showToast={showToast} />}
           {view === "data" && <DataPanel openWorkOrder={openLinkedWorkOrder} state={state} mutate={mutate} busy={busy} showToast={showToast} editDocument={(document) => {
             if (!canOpenView(document.type)) return showToast(`This account cannot edit ${document.type === "invoice" ? "invoices" : "quotations"}.`);
+            rememberCurrentView();
             setEditingDocument(document);
             setCompanyKey(document.companyKey || "fmg");
             setView(document.type);
