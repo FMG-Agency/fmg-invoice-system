@@ -709,7 +709,8 @@ async function ensureDraftInvoice(input: DraftInvoiceInput) {
   if (!category) throw new Error("The Media Guide category is required before a draft invoice can be created.");
   const settings = await database.prepare("SELECT prepared_by AS preparedBy, default_payment_terms AS paymentTerms FROM settings WHERE id = 1")
     .first<{ preparedBy: string; paymentTerms: string }>();
-  const generatedCode = `${category.prefix}-${String(input.workOrderId).padStart(4, "0")}`;
+  const clientPart = input.scope.client.name.trim().replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, "-").replace(/^-|-$/g, "") || "CLIENT";
+  const generatedCode = `${clientPart}-${category.prefix}${String(input.workOrderId).padStart(4, "0")}`;
   await database.prepare(`INSERT OR IGNORE INTO documents
     (type, company_key, generated_code, client_id, category_id, date, valid_until, prepared_by, currency, project,
       status, items_json, subtotal, discount, tax, total, payment_terms, notes_exclusions, pdf_key, production_work_order_id, created_by_user_id, created_by_name)

@@ -48,7 +48,9 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   await call(app.production,{action:'finalApprove',id:order.id,data:{...scope,callTime:'13:00',options,productionNote:'',operationNote:''}});
   state=await app.state(new Request('https://fixture.test/api/state')).then(r=>r.json());
   const linked=state.documents.find(d=>d.productionWorkOrderId===order.id);
-  assert.equal(linked.generatedCode,order.code.replace(/^WO-/,'MG-'));
+  const clientPart = (client.companyName || client.name).trim().replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, '-').replace(/^-|-$/g, '') || 'CLIENT';
+  assert.equal(linked.generatedCode, `${clientPart}-MG${order.code.slice(3)}`);
+  assert.equal(Number(linked.generatedCode.match(/(\d+)$/)[1]), order.id);
   assert.equal(linked.createdByName,'Approving Manager');
   assert.equal(linked.createdByUserId,102);
   assert.equal(state.documents.find(d=>d.id===legacy.id).generatedCode,legacy.generatedCode);
