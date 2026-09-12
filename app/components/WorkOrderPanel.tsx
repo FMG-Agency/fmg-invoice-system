@@ -385,7 +385,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [sortOrder, setSortOrder] = useState<"newest" | "production_date">("newest");
+  const [sortOrder, setSortOrder] = useState<"created_at" | "production_date">("created_at");
   const [expandedOrderIds, setExpandedOrderIds] = useState<number[]>([]);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [accountDraft, setAccountDraft] = useState<AccountDraft>(blankAccountDraft);
@@ -444,6 +444,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
     const selectedNames = selectedBundleNames(adminDraft?.bundles ?? [], bundles);
     return addons.filter((item) => !item.appliesTo || selectedNames.has(item.appliesTo.toLowerCase()));
   }, [addons, adminDraft?.bundles, bundles]);
+  const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
   const visibleOrders = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const matches = state.orders.filter((order) => {
@@ -454,10 +455,13 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
       return [order.code, order.clientName, order.bundles.map((bundle) => bundle.name).join(" "), order.addons.map((addon) => addon.name).join(" "), order.createdByName, order.productionManagerName, order.operationManagerName]
         .some((value) => value.toLowerCase().includes(query));
     });
-    return [...matches].sort((left, right) => sortOrder === "production_date"
-      ? left.workDate.localeCompare(right.workDate) || right.createdAt.localeCompare(left.createdAt)
-      : right.createdAt.localeCompare(left.createdAt));
-  }, [dateFrom, dateTo, filter, searchQuery, sortOrder, state.orders]);
+    return [...matches].sort((left, right) => {
+      const comparison = sortOrder === "production_date"
+        ? left.workDate.localeCompare(right.workDate) || left.createdAt.localeCompare(right.createdAt)
+        : left.createdAt.localeCompare(right.createdAt);
+      return (comparison || left.id - right.id) * (sortDirection === "asc" ? 1 : -1);
+    });
+  }, [dateFrom, dateTo, filter, searchQuery, sortOrder, sortDirection, state.orders]);
   const canCreate = state.role === "account_manager" || state.role === "operation_manager" || state.role === "administrator";
   const canComplete = state.role === "production_manager" || state.role === "operation_manager" || state.role === "administrator";
   const canFinalApprove = state.role === "operation_manager" || state.role === "administrator";
@@ -656,11 +660,11 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
           <label><span>TO</span><input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} aria-label="Work orders to date" /></label>
           {(dateFrom || dateTo) && <button type="button" onClick={() => { setDateFrom(""); setDateTo(""); }} aria-label="Clear date range"><X size={14} /></button>}
         </div>
-        <label className={styles.orderSort}><ListFilter size={15} /><span>Sort</span><select value={sortOrder} onChange={(event) => setSortOrder(event.target.value as typeof sortOrder)}><option value="newest">Newest first</option><option value="production_date">Production date</option></select></label>
-        <span className={styles.resultCount}><strong>{visibleOrders.length}</strong> {visibleOrders.length === 1 ? "order" : "orders"} shown</span>
+        <div className={styles.sortingControls}><label className={styles.orderSort}><ListFilter size={15} /><span>Sort by</span><select aria-label="Sort work orders by" value={sortOrder} onChange={(event) => setSortOrder(event.target.value as typeof sortOrder)}><option value="created_at">Work order creation</option><option value="production_date">Production date</option></select></label><label className={styles.orderSort}><span>Order</span><select aria-label="Work order sort direction" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as typeof sortDirection)}><option value="desc">Newest to oldest</option><option value="asc">Oldest to newest</option></select></label></div>
+        <span className={styles.resultCount} role="status" aria-live="polite">Total: <strong>{visibleOrders.length}</strong> {visibleOrders.length === 1 ? "order" : "orders"} shown</span>
       </div>
 
-      {visibleOrders.length ? <div className={styles.orderGrid}>{visibleOrders.map((order) => {
+      {visibleOrders.length ? <div className={styles.orderGrid}>{visibleOrders.map((order, index) => {
         const pending = order.status === "pending_production";
         const pendingOperations = order.status === "pending_operations";
         const finalApproved = order.status === "final_approved";
@@ -668,7 +672,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
         return <article key={order.id} className={`${styles.orderCard} ${pending ? styles.cardPending : pendingOperations ? styles.cardOperations : styles.cardReady}`}>
           <header className={`${styles.orderCardHeader} ${expanded ? styles.orderCardHeaderOpen : ""}`}>
             <button type="button" className={styles.orderCardToggle} aria-expanded={expanded} aria-controls={`work-order-details-${order.id}`} onClick={() => toggleOrderDetails(order.id)}>
-              <div className={styles.orderIdentity}><span className={pending ? styles.statusPending : pendingOperations ? styles.statusOperations : styles.statusReady}>{finalApproved ? <CheckCircle2 size={13} /> : <Clock3 size={13} />}{statusLabel(order)}</span><div><h3>{order.clientName}</h3><span className={styles.orderCode}>{order.code}</span></div><p>Media Guide work order</p></div>
+              <div className={styles.orderIdentity}><b className={styles.rowNumber}>#{index + 1}</b><span className={pending ? styles.statusPending : pendingOperations ? styles.statusOperations : styles.statusReady}>{finalApproved ? <CheckCircle2 size={13} /> : <Clock3 size={13} />}{statusLabel(order)}</span><div><h3>{order.clientName}</h3><span className={styles.orderCode}>{order.code}</span></div><p>Media Guide work order</p></div>
               <div className={styles.orderDates}>
                 <div className={styles.orderSchedule}><CalendarDays size={18} /><span><small>PRODUCTION DATE</small><strong>{prettyDate(order.workDate)}</strong>{!pending && order.callTime && <em><Clock3 size={11} /> {order.callTime}</em>}</span></div>
                 <div className={styles.orderSchedule}><NotebookPen size={18} /><span><small>ORDER CREATED</small><strong>{createdDate(order.createdAt)}</strong><em>By {order.createdByName || "Account Manager"}</em></span></div>

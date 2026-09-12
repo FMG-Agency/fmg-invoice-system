@@ -44,7 +44,7 @@
 .filters button span { min-width: 18px; padding: 2px 5px; border-radius: 999px; background: var(--line); color: var(--ink); font-size: 8px; }
 .filters button.active { background: var(--surface); color: var(--ink); box-shadow: 0 2px 8px rgba(0,0,0,.07); }
 
-.orderToolbar { min-height: 52px; margin-bottom: 16px; padding: 7px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); display: grid; grid-template-columns: minmax(220px, 1fr) auto auto auto; align-items: center; gap: 8px; }
+.orderToolbar { min-height: 52px; margin-bottom: 16px; padding: 7px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); display: grid; grid-template-columns: minmax(220px, 1fr) auto; align-items: center; gap: 8px; }
 .orderSearch { height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); display: flex; align-items: center; gap: 8px; }
 .orderSearch > svg { flex: 0 0 auto; color: var(--muted); }
 .orderSearch input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 10px; }
@@ -55,10 +55,12 @@
 .dateRange label span { color: var(--muted); font-size: 6.5px; font-weight: 900; letter-spacing: .5px; }
 .dateRange input { min-width: 0; height: 28px; padding: 0 4px; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 8px; font-weight: 800; }
 .dateRange button { width: 27px; height: 27px; flex: 0 0 auto; border: 0; border-radius: 7px; background: var(--surface-2); color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.sortingControls { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.rowNumber { display: inline-flex; padding: 3px 8px; margin-bottom: 6px; border-radius: 6px; background: var(--yellow); color: #171717; font-size: 12px; }
 .orderSort { height: 38px; padding: 0 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: 8px; font-weight: 850; }
 .orderSort select { border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 9px; font-weight: 800; }
-.resultCount { padding: 0 10px; color: var(--muted); font-size: 8px; white-space: nowrap; }
-.resultCount strong { color: var(--ink); font-size: 11px; }
+.resultCount { padding: 0 10px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.resultCount strong { color: var(--ink); font-size: 17px; }
 
 .orderGrid { padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: color-mix(in srgb, var(--surface-2) 84%, var(--line)); display: grid; grid-template-columns: 1fr; gap: 20px; }
 .orderCard { position: relative; min-width: 0; border: 1px solid var(--line-strong); border-radius: 15px; background: var(--surface); box-shadow: 0 8px 24px rgba(17,17,17,.07); display: flex; flex-direction: column; overflow: hidden; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
@@ -335,7 +337,8 @@
   .orderSearch { grid-column: 1 / -1; }
   .dateRange { grid-column: 1 / -1; grid-row: auto; width: 100%; }
   .dateRange label { flex: 1; }
-  .resultCount { justify-self: end; }
+  .resultCount { grid-column: 1 / -1; grid-row: auto; justify-self: start; }
+  .sortingControls { grid-column: 1 / -1; }
   .orderGrid { padding: 9px; gap: 16px; }
   .orderCardToggle { grid-template-columns: minmax(0, 1fr) auto; gap: 11px; }
   .orderDates { grid-column: 1 / -1; grid-row: 2; }
