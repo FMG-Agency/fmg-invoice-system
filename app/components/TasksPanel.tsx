@@ -189,7 +189,7 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
   async function submitTask(event: React.FormEvent) {
     event.preventDefault();
     if (!submitting) return;
-    const done = await mutate({ action: "submit", id: submitting.id, submissionUrl: submissionUrl.trim(), submissionMethod, submissionNotes });
+    const done = await mutate({ action: "submit", id: submitting.id, submissionUrl: submissionMethod === "link" ? submissionUrl.trim() : "", submissionMethod, submissionNotes });
     if (!done) return;
     setSubmitting(null);
     setSubmissionUrl("");
@@ -322,7 +322,7 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
     {submitting && <TaskModal eyebrow="TASK DELIVERY" title={`Submit “${submitting.title}”`} description="Confirm the task is complete. The completion time is recorded immediately and compared with the deadline." onClose={() => !saving && setSubmitting(null)}>
       <form className={styles.submitForm} onSubmit={(event) => void submitTask(event)}>
         <div className={styles.submitSummary}><span><Clock3 size={17} /></span><div><small>DEADLINE</small><strong>{dateTimeLabel(submitting.deadlineAt)}</strong><p>{submitting.liveLateMinutes ? `Currently ${durationLabel(submitting.liveLateMinutes)} late` : "Still within the deadline"}</p></div></div>
-        <label><span>Delivery method</span><select value={submissionMethod} onChange={event=>setSubmissionMethod(event.target.value)}><option value="link">Link</option><option value="flash_drive">Flash drive / USB</option><option value="other">Other delivery method</option></select></label>
+        <label><span>Delivery method</span><select value={submissionMethod} onChange={event=>{setSubmissionMethod(event.target.value); setSubmissionUrl("");}}><option value="link">Link</option><option value="flash_drive">Flash drive / USB</option><option value="other">Other delivery method</option></select></label>
         {submissionMethod === "link" && <label><span>Completed work link <small>Optional</small></span><div><Link2 size={16} /><input type="url" value={submissionUrl} onChange={(event) => setSubmissionUrl(event.target.value)} placeholder="https://drive.google.com/…" /></div></label>}
         <label><span>Delivery notes {submissionMethod !== "other" && <small>Optional</small>}</span><textarea required={submissionMethod === "other"} maxLength={2000} value={submissionNotes} onChange={event=>setSubmissionNotes(event.target.value)} placeholder="For example: handed the USB drive to the Production Manager" /></label>
         <p className={styles.confirmNote}><CheckCircle2 size={15} /> Any assigned employee can submit for the whole team. Submission marks this shared task as completed and records the exact Cairo delivery time.</p>

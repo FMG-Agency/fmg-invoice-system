@@ -16,8 +16,7 @@ export const runtime = "nodejs";
 
 const localDateTime = z.string().regex(/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/);
 const httpUrl = z.string().trim().url().refine((value) => {
-  const protocol = new URL(value).protocol;
-  return protocol === "http:" || protocol === "https:";
+  try { const protocol = new URL(value).protocol; return protocol === "http:" || protocol === "https:"; } catch { return false; }
 }, "Use an http or https link.");
 const reference = z.object({
   label: z.string().trim().max(120).default(""),
@@ -74,7 +73,12 @@ export async function POST(request: Request) {
     await ensureTasksDatabase();
     const session = await getSession(request);
     if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
-    const payload = payloadSchema.parse(await request.json());
+    const input = await request.json();
+    // Offline delivery must ignore a hidden or unfinished URL from the link option.
+    if (input && typeof input === "object" && "action" in input && input.action === "submit" && "submissionMethod" in input && ["flash_drive", "other"].includes(String(input.submissionMethod))) {
+      Object.assign(input, { submissionUrl: "" });
+    }
+    const payload = payloadSchema.parse(input);
 
     if (payload.action === "delete") {
       if (!session.isAdmin) return Response.json({ error: "Only administrators can delete tasks." }, { status: 403 });

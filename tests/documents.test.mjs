@@ -77,7 +77,7 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   assert.equal((await app.tasks(request({action:'submit',id:shared.id,submissionMethod:'flash_drive'}))).status,403);
   globalThis.documentTestSession={...globalThis.documentTestSession,userId:102,displayName:'Second Employee'};
   assert.equal((await app.taskState(request({})).then(r=>r.json())).tasks.length,1);
-  const submitted=await call(app.tasks,{action:'submit',id:shared.id,submissionMethod:'flash_drive',submissionNotes:'USB handed to manager'});
+  const submitted=await call(app.tasks,{action:'submit',id:shared.id,submissionMethod:'flash_drive',submissionUrl:'unfinished link',submissionNotes:'USB handed to manager'});
   assert.equal(submitted.tasks[0].submissionMethod,'flash_drive');
   assert.equal(submitted.tasks[0].submittedByName,'Second Employee');
   assert.equal(submitted.tasks[0].status,'submitted');
@@ -86,6 +86,9 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   const noGrid=await call(app.tasks,{action:'create',data:{title:'No grid',details:'Ordinary work',assignedUserId:101,startAt:'2026-09-13T09:00',deadlineAt:'2026-09-14T18:00'}});
   assert.deepEqual(noGrid.tasks.find(t=>t.title==='No grid').gridCells,[]);
   const deleteId=noGrid.tasks.find(t=>t.title==='No grid').id;
+  const offline=await call(app.tasks,{action:'submit',id:deleteId,submissionMethod:'other',submissionUrl:'not a url',submissionNotes:'Handed over in person'});
+  assert.equal(offline.tasks.find(t=>t.id===deleteId).submissionUrl,'');
+  assert.equal(offline.tasks.find(t=>t.id===deleteId).submissionMethod,'other');
   for (const roleLabel of ['Account Manager','Operation Manager','Administrator']) {
     globalThis.documentTestSession={...globalThis.documentTestSession,isAdmin:false,roleLabel};
     assert.equal((await app.tasks(request({action:'delete',id:deleteId}))).status,403);
