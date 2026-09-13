@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  outputFileTracingIncludes: { "/api/pdf/*": ["./public/arial.ttf", "./public/arial-bold.ttf", "./public/fmg-logo-pdf.png", "./public/digital-empire-logo-pdf.png"] },
   async headers() {
     return [
       {

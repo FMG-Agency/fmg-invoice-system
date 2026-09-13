@@ -1,3 +1,4 @@
+import { renderSavedDocumentPdf } from "../../../lib/server-document-pdf";
 import { get } from "@vercel/blob";
 import { database } from "../../../lib/database";
 import { getSession, requireAnyPermission } from "../../../lib/auth-server";
@@ -27,16 +28,22 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       && !canAccess(session.permissions, documentPermission, session.isAdmin)) {
       return new Response("Access denied", { status: 403 });
     }
-    if (!row.pdfKey) return new Response("This is a Draft invoice. Open it in the editor and save it to generate the PDF.", { status: 409 });
-    const object = await get(row.pdfKey, { access: "private" });
-    if (!object || object.statusCode !== 200) return new Response("PDF not found", { status: 404 });
+    let body: BodyInit;
+    // Work-order drafts and renumbered files are rendered from their saved data.
+    const currentFile = row.pdfKey && row.pdfKey.endsWith(`/${row.generatedCode}.pdf`);
+    let object = null;
+    if (currentFile) {
+      try { object = await get(row.pdfKey, { access: "private" }); } catch { /* Recover from saved document data. */ }
+    }
+    if (object && object.statusCode === 200) body = object.stream;
+    else body = await renderSavedDocumentPdf(numericId);
     const download = new URL(request.url).searchParams.get("download") === "1";
     const headers = new Headers();
     headers.set("content-type", "application/pdf");
-    headers.set("content-disposition", `${download ? "attachment" : "inline"}; filename=\"${row.generatedCode}.pdf\"`);
-    headers.set("cache-control", "private, max-age=60");
+    headers.set("content-disposition", `${download ? "attachment" : "inline"}; filename="document-${numericId}.pdf"; filename*=UTF-8''${encodeURIComponent(row.generatedCode)}.pdf`);
+    headers.set("cache-control", "private, no-store");
     headers.set("x-content-type-options", "nosniff");
-    return new Response(object.stream, { headers });
+    return new Response(body, { headers });
   } catch (error) {
     return new Response(error instanceof Error ? error.message : "Unexpected error", { status: 500 });
   }

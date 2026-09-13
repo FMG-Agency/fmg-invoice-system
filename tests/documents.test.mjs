@@ -12,10 +12,10 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   globalThis.documentTestSession = { userId: 101, username: 'fixture', displayName: 'Original Author', roleLabel: 'Administrator', isAdmin: true, permissions: [], clientId: null, employeeId: null };
   await mkdir(new URL('../work/', import.meta.url), { recursive: true });
   const bundle = new URL('../work/document-test.mjs', import.meta.url);
-  await build({ stdin: { contents: `export { database } from './app/lib/database'; export { POST as production } from './app/api/production/route'; export { GET as state, POST as save } from './app/api/state/route'; export { reserveWorkOrderNumber } from './app/lib/document-metadata'; export {POST as tasks, GET as taskState} from './app/api/tasks/route';`, resolveDir: process.cwd() }, outfile: fileURLToPath(bundle), bundle: true, platform: 'node', format: 'esm', packages: 'external', plugins: [{ name: 'isolated-auth-storage', setup(b) {
+  await build({ stdin: { contents: `export { database } from './app/lib/database'; export { POST as production } from './app/api/production/route'; export { GET as state, POST as save } from './app/api/state/route'; export { reserveWorkOrderNumber } from './app/lib/document-metadata'; export {POST as tasks, GET as taskState} from './app/api/tasks/route'; export {GET as pdf} from './app/api/pdf/[id]/route';`, resolveDir: process.cwd() }, outfile: fileURLToPath(bundle), bundle: true, platform: 'node', format: 'esm', packages: 'external', plugins: [{ name: 'isolated-auth-storage', setup(b) {
     b.onResolve({ filter: /auth-server$/ }, () => ({ path: 'auth', namespace: 'fixture' }));
     b.onResolve({ filter: /^@vercel\/blob$/ }, () => ({ path: 'blob', namespace: 'fixture' }));
-    b.onLoad({ filter: /.*/, namespace: 'fixture' }, ({path}) => ({ contents: path === 'auth' ? `export async function ensureAuthDatabase(){} export async function getSession(){return globalThis.documentTestSession;} export async function requireAuth(){return globalThis.documentTestSession ? null : Response.json({}, {status:401});} export async function requirePermission(){return requireAuth();}` : `export async function put(){return {url:'mock-only'};} export async function del(){}` }));
+    b.onLoad({ filter: /.*/, namespace: 'fixture' }, ({path}) => ({ contents: path === 'auth' ? `export async function ensureAuthDatabase(){} export async function getSession(){return globalThis.documentTestSession;} export async function requireAuth(){return globalThis.documentTestSession ? null : Response.json({}, {status:401});} export async function requireAnyPermission(){return requireAuth();} export async function requirePermission(){return requireAuth();}` : `export async function get(){return null;} export async function put(){return {url:'mock-only'};} export async function del(){}` }));
   }}] });
   const app = await import(bundle.href);
   for (const f of (await readdir(new URL('../drizzle/', import.meta.url))).filter(f => f.endsWith('.sql')).sort()) {
@@ -99,6 +99,20 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   assert.ok(!afterDelete.tasks.some(t=>t.id===deleteId));
   assert.ok(afterDelete.tasks.some(t=>t.id===shared.id));
   assert.equal((await app.tasks(request({action:'delete',id:deleteId}))).status,404);
+  // Missing PDFs render from saved data without requiring a save or changing status.
+  globalThis.documentTestSession={...globalThis.documentTestSession,isAdmin:true,clientId:null};
+  for (const docId of [linked.id,manual.id]) {
+    const response=await app.pdf(request({}),{params:Promise.resolve({id:String(docId)})});
+    assert.equal(response.status,200);
+    assert.equal(response.headers.get('content-type'),'application/pdf');
+    const bytes=Buffer.from(await response.arrayBuffer());
+    assert.equal(bytes.subarray(0,5).toString(),'%PDF-');
+    assert.ok(bytes.length>10000);
+  }
+  globalThis.documentTestSession={...globalThis.documentTestSession,isAdmin:false,clientId:999999};
+  assert.equal((await app.pdf(request({}),{params:Promise.resolve({id:String(linked.id)})})).status,403);
+  globalThis.documentTestSession=null;
+  assert.equal((await app.pdf(request({}),{params:Promise.resolve({id:String(linked.id)})})).status,401);
   const reserved=await Promise.all(Array.from({length:6},()=>app.reserveWorkOrderNumber()));
   assert.equal(new Set(reserved).size,6);
   assert.ok(reserved.every(n=>n>order.id));

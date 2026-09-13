@@ -235,10 +235,10 @@ function invoiceSignatureBlock(doc: jsPDF, y: number, theme: PdfTheme, digitalEm
   text(doc, digitalEmpire ? "Name: __________________" : "Name: Rafik Ezzat", 130, y + 10, { fontSize: 7, color: theme.dark });
 }
 
-export async function generateDocumentPdf(draft: DocumentDraft, client: Client, category: Category, generatedCode: string) {
+export async function generateDocumentPdf(draft: DocumentDraft, client: Client, category: Category, generatedCode: string, assets?: { logo: string; regularFont: string; boldFont: string }) {
   const digitalEmpire = draft.companyKey === "digital_empire";
   const theme = digitalEmpire ? DIGITAL_EMPIRE_THEME : FMG_THEME;
-  const [logo, regularFont, boldFont] = await Promise.all([
+  const [logo, regularFont, boldFont] = assets ? [assets.logo, assets.regularFont, assets.boldFont] : await Promise.all([
     toDataUrl(digitalEmpire ? "/digital-empire-logo-pdf.png" : "/fmg-logo-pdf.png"),
     fontBase64("/arial.ttf"),
     fontBase64("/arial-bold.ttf"),

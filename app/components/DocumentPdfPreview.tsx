@@ -28,8 +28,7 @@ export function DocumentPdfPreview({ id, code, onClose }: { id: number; code: st
       try {
         const response = await fetch(`/api/pdf/${id}`, { signal: controller.signal, cache: "no-store" });
         if (!response.ok) {
-          const message = response.status === 409 ? "This draft has no PDF yet. Open it in the editor and save it first."
-            : response.status === 401 ? "Your session expired. Please sign in again."
+          const message = response.status === 401 ? "Your session expired. Please sign in again."
             : response.status === 403 ? "You do not have access to this document."
             : response.status === 404 ? "This document or its PDF could not be found."
             : "Could not load this document. Close the preview and try again.";
@@ -57,7 +56,7 @@ export function DocumentPdfPreview({ id, code, onClose }: { id: number; code: st
     </header>
     {error ? <p className="document-preview-message" role="alert">{error}</p> : url
       ? <iframe src={url} title={`PDF preview: ${code}`} />
-      : <p className="document-preview-message" role="status">Loading document…</p>}
+      : <p className="document-preview-message" role="status">Preparing document preview…</p>}
     <footer>If your browser cannot display the PDF, use Download.</footer>
   </dialog>;
 }
