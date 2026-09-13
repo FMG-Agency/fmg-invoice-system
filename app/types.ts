@@ -69,6 +69,7 @@ export type QuotationCatalogItem = {
 };
 
 export type DocumentRecord = {
+  deletedAt?: string;
   id: number;
   type: "invoice" | "quotation";
   companyKey: CompanyKey;
@@ -120,6 +121,7 @@ export type Settings = {
 };
 
 export type AppState = {
+  deletedDocuments?: DocumentRecord[];
   clients: Client[];
   categories: Category[];
   documents: DocumentRecord[];

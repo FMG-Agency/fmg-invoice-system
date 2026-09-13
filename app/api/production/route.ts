@@ -711,6 +711,8 @@ async function ensureDraftInvoice(input: DraftInvoiceInput) {
     .first<{ preparedBy: string; paymentTerms: string }>();
   const clientPart = input.scope.client.name.trim().replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, "-").replace(/^-|-$/g, "") || "CLIENT";
   const generatedCode = `${clientPart}-${category.prefix}${String(input.workOrderId).padStart(4, "0")}`;
+  const archived = await database.prepare("SELECT id FROM deleted_document_history WHERE generated_code = ?").bind(generatedCode).first();
+  if (archived) throw new Error("This invoice was deleted and its serial is reserved. Create a new work order for a new invoice.");
   await database.prepare(`INSERT OR IGNORE INTO documents
     (type, company_key, generated_code, client_id, category_id, date, valid_until, prepared_by, currency, project,
       status, items_json, subtotal, discount, tax, total, payment_terms, notes_exclusions, pdf_key, production_work_order_id, created_by_user_id, created_by_name)

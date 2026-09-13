@@ -1,6 +1,7 @@
 import { database } from "./database";
 
 export async function ensureDocumentMetadata() {
+  await database.prepare("CREATE TABLE IF NOT EXISTS deleted_document_history (id INTEGER PRIMARY KEY, generated_code TEXT NOT NULL UNIQUE, snapshot_json TEXT NOT NULL, deleted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
   const columns = await database.prepare("PRAGMA table_info(documents)").all<{ name: string }>();
   for (const [name, definition] of [["created_by_user_id", "INTEGER"], ["created_by_name", "TEXT NOT NULL DEFAULT ''"]]) {
     if (columns.results.some((column) => column.name === name)) continue;

@@ -111,6 +111,13 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   }
   globalThis.documentTestSession={...globalThis.documentTestSession,isAdmin:false,clientId:999999};
   assert.equal((await app.pdf(request({}),{params:Promise.resolve({id:String(linked.id)})})).status,403);
+  globalThis.documentTestSession={...globalThis.documentTestSession,isAdmin:true,clientId:null};
+  const beforeCounter=(await app.database.prepare('SELECT counter FROM categories WHERE id=?').bind(category.id).first()).counter;
+  const deletedState=await call(app.save,{action:'deleteDocument',id:manual.id});
+  assert.ok(!deletedState.documents.some(d=>d.id===manual.id));
+  assert.equal(deletedState.deletedDocuments.find(d=>d.id===manual.id).generatedCode,manual.generatedCode);
+  assert.equal(deletedState.deletedDocuments.find(d=>d.id===manual.id).status,'Deleted');
+  assert.equal((await app.database.prepare('SELECT counter FROM categories WHERE id=?').bind(category.id).first()).counter,beforeCounter);
   globalThis.documentTestSession=null;
   assert.equal((await app.pdf(request({}),{params:Promise.resolve({id:String(linked.id)})})).status,401);
   const reserved=await Promise.all(Array.from({length:6},()=>app.reserveWorkOrderNumber()));

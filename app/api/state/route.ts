@@ -1,4 +1,5 @@
-import { del, put } from "@vercel/blob";
+import type { DocumentRecord } from "../../types";
+import { put } from "@vercel/blob";
 import { z } from "zod";
 import { ensureDocumentMetadata } from "../../lib/document-metadata";
 import { database } from "../../lib/database";
@@ -336,6 +337,7 @@ async function getState() {
     clients: clientsResult.results,
     categories: categoriesResult.results,
     documents,
+    deletedDocuments: (await database.prepare("SELECT snapshot_json, deleted_at FROM deleted_document_history ORDER BY id DESC").all<{snapshot_json:string;deleted_at:string}>()).results.map(row=>({...JSON.parse(row.snapshot_json),deletedAt:row.deleted_at,status:"Deleted"} as DocumentRecord)),
     quotationCatalog: catalogResult.results.map((record) => ({
       ...record,
       price: numberValue(record.price),
@@ -392,6 +394,7 @@ function filterState(state: WorkspaceState, session: AuthSession): WorkspaceStat
     clients,
     categories: allowed("categories") || allowed("all_data") || allowed("invoices") || allowed("quotations") ? state.categories : [],
     documents,
+    deletedDocuments: state.deletedDocuments.filter(d => allowed("all_data") || allowed(d.type === "invoice" ? "invoices" : "quotations")),
     quotationCatalog: allowed("quotations") ? state.quotationCatalog : [],
     settings: allowed("settings") || allowed("invoices") || allowed("quotations") ? state.settings : null,
   };
@@ -570,9 +573,13 @@ export async function POST(request: Request) {
     }
 
     if (payload.action === "deleteDocument") {
-      const row = await database.prepare("SELECT pdf_key AS pdfKey FROM documents WHERE id = ?").bind(payload.id).first<{ pdfKey: string }>();
-      if (row?.pdfKey) await del(row.pdfKey);
-      await database.prepare("DELETE FROM documents WHERE id = ?").bind(payload.id).run();
+      const snapshot = (await getState()).documents.find(d => Number((d as Record<string, unknown>).id) === payload.id);
+      if (!snapshot) return Response.json({error:"Document not found."},{status:404});
+      await database.batch([
+        database.prepare("INSERT INTO deleted_document_history (id, generated_code, snapshot_json) VALUES (?, ?, ?)").bind(payload.id, (snapshot as Record<string, unknown>).generatedCode, JSON.stringify(snapshot)),
+        database.prepare("UPDATE production_work_orders SET draft_invoice_id = NULL WHERE draft_invoice_id = ?").bind(payload.id),
+        database.prepare("DELETE FROM documents WHERE id = ?").bind(payload.id),
+      ]);
     }
 
     if (payload.action === "updateSettings") {
