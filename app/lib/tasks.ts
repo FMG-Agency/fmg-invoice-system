@@ -37,7 +37,7 @@ let tasksDatabaseReady: Promise<void> | null = null;
 export async function ensureTasksDatabase() {
   tasksDatabaseReady ??= database.batch(taskSchema.map((statement) => database.prepare(statement))).then(async () => {
     const columns = (await database.prepare("PRAGMA table_info(agency_tasks)").all<{name:string}>()).results;
-    for (const [name, value] of [["grid_cells_json", "[]"], ["assigned_users_json", "[]"], ["submission_method", "link"], ["submission_notes", ""], ["submitted_by_name", ""]]) {
+    for (const [name, value] of [["task_notes", ""], ["grid_cells_json", "[]"], ["assigned_users_json", "[]"], ["submission_method", "link"], ["submission_notes", ""], ["submitted_by_name", ""]]) {
       if (columns.some(c => c.name === name)) continue;
       try { await database.prepare(`ALTER TABLE agency_tasks ADD COLUMN ${name} TEXT NOT NULL DEFAULT '${value}'`).run(); }
       catch(error) { if (!/duplicate column/i.test(String(error))) throw error; }
@@ -134,6 +134,7 @@ function taskFromRow(row: Record<string, unknown>, nowEpoch: number): AgencyTask
     title: String(row.title ?? ""),
     details: String(row.details ?? ""),
     brief: String(row.brief ?? ""),
+    notes: String(row.taskNotes ?? ""),
     gridNotes: String(row.gridNotes ?? ""),
     gridCells: JSON.parse(String(row.gridCellsJson || "[]")),
     assignedUsers: JSON.parse(String(row.assignedUsersJson || "[]")).length ? JSON.parse(String(row.assignedUsersJson)) : [{id:numberValue(row.assignedUserId),displayName:String(row.assignedUserName),roleLabel:String(row.assignedUserRole)}],
@@ -192,7 +193,7 @@ export async function getTasksState(session: AuthSession): Promise<TasksState> {
     : role === "account_manager"
       ? `(${assignedAccess} OR t.created_by_user_id = ?)`
       : assignedAccess;
-  const query = database.prepare(`SELECT t.grid_cells_json AS gridCellsJson, t.assigned_users_json AS assignedUsersJson, t.submission_method AS submissionMethod, t.submission_notes AS submissionNotes, t.submitted_by_name AS submittedByName, t.id, t.title, t.details, t.brief, t.grid_notes AS gridNotes,
+  const query = database.prepare(`SELECT t.task_notes AS taskNotes, t.grid_cells_json AS gridCellsJson, t.assigned_users_json AS assignedUsersJson, t.submission_method AS submissionMethod, t.submission_notes AS submissionNotes, t.submitted_by_name AS submittedByName, t.id, t.title, t.details, t.brief, t.grid_notes AS gridNotes,
       t.references_json AS referencesJson, t.start_at AS startAt, t.deadline_at AS deadlineAt,
       t.assigned_user_id AS assignedUserId, t.assigned_user_name AS assignedUserName,
       t.assigned_user_role AS assignedUserRole, t.created_by_user_id AS createdByUserId,

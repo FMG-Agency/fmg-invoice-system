@@ -27,6 +27,7 @@ const taskData = z.object({
   title: z.string().trim().min(2).max(200),
   details: z.string().trim().min(3).max(10_000),
   brief: z.string().trim().max(10_000).default(""),
+  notes: z.string().trim().max(10_000).default(""),
   gridNotes: z.string().trim().max(10_000).default(""),
   references: z.array(reference).max(20).default([]),
   startAt: localDateTime,
@@ -89,11 +90,11 @@ export async function POST(request: Request) {
       const team = ids.map(id => { const a = available.find(a => a.id === id)!; return {id, displayName:a.displayName, roleLabel:a.roleLabel}; });
       const creatorName = sessionName(session);
       const result = await database.prepare(`INSERT INTO agency_tasks
-          (grid_cells_json, assigned_users_json, title, details, brief, grid_notes, references_json, start_at, deadline_at,
+          (task_notes, grid_cells_json, assigned_users_json, title, details, brief, grid_notes, references_json, start_at, deadline_at,
             assigned_user_id, assigned_user_name, assigned_user_role,
             created_by_user_id, created_by_name, created_by_role)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(JSON.stringify(payload.data.gridCells), JSON.stringify(team), payload.data.title, payload.data.details, payload.data.brief, payload.data.gridNotes,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(payload.data.notes, JSON.stringify(payload.data.gridCells), JSON.stringify(team), payload.data.title, payload.data.details, payload.data.brief, payload.data.gridNotes,
           JSON.stringify(payload.data.references), payload.data.startAt, payload.data.deadlineAt,
           allowedAssignee.id, allowedAssignee.displayName, allowedAssignee.roleLabel,
           session.userId, creatorName, session.roleLabel).run();

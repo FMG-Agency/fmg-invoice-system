@@ -524,6 +524,7 @@ export type AgencyTask = {
   title: string;
   details: string;
   brief: string;
+  notes: string;
   gridNotes: string;
   references: TaskReference[];
   startAt: string;

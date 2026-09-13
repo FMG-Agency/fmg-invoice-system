@@ -34,6 +34,7 @@ type TaskDraft = {
   title: string;
   details: string;
   brief: string;
+  notes: string;
   gridNotes: string;
   references: TaskReference[];
   startAt: string;
@@ -66,7 +67,7 @@ function initialSchedule() {
 
 function blankDraft(): TaskDraft {
   const schedule = initialSchedule();
-  return { title: "", details: "", brief: "", gridNotes: "", references: [], startAt: schedule.startAt, deadlineAt: schedule.deadlineAt, assignedUserId: 0, additionalUserIds: [], gridCells: [] };
+  return { title: "", details: "", brief: "", notes: "", gridNotes: "", references: [], startAt: schedule.startAt, deadlineAt: schedule.deadlineAt, assignedUserId: 0, additionalUserIds: [], gridCells: [] };
 }
 
 function dateTimeLabel(value: string) {
@@ -277,6 +278,7 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
           {open && <div className={styles.taskDetails}>
             <div className={styles.detailGrid}>
               <section><span><FileText size={14} /> TASK DETAILS</span><p>{task.details || "No extra details."}</p></section>
+              {task.notes && <section><span><FileText size={14} /> NOTES</span><p style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{task.notes}</p></section>}
               <section><span><FileText size={14} /> BRIEF</span><p>{task.brief || "No brief added."}</p></section>
               {(task.gridCells.length > 0 || task.gridNotes) && <section><span><FileText size={14} /> INSTAGRAM GRID</span><div className={styles.instagramGrid}>{task.gridCells.map((cell, index) => <div key={index} className={styles.gridCell} data-kind={cell}><small>#{index + 1}</small><strong>{cell === "design" ? "▧" : cell === "carousel" ? "▣" : "▶"}</strong><span>{cell}</span></div>)}</div>{task.gridNotes && <p>{task.gridNotes}</p>}</section>}
               <section><span><Link2 size={14} /> REFERENCES · {task.references.length}</span>{task.references.length ? <div className={styles.referenceList}>{task.references.map((reference, index) => <a key={`${reference.url}-${index}`} href={reference.url} target="_blank" rel="noopener noreferrer"><span>{reference.label || `Reference ${index + 1}`}</span><ExternalLink size={13} /></a>)}</div> : <p>No references added.</p>}</section>
@@ -296,6 +298,7 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
           <label><span>Start date & time</span><input required type="datetime-local" value={draft.startAt} onChange={(event) => setDraft((current) => ({ ...current, startAt: event.target.value }))} /></label>
           <label><span>Deadline</span><input required type="datetime-local" min={draft.startAt} value={draft.deadlineAt} onChange={(event) => setDraft((current) => ({ ...current, deadlineAt: event.target.value }))} /></label>
           <label className={styles.wide}><span>Task details</span><textarea required minLength={3} rows={4} value={draft.details} onChange={(event) => setDraft((current) => ({ ...current, details: event.target.value }))} placeholder="Write exactly what needs to be delivered…" /></label>
+          <label className={styles.wide}><span>Notes / text <small>Optional</small></span><textarea rows={4} maxLength={10000} value={draft.notes} onChange={event=>setDraft(current=>({...current,notes:event.target.value}))} placeholder="Write any additional text or notes for the team…" /></label>
           <label><span>Brief <small>Optional</small></span><textarea rows={4} value={draft.brief} onChange={(event) => setDraft((current) => ({ ...current, brief: event.target.value }))} placeholder="Objectives, tone, audience, or key message…" /></label>
           <label><span>Grid / layout direction <small>Optional</small></span><textarea rows={4} value={draft.gridNotes} onChange={(event) => setDraft((current) => ({ ...current, gridNotes: event.target.value }))} placeholder="Describe the grid or visual layout…" /></label>
         </div>
