@@ -35,7 +35,14 @@ const taskSchema = [
 let tasksDatabaseReady: Promise<void> | null = null;
 
 export async function ensureTasksDatabase() {
-  tasksDatabaseReady ??= database.batch(taskSchema.map((statement) => database.prepare(statement))).then(() => undefined);
+  tasksDatabaseReady ??= database.batch(taskSchema.map((statement) => database.prepare(statement))).then(async () => {
+    const columns = (await database.prepare("PRAGMA table_info(agency_tasks)").all<{name:string}>()).results;
+    for (const [name, value] of [["grid_cells_json", "[]"], ["assigned_users_json", "[]"], ["submission_method", "link"], ["submission_notes", ""], ["submitted_by_name", ""]]) {
+      if (columns.some(c => c.name === name)) continue;
+      try { await database.prepare(`ALTER TABLE agency_tasks ADD COLUMN ${name} TEXT NOT NULL DEFAULT '${value}'`).run(); }
+      catch(error) { if (!/duplicate column/i.test(String(error))) throw error; }
+    }
+  });
   try {
     await tasksDatabaseReady;
   } catch (error) {
@@ -128,6 +135,11 @@ function taskFromRow(row: Record<string, unknown>, nowEpoch: number): AgencyTask
     details: String(row.details ?? ""),
     brief: String(row.brief ?? ""),
     gridNotes: String(row.gridNotes ?? ""),
+    gridCells: JSON.parse(String(row.gridCellsJson || "[]")),
+    assignedUsers: JSON.parse(String(row.assignedUsersJson || "[]")).length ? JSON.parse(String(row.assignedUsersJson)) : [{id:numberValue(row.assignedUserId),displayName:String(row.assignedUserName),roleLabel:String(row.assignedUserRole)}],
+    submissionMethod: String(row.submissionMethod || "link"),
+    submissionNotes: String(row.submissionNotes || ""),
+    submittedByName: String(row.submittedByName || ""),
     references: referencesValue(row.referencesJson),
     startAt: String(row.startAt ?? ""),
     deadlineAt: String(row.deadlineAt ?? ""),
@@ -174,12 +186,13 @@ export async function taskAssignees(session: AuthSession): Promise<TaskAssignee[
 
 export async function getTasksState(session: AuthSession): Promise<TasksState> {
   const role = taskWorkflowRole(session);
+  const assignedAccess = "(t.assigned_user_id = ? OR EXISTS (SELECT 1 FROM json_each(t.assigned_users_json) a WHERE json_extract(a.value, '$.id') = ?))";
   const accessWhere = role === "administrator" || role === "operation_manager"
     ? "1 = 1"
     : role === "account_manager"
-      ? "(t.assigned_user_id = ? OR t.created_by_user_id = ?)"
-      : "t.assigned_user_id = ?";
-  const query = database.prepare(`SELECT t.id, t.title, t.details, t.brief, t.grid_notes AS gridNotes,
+      ? `(${assignedAccess} OR t.created_by_user_id = ?)`
+      : assignedAccess;
+  const query = database.prepare(`SELECT t.grid_cells_json AS gridCellsJson, t.assigned_users_json AS assignedUsersJson, t.submission_method AS submissionMethod, t.submission_notes AS submissionNotes, t.submitted_by_name AS submittedByName, t.id, t.title, t.details, t.brief, t.grid_notes AS gridNotes,
       t.references_json AS referencesJson, t.start_at AS startAt, t.deadline_at AS deadlineAt,
       t.assigned_user_id AS assignedUserId, t.assigned_user_name AS assignedUserName,
       t.assigned_user_role AS assignedUserRole, t.created_by_user_id AS createdByUserId,
@@ -192,8 +205,8 @@ export async function getTasksState(session: AuthSession): Promise<TasksState> {
   const rows = role === "administrator" || role === "operation_manager"
     ? await query.all<Record<string, unknown>>()
     : role === "account_manager"
-      ? await query.bind(session.userId, session.userId).all<Record<string, unknown>>()
-      : await query.bind(session.userId).all<Record<string, unknown>>();
+      ? await query.bind(session.userId, session.userId, session.userId).all<Record<string, unknown>>()
+      : await query.bind(session.userId, session.userId).all<Record<string, unknown>>();
   const now = cairoNow();
   return {
     tasks: rows.results.map((row) => taskFromRow(row, Date.now())),

@@ -32,10 +32,12 @@ const taskData = z.object({
   startAt: localDateTime,
   deadlineAt: localDateTime,
   assignedUserId: z.number().int().positive(),
+  additionalUserIds: z.array(z.number().int().positive()).max(49).default([]),
+  gridCells: z.array(z.enum(["design", "carousel", "video"])).max(36).default([]),
 });
 const payloadSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("create"), data: taskData }),
-  z.object({ action: z.literal("submit"), id: z.number().int().positive(), submissionUrl: z.union([httpUrl, z.literal("")]).default("") }),
+  z.object({ action: z.literal("submit"), id: z.number().int().positive(), submissionMethod: z.enum(["link", "flash_drive", "other"]).default("link"), submissionNotes: z.string().trim().max(2000).default(""), submissionUrl: z.union([httpUrl, z.literal("")]).default("") }),
 ]);
 
 function sessionName(session: { displayName: string; username: string }) {
@@ -81,18 +83,22 @@ export async function POST(request: Request) {
       }
       const allowedAssignee = (await taskAssignees(session)).find((assignee) => assignee.id === payload.data.assignedUserId);
       if (!allowedAssignee) return Response.json({ error: "You cannot assign a task to this user." }, { status: 403 });
+      const ids = [...new Set([payload.data.assignedUserId, ...payload.data.additionalUserIds])];
+      const available = await taskAssignees(session);
+      if (ids.some(id => !available.some(a => a.id === id))) return Response.json({error:"You cannot assign a task to this user."}, {status:403});
+      const team = ids.map(id => { const a = available.find(a => a.id === id)!; return {id, displayName:a.displayName, roleLabel:a.roleLabel}; });
       const creatorName = sessionName(session);
       const result = await database.prepare(`INSERT INTO agency_tasks
-          (title, details, brief, grid_notes, references_json, start_at, deadline_at,
+          (grid_cells_json, assigned_users_json, title, details, brief, grid_notes, references_json, start_at, deadline_at,
             assigned_user_id, assigned_user_name, assigned_user_role,
             created_by_user_id, created_by_name, created_by_role)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(payload.data.title, payload.data.details, payload.data.brief, payload.data.gridNotes,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(JSON.stringify(payload.data.gridCells), JSON.stringify(team), payload.data.title, payload.data.details, payload.data.brief, payload.data.gridNotes,
           JSON.stringify(payload.data.references), payload.data.startAt, payload.data.deadlineAt,
           allowedAssignee.id, allowedAssignee.displayName, allowedAssignee.roleLabel,
           session.userId, creatorName, session.roleLabel).run();
       const taskId = Number(result.meta.last_row_id);
-      await notifyUsers([allowedAssignee.id], {
+      await notifyUsers(ids, {
         type: "task_assigned",
         title: "New task assigned",
         message: `${creatorName} assigned “${payload.data.title}” to you. Deadline: ${payload.data.deadlineAt.replace("T", " ")}.`,
@@ -101,19 +107,20 @@ export async function POST(request: Request) {
         actorUserId: session.userId,
       });
     } else {
-      const task = await database.prepare(`SELECT id, title, assigned_user_id AS assignedUserId,
+      const task = await database.prepare(`SELECT assigned_users_json AS assignedUsersJson, id, title, assigned_user_id AS assignedUserId,
           created_by_user_id AS createdByUserId, deadline_at AS deadlineAt, status
         FROM agency_tasks WHERE id = ?`).bind(payload.id).first<Record<string, unknown>>();
       if (!task) return Response.json({ error: "Task not found." }, { status: 404 });
-      if (Number(task.assignedUserId) !== session.userId) return Response.json({ error: "Only the assigned user can submit this task." }, { status: 403 });
+      if (Number(task.assignedUserId) !== session.userId && !JSON.parse(String(task.assignedUsersJson || "[]")).some((a: {id:number}) => a.id === session.userId)) return Response.json({ error: "Only the assigned user can submit this task." }, { status: 403 });
       if (String(task.status) === "submitted") return Response.json({ error: "This task has already been submitted." }, { status: 409 });
+      if (payload.submissionMethod === "other" && !payload.submissionNotes) return Response.json({error:"Describe how the work was delivered."},{status:400});
       const now = cairoNow();
       const deadlineEpoch = cairoLocalEpoch(String(task.deadlineAt ?? ""));
       const lateMinutes = Number.isFinite(deadlineEpoch) ? Math.max(0, Math.ceil((Date.now() - deadlineEpoch) / 60_000)) : 0;
-      const updated = await database.prepare(`UPDATE agency_tasks SET status = 'submitted', submission_url = ?,
+      const updated = await database.prepare(`UPDATE agency_tasks SET status = 'submitted', submission_method = ?, submission_notes = ?, submitted_by_name = ?, submission_url = ?,
           submitted_at = ?, late_minutes = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND status = 'assigned' AND assigned_user_id = ?`)
-        .bind(payload.submissionUrl, now.dateTime, lateMinutes, payload.id, session.userId).run();
+        WHERE id = ? AND status = 'assigned' AND (assigned_user_id = ? OR EXISTS (SELECT 1 FROM json_each(assigned_users_json) a WHERE json_extract(a.value, '$.id') = ?))`)
+        .bind(payload.submissionMethod, payload.submissionNotes, sessionName(session), payload.submissionMethod === "link" ? payload.submissionUrl : "", now.dateTime, lateMinutes, payload.id, session.userId, session.userId).run();
       if (!Number(updated.meta.changes)) return Response.json({ error: "This task was already submitted." }, { status: 409 });
       const recipients = [
         Number(task.createdByUserId),

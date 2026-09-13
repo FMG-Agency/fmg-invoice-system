@@ -12,10 +12,10 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   globalThis.documentTestSession = { userId: 101, username: 'fixture', displayName: 'Original Author', roleLabel: 'Administrator', isAdmin: true, permissions: [], clientId: null, employeeId: null };
   await mkdir(new URL('../work/', import.meta.url), { recursive: true });
   const bundle = new URL('../work/document-test.mjs', import.meta.url);
-  await build({ stdin: { contents: `export { database } from './app/lib/database'; export { POST as production } from './app/api/production/route'; export { GET as state, POST as save } from './app/api/state/route'; export { reserveWorkOrderNumber } from './app/lib/document-metadata';`, resolveDir: process.cwd() }, outfile: fileURLToPath(bundle), bundle: true, platform: 'node', format: 'esm', packages: 'external', plugins: [{ name: 'isolated-auth-storage', setup(b) {
+  await build({ stdin: { contents: `export { database } from './app/lib/database'; export { POST as production } from './app/api/production/route'; export { GET as state, POST as save } from './app/api/state/route'; export { reserveWorkOrderNumber } from './app/lib/document-metadata'; export {POST as tasks, GET as taskState} from './app/api/tasks/route';`, resolveDir: process.cwd() }, outfile: fileURLToPath(bundle), bundle: true, platform: 'node', format: 'esm', packages: 'external', plugins: [{ name: 'isolated-auth-storage', setup(b) {
     b.onResolve({ filter: /auth-server$/ }, () => ({ path: 'auth', namespace: 'fixture' }));
     b.onResolve({ filter: /^@vercel\/blob$/ }, () => ({ path: 'blob', namespace: 'fixture' }));
-    b.onLoad({ filter: /.*/, namespace: 'fixture' }, ({path}) => ({ contents: path === 'auth' ? `export async function getSession(){return globalThis.documentTestSession;} export async function requireAuth(){return globalThis.documentTestSession ? null : Response.json({}, {status:401});} export async function requirePermission(){return requireAuth();}` : `export async function put(){return {url:'mock-only'};} export async function del(){}` }));
+    b.onLoad({ filter: /.*/, namespace: 'fixture' }, ({path}) => ({ contents: path === 'auth' ? `export async function ensureAuthDatabase(){} export async function getSession(){return globalThis.documentTestSession;} export async function requireAuth(){return globalThis.documentTestSession ? null : Response.json({}, {status:401});} export async function requirePermission(){return requireAuth();}` : `export async function put(){return {url:'mock-only'};} export async function del(){}` }));
   }}] });
   const app = await import(bundle.href);
   for (const f of (await readdir(new URL('../drizzle/', import.meta.url))).filter(f => f.endsWith('.sql')).sort()) {
@@ -65,6 +65,25 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   assert.equal((await app.database.prepare('SELECT generated_code AS code FROM documents WHERE id=?').bind(linked.id).first()).code,'Legacy-MG0099');
   const count=await app.database.prepare('SELECT COUNT(*) AS total FROM documents WHERE production_work_order_id=?').bind(order.id).first();
   assert.equal(count.total,1);
+  // Shared task visibility, optional grids and delivery authorization use isolated storage.
+  globalThis.documentTestSession={...globalThis.documentTestSession,userId:101,displayName:'Task Creator'};
+  const taskResult=await call(app.tasks,{action:'create',data:{title:'Shared grid',details:'Create three posts',assignedUserId:101,additionalUserIds:[102,102],gridCells:['design','carousel','video'],startAt:'2026-09-13T09:00',deadlineAt:'2026-09-14T18:00'}});
+  const shared=taskResult.tasks[0];
+  assert.equal(shared.assignedUsers.length,2);
+  assert.deepEqual(shared.gridCells,['design','carousel','video']);
+  globalThis.documentTestSession={...globalThis.documentTestSession,userId:103,isAdmin:false,roleLabel:'Designer'};
+  assert.equal((await app.taskState(request({})).then(r=>r.json())).tasks.length,0);
+  assert.equal((await app.tasks(request({action:'submit',id:shared.id,submissionMethod:'flash_drive'}))).status,403);
+  globalThis.documentTestSession={...globalThis.documentTestSession,userId:102,displayName:'Second Employee'};
+  assert.equal((await app.taskState(request({})).then(r=>r.json())).tasks.length,1);
+  const submitted=await call(app.tasks,{action:'submit',id:shared.id,submissionMethod:'flash_drive',submissionNotes:'USB handed to manager'});
+  assert.equal(submitted.tasks[0].submissionMethod,'flash_drive');
+  assert.equal(submitted.tasks[0].submittedByName,'Second Employee');
+  assert.equal(submitted.tasks[0].status,'submitted');
+  assert.equal((await app.tasks(request({action:'submit',id:shared.id,submissionMethod:'flash_drive'}))).status,409);
+  globalThis.documentTestSession={...globalThis.documentTestSession,userId:101,isAdmin:true,roleLabel:'Administrator'};
+  const noGrid=await call(app.tasks,{action:'create',data:{title:'No grid',details:'Ordinary work',assignedUserId:101,startAt:'2026-09-13T09:00',deadlineAt:'2026-09-14T18:00'}});
+  assert.deepEqual(noGrid.tasks.find(t=>t.title==='No grid').gridCells,[]);
   const reserved=await Promise.all(Array.from({length:6},()=>app.reserveWorkOrderNumber()));
   assert.equal(new Set(reserved).size,6);
   assert.ok(reserved.every(n=>n>order.id));

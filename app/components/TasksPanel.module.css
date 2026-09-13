@@ -190,3 +190,11 @@
   .modalCard { max-height: calc(100dvh - 16px); }
   .scopeFilters { max-width: 100%; }
 }
+.instagramGrid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; max-width:520px; width:100%; margin:14px 0; }
+.gridCell { min-width:0; aspect-ratio:1; display:flex !important; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:10px; border:1px solid var(--line); background:var(--surface-2); border-radius:8px; text-transform:capitalize; }
+.gridCell[data-kind="carousel"] { background:color-mix(in srgb,#8770dd 13%,var(--surface)); }
+.gridCell[data-kind="video"] { background:color-mix(in srgb,#e6b62b 13%,var(--surface)); }
+.gridCell strong { font-size:26px; }.gridCell small { color:var(--muted); font-size:11px; }.gridCell select { width:100%; min-width:0; padding:5px !important; font-size:12px; }
+.gridEditor { padding:16px; border:1px solid var(--line); border-radius:12px; }.gridEditor p { color:var(--muted); font-size:12px; }.gridToggle { display:flex !important; flex-direction:row !important; align-items:center; gap:9px; }.gridToggle input { width:17px !important; height:17px !important; }
+.gridButtons,.teamEditor > div { display:flex; align-items:center; gap:8px; }.teamEditor { display:grid; gap:10px; }.teamEditor label { flex:1; min-width:0; }.gridButtons button,.teamEditor button { padding:9px 12px; border:1px solid var(--line); border-radius:8px; background:var(--surface-2); color:var(--ink); cursor:pointer; }.submitForm select,.submitForm textarea { width:100%; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); }
+@media(max-width:480px) { .gridCell { padding:5px; gap:4px; }.gridCell select { font-size:10px; }.gridCell strong { font-size:20px; } }

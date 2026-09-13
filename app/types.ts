@@ -512,7 +512,14 @@ export type TaskAssignee = {
   employeeTitle: string;
 };
 
+export type TaskGridCell = "design" | "carousel" | "video";
+export type TaskTeamMember = { id: number; displayName: string; roleLabel: string };
 export type AgencyTask = {
+  gridCells: TaskGridCell[];
+  assignedUsers: TaskTeamMember[];
+  submissionMethod: string;
+  submissionNotes: string;
+  submittedByName: string;
   id: number;
   title: string;
   details: string;
