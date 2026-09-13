@@ -85,6 +85,17 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   globalThis.documentTestSession={...globalThis.documentTestSession,userId:101,isAdmin:true,roleLabel:'Administrator'};
   const noGrid=await call(app.tasks,{action:'create',data:{title:'No grid',details:'Ordinary work',assignedUserId:101,startAt:'2026-09-13T09:00',deadlineAt:'2026-09-14T18:00'}});
   assert.deepEqual(noGrid.tasks.find(t=>t.title==='No grid').gridCells,[]);
+  const deleteId=noGrid.tasks.find(t=>t.title==='No grid').id;
+  for (const roleLabel of ['Account Manager','Operation Manager','Administrator']) {
+    globalThis.documentTestSession={...globalThis.documentTestSession,isAdmin:false,roleLabel};
+    assert.equal((await app.tasks(request({action:'delete',id:deleteId}))).status,403);
+  }
+  assert.ok(await app.database.prepare('SELECT id FROM agency_tasks WHERE id=?').bind(deleteId).first());
+  globalThis.documentTestSession={...globalThis.documentTestSession,isAdmin:true};
+  const afterDelete=await call(app.tasks,{action:'delete',id:deleteId});
+  assert.ok(!afterDelete.tasks.some(t=>t.id===deleteId));
+  assert.ok(afterDelete.tasks.some(t=>t.id===shared.id));
+  assert.equal((await app.tasks(request({action:'delete',id:deleteId}))).status,404);
   const reserved=await Promise.all(Array.from({length:6},()=>app.reserveWorkOrderNumber()));
   assert.equal(new Set(reserved).size,6);
   assert.ok(reserved.every(n=>n>order.id));

@@ -12,6 +12,7 @@ import {
   LoaderCircle,
   Plus,
   Send,
+  Trash2,
   UserRound,
   UsersRound,
   X,
@@ -227,6 +228,14 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
     return [...groups.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name));
   }, [dailyTasks, dailyEmployee]);
 
+  async function deleteTask(task: AgencyTask) {
+    if (!window.confirm(`Delete “${task.title}” for all assigned employees? This cannot be undone.`)) return;
+    if (await mutate({action:"delete",id:task.id})) {
+      setExpanded(current => { const next = new Set(current); next.delete(task.id); return next; });
+      showToast("Task deleted.");
+    }
+  }
+
   function toggleTask(id: number) {
     setExpanded((current) => {
       const next = new Set(current);
@@ -283,7 +292,7 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
               {(task.gridCells.length > 0 || task.gridNotes) && <section><span><FileText size={14} /> INSTAGRAM GRID</span><div className={styles.instagramGrid}>{task.gridCells.map((cell, index) => <div key={index} className={styles.gridCell} data-kind={cell}><small>#{index + 1}</small><strong>{cell === "design" ? "▧" : cell === "carousel" ? "▣" : "▶"}</strong><span>{cell}</span></div>)}</div>{task.gridNotes && <p>{task.gridNotes}</p>}</section>}
               <section><span><Link2 size={14} /> REFERENCES · {task.references.length}</span>{task.references.length ? <div className={styles.referenceList}>{task.references.map((reference, index) => <a key={`${reference.url}-${index}`} href={reference.url} target="_blank" rel="noopener noreferrer"><span>{reference.label || `Reference ${index + 1}`}</span><ExternalLink size={13} /></a>)}</div> : <p>No references added.</p>}</section>
             </div>
-            <footer><div><span>Assigned to <strong>{task.assignedUsers.map(a => a.displayName).join(", ")}</strong> · {task.assignedUserRole}</span>{task.status === "submitted" && <span>Submitted {dateTimeLabel(task.submittedAt)} · {task.lateMinutes ? `${durationLabel(task.lateMinutes)} late` : "on time"}</span>}</div>{task.status === "submitted" && <span>Delivery: {task.submissionMethod === "flash_drive" ? "Flash drive / USB" : task.submissionMethod === "other" ? "Other" : "Link"}{task.submittedByName && ` · By ${task.submittedByName}`}{task.submissionNotes && ` · ${task.submissionNotes}`}</span>}{task.submissionUrl && <a href={task.submissionUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} /> Open submitted link</a>}{task.status === "assigned" && task.assignedUsers.some(a => a.id === state.userId) && <button type="button" onClick={() => { setSubmitting(task); setSubmissionUrl(""); setSubmissionMethod("link"); setSubmissionNotes(""); }}><Send size={14} /> Submit completed task</button>}</footer>
+            <footer>{state.role === "administrator" && <button type="button" className={styles.deleteTaskButton} disabled={saving} onClick={() => void deleteTask(task)}><Trash2 size={14} /> Delete task</button>}<div><span>Assigned to <strong>{task.assignedUsers.map(a => a.displayName).join(", ")}</strong> · {task.assignedUserRole}</span>{task.status === "submitted" && <span>Submitted {dateTimeLabel(task.submittedAt)} · {task.lateMinutes ? `${durationLabel(task.lateMinutes)} late` : "on time"}</span>}</div>{task.status === "submitted" && <span>Delivery: {task.submissionMethod === "flash_drive" ? "Flash drive / USB" : task.submissionMethod === "other" ? "Other" : "Link"}{task.submittedByName && ` · By ${task.submittedByName}`}{task.submissionNotes && ` · ${task.submissionNotes}`}</span>}{task.submissionUrl && <a href={task.submissionUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} /> Open submitted link</a>}{task.status === "assigned" && task.assignedUsers.some(a => a.id === state.userId) && <button type="button" onClick={() => { setSubmitting(task); setSubmissionUrl(""); setSubmissionMethod("link"); setSubmissionNotes(""); }}><Send size={14} /> Submit completed task</button>}</footer>
           </div>}
         </article>;
       })}</div> : <div className={styles.emptyTasks}><CheckCircle2 size={30} /><strong>No tasks in this view.</strong><span>Assigned work and completed submissions will appear here.</span></div>}

@@ -37,6 +37,7 @@ const taskData = z.object({
   gridCells: z.array(z.enum(["design", "carousel", "video"])).max(36).default([]),
 });
 const payloadSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("delete"), id: z.number().int().positive() }),
   z.object({ action: z.literal("create"), data: taskData }),
   z.object({ action: z.literal("submit"), id: z.number().int().positive(), submissionMethod: z.enum(["link", "flash_drive", "other"]).default("link"), submissionNotes: z.string().trim().max(2000).default(""), submissionUrl: z.union([httpUrl, z.literal("")]).default("") }),
 ]);
@@ -74,6 +75,13 @@ export async function POST(request: Request) {
     const session = await getSession(request);
     if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
     const payload = payloadSchema.parse(await request.json());
+
+    if (payload.action === "delete") {
+      if (!session.isAdmin) return Response.json({ error: "Only administrators can delete tasks." }, { status: 403 });
+      const deleted = await database.prepare("DELETE FROM agency_tasks WHERE id = ?").bind(payload.id).run();
+      if (!Number(deleted.meta.changes)) return Response.json({ error: "Task not found." }, { status: 404 });
+      return Response.json(await getTasksState(session));
+    }
 
     if (payload.action === "create") {
       if (!canCreateTasks(session)) return Response.json({ error: "Only administrators, Operation Managers, and Account Managers can assign tasks." }, { status: 403 });

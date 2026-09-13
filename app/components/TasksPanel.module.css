@@ -198,3 +198,6 @@
 .gridEditor { padding:16px; border:1px solid var(--line); border-radius:12px; }.gridEditor p { color:var(--muted); font-size:12px; }.gridToggle { display:flex !important; flex-direction:row !important; align-items:center; gap:9px; }.gridToggle input { width:17px !important; height:17px !important; }
 .gridButtons,.teamEditor > div { display:flex; align-items:center; gap:8px; }.teamEditor { display:grid; gap:10px; }.teamEditor label { flex:1; min-width:0; }.gridButtons button,.teamEditor button { padding:9px 12px; border:1px solid var(--line); border-radius:8px; background:var(--surface-2); color:var(--ink); cursor:pointer; }.submitForm select,.submitForm textarea { width:100%; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); }
 @media(max-width:480px) { .gridCell { padding:5px; gap:4px; }.gridCell select { font-size:10px; }.gridCell strong { font-size:20px; } }
+
+.taskDetails > footer .deleteTaskButton { background:transparent; color:#dc4545; border:1px solid #dc454560; }
+.taskDetails > footer .deleteTaskButton:hover { background:#dc454515; }
