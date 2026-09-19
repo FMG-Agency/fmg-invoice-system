@@ -67,11 +67,12 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   assert.equal(count.total,1);
   // Shared task visibility, optional grids and delivery authorization use isolated storage.
   globalThis.documentTestSession={...globalThis.documentTestSession,userId:101,displayName:'Task Creator'};
-  const taskResult=await call(app.tasks,{action:'create',data:{title:'Shared grid',notes:'First line\nSecond line',details:'Create three posts',assignedUserId:101,additionalUserIds:[102,102],gridCells:['design','carousel','video'],startAt:'2026-09-13T09:00',deadlineAt:'2026-09-14T18:00'}});
+  const taskResult=await call(app.tasks,{action:'create',data:{title:'Shared grid',notes:'First line\nSecond line',details:'Create three posts',assignedUserId:101,additionalUserIds:[102,102],gridCells:['design','carousel','video'],gridPostNotes:['Design note\nسطر ثاني','','Video note'],startAt:'2026-09-13T09:00',deadlineAt:'2026-09-14T18:00'}});
   const shared=taskResult.tasks[0];
   assert.equal(shared.notes,'First line\nSecond line');
   assert.equal(shared.assignedUsers.length,2);
   assert.deepEqual(shared.gridCells,['design','carousel','video']);
+  assert.deepEqual(shared.gridPostNotes,['Design note\nسطر ثاني','','Video note']);
   globalThis.documentTestSession={...globalThis.documentTestSession,userId:103,isAdmin:false,roleLabel:'Designer'};
   assert.equal((await app.taskState(request({})).then(r=>r.json())).tasks.length,0);
   assert.equal((await app.tasks(request({action:'submit',id:shared.id,submissionMethod:'flash_drive'}))).status,403);

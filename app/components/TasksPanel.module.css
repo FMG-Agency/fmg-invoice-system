@@ -201,3 +201,10 @@
 
 .taskDetails > footer .deleteTaskButton { background:transparent; color:#dc4545; border:1px solid #dc454560; }
 .taskDetails > footer .deleteTaskButton:hover { background:#dc454515; }
+
+.postNoteInput { width:100%; text-transform:none; }
+.postNoteInput > span { display:flex; flex-wrap:wrap; gap:5px; font-size:11px; }
+.postNoteInput textarea { width:100%; min-width:0; resize:vertical; padding:8px; font:inherit; font-size:12px; background:var(--surface); color:var(--ink); border:1px solid var(--line); border-radius:7px; }
+.gridCell:has(.postNoteInput),.gridCell:has(.postNote) { aspect-ratio:auto; min-height:160px; }
+.postNote { width:100%; white-space:pre-wrap; overflow-wrap:anywhere; text-transform:none; margin:5px 0 0 !important; font-size:12px; text-align:left; }
+.postNote b { display:block; margin-bottom:4px; }

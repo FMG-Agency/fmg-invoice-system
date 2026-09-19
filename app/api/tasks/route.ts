@@ -33,6 +33,7 @@ const taskData = z.object({
   deadlineAt: localDateTime,
   assignedUserId: z.number().int().positive(),
   additionalUserIds: z.array(z.number().int().positive()).max(49).default([]),
+  gridPostNotes: z.array(z.string().trim().max(2000)).max(36).default([]),
   gridCells: z.array(z.enum(["design", "carousel", "video"])).max(36).default([]),
 });
 const payloadSchema = z.discriminatedUnion("action", [
@@ -102,11 +103,11 @@ export async function POST(request: Request) {
       const team = ids.map(id => { const a = available.find(a => a.id === id)!; return {id, displayName:a.displayName, roleLabel:a.roleLabel}; });
       const creatorName = sessionName(session);
       const result = await database.prepare(`INSERT INTO agency_tasks
-          (task_notes, grid_cells_json, assigned_users_json, title, details, brief, grid_notes, references_json, start_at, deadline_at,
+          (grid_post_notes_json, task_notes, grid_cells_json, assigned_users_json, title, details, brief, grid_notes, references_json, start_at, deadline_at,
             assigned_user_id, assigned_user_name, assigned_user_role,
             created_by_user_id, created_by_name, created_by_role)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(payload.data.notes, JSON.stringify(payload.data.gridCells), JSON.stringify(team), payload.data.title, payload.data.details, payload.data.brief, payload.data.gridNotes,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(JSON.stringify(payload.data.gridCells.map((_, i) => payload.data.gridPostNotes[i] || "")), payload.data.notes, JSON.stringify(payload.data.gridCells), JSON.stringify(team), payload.data.title, payload.data.details, payload.data.brief, payload.data.gridNotes,
           JSON.stringify(payload.data.references), payload.data.startAt, payload.data.deadlineAt,
           allowedAssignee.id, allowedAssignee.displayName, allowedAssignee.roleLabel,
           session.userId, creatorName, session.roleLabel).run();
