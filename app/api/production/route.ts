@@ -74,6 +74,14 @@ const payloadSchema = z.discriminatedUnion("action", [
     }),
   }),
   z.object({
+    action: z.literal("submitContent"),
+    id: z.number().int().positive(),
+    data: z.object({
+      contentNote: z.string().trim().min(1).max(5000),
+      contentReferences: z.array(z.string().trim().url().max(2000).refine(value => /^https?:\/\//i.test(value), "Use an http or https link.")).min(1).max(20),
+    }),
+  }),
+  z.object({
     action: z.literal("complete"),
     id: z.number().int().positive(),
     data: z.object({
@@ -239,6 +247,12 @@ async function ensureProductionDatabase() {
     const columns = await database.prepare("PRAGMA table_info(production_work_orders)").all<{ name: string }>();
     const names = new Set(columns.results.map((column) => column.name));
     const additions = [
+      ["content_required", "ALTER TABLE production_work_orders ADD COLUMN content_required INTEGER NOT NULL DEFAULT 0"],
+      ["content_note", "ALTER TABLE production_work_orders ADD COLUMN content_note TEXT NOT NULL DEFAULT ''"],
+      ["content_references_json", "ALTER TABLE production_work_orders ADD COLUMN content_references_json TEXT NOT NULL DEFAULT '[]'"],
+      ["content_creator_user_id", "ALTER TABLE production_work_orders ADD COLUMN content_creator_user_id INTEGER"],
+      ["content_creator_name", "ALTER TABLE production_work_orders ADD COLUMN content_creator_name TEXT NOT NULL DEFAULT ''"],
+      ["content_submitted_at", "ALTER TABLE production_work_orders ADD COLUMN content_submitted_at TEXT NOT NULL DEFAULT ''"],
       ["operation_note", "ALTER TABLE production_work_orders ADD COLUMN operation_note TEXT NOT NULL DEFAULT ''"],
       ["operation_manager_user_id", "ALTER TABLE production_work_orders ADD COLUMN operation_manager_user_id INTEGER"],
       ["operation_manager_name", "ALTER TABLE production_work_orders ADD COLUMN operation_manager_name TEXT NOT NULL DEFAULT ''"],
@@ -335,6 +349,7 @@ async function ensureProductionDatabase() {
 function workflowRole(session: AuthSession): ProductionWorkflowRole {
   if (session.isAdmin) return "administrator";
   const normalized = session.roleLabel.toLowerCase().replace(/[^a-z]+/g, " ").trim();
+  if (normalized.includes("content") && normalized.includes("creator")) return "content_creator";
   if (normalized.includes("account") && normalized.includes("manager")) return "account_manager";
   if (normalized.includes("production") && normalized.includes("manager")) return "production_manager";
   if ((normalized.includes("operation") || normalized.includes("operations")) && normalized.includes("manager")) return "operation_manager";
@@ -430,7 +445,7 @@ function mapOrder(row: Record<string, unknown>): ProductionWorkOrder {
   const finalApprovedAt = String(row.finalApprovedAt ?? "");
   const status = row.status === "ready_for_operations"
     ? finalApprovedAt ? "final_approved" : "pending_operations"
-    : "pending_production";
+    : Number(row.contentRequired) && !row.contentSubmittedAt ? "pending_content" : "pending_production";
   const options = productionOptions(row);
   const bundles = workOrderBundles(row);
   const primaryBundle = bundles[0] ?? null;
@@ -465,6 +480,11 @@ function mapOrder(row: Record<string, unknown>): ProductionWorkOrder {
     location: String(row.location ?? ""),
     modelName: String(row.modelName ?? ""),
     photographerName: String(row.photographerName ?? ""),
+    contentRequired: Boolean(Number(row.contentRequired)),
+    contentNote: String(row.contentNote ?? ""),
+    contentReferences: stringArray(row.contentReferencesJson),
+    contentCreatorName: String(row.contentCreatorName ?? ""),
+    contentSubmittedAt: String(row.contentSubmittedAt ?? ""),
     accountNote: String(row.accountNote ?? ""),
     productionNote: String(row.productionNote ?? ""),
     operationNote: String(row.operationNote ?? ""),
@@ -499,6 +519,8 @@ async function getProductionState(session: AuthSession): Promise<ProductionState
         p.addon_inputs_json AS addonInputsJson, p.addon_outputs_json AS addonOutputsJson, p.addons_json AS addonsJson,
         p.work_date AS workDate, p.call_time AS callTime, p.location, p.model_name AS modelName,
         p.photographer_name AS photographerName, p.account_note AS accountNote, p.production_note AS productionNote,
+        p.content_required AS contentRequired, p.content_note AS contentNote, p.content_references_json AS contentReferencesJson,
+        p.content_creator_name AS contentCreatorName, p.content_submitted_at AS contentSubmittedAt,
         p.operation_note AS operationNote, p.production_options_json AS productionOptionsJson,
         p.status, p.created_by_user_id AS createdByUserId, p.created_by_name AS createdByName, p.created_by_role AS createdByRole,
         p.production_manager_user_id AS productionManagerUserId, p.production_manager_name AS productionManagerName,
@@ -565,6 +587,7 @@ async function getProductionState(session: AuthSession): Promise<ProductionState
     crew,
     modelCatalogUrl: settingsResult?.modelCatalogUrl ?? "",
     canManageDirectory,
+    pendingContentCount: orders.filter((order) => order.status === "pending_content").length,
     pendingProductionCount: orders.filter((order) => order.status === "pending_production").length,
     pendingOperationsCount: orders.filter((order) => order.status === "pending_operations").length,
     finalApprovedCount: orders.filter((order) => order.status === "final_approved").length,
@@ -803,8 +826,8 @@ export async function POST(request: Request) {
       const inserted = await database.prepare(`INSERT INTO production_work_orders
         (id, document_type, client_id, client_name, bundle_catalog_id, bundle_name, bundle_price, bundle_inputs_json, bundle_outputs_json, bundles_json,
           addon_catalog_id, addon_name, addon_price, addon_inputs_json, addon_outputs_json, addons_json,
-          work_date, account_note, status, created_by_user_id, created_by_name, created_by_role)
-        VALUES (?, 'media_guide', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_production', ?, ?, ?)`)
+          work_date, account_note, content_required, status, created_by_user_id, created_by_name, created_by_role)
+        VALUES (?, 'media_guide', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending_production', ?, ?, ?)`)
         .bind(reservedNumber, payload.data.clientId, client.name, bundle.catalogId, bundle.name, bundle.price, JSON.stringify(bundle.inputs), JSON.stringify(bundle.outputs), JSON.stringify(bundles),
           primaryAddon?.catalogId ?? null, primaryAddon?.name ?? "", primaryAddon?.price ?? 0, JSON.stringify(primaryAddon?.inputs ?? []), JSON.stringify(primaryAddon?.outputs ?? []), JSON.stringify(addons),
           payload.data.workDate, payload.data.accountNote, session.userId, actorName, session.roleLabel).run();
@@ -813,13 +836,25 @@ export async function POST(request: Request) {
         (work_order_id, event_type, actor_user_id, actor_name, actor_role, note)
         VALUES (?, 'account_submitted', ?, ?, ?, ?)`)
         .bind(workOrderId, session.userId, actorName, session.roleLabel, payload.data.accountNote).run();
-      await notifyUsers(await workflowRecipientUserIds("production_manager", session.userId), {
-        type: "work_order_pending_production",
+      await notifyUsers(await workflowRecipientUserIds("content_creator", session.userId), {
+        type: "work_order_pending_content",
         title: `New work order ${codeFor(workOrderId)}`,
-        message: `${actorName} sent ${client.name}'s Media Guide order for Production completion on ${payload.data.workDate}.`,
+        message: `${actorName} sent ${client.name}'s Media Guide order for Content Creator references and notes on ${payload.data.workDate}.`,
         targetView: "work-order",
         entityId: workOrderId,
         actorUserId: session.userId,
+      });
+    } else if (payload.action === "submitContent") {
+      if (role !== "content_creator" && role !== "administrator") return accessDenied("Only a Content Creator or administrator can submit references and notes.");
+      const updated = await database.prepare(`UPDATE production_work_orders SET content_note = ?, content_references_json = ?,
+        content_creator_user_id = ?, content_creator_name = ?, content_submitted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND status = 'pending_production' AND content_required = 1 AND content_submitted_at = ''`)
+        .bind(payload.data.contentNote, JSON.stringify(payload.data.contentReferences), session.userId, displayName(session), payload.id).run();
+      if (Number(updated.meta.changes) !== 1) return Response.json({ error: "This work order is no longer waiting for content." }, { status: 409 });
+      await notifyUsers(await workflowRecipientUserIds("production_manager", session.userId), {
+        type: "work_order_pending_production", title: `${codeFor(payload.id)} ready for Production`,
+        message: `${displayName(session)} submitted references and notes. Select the resources for the shoot.`,
+        targetView: "work-order", entityId: payload.id, actorUserId: session.userId,
       });
     } else if (payload.action === "complete") {
       if (role !== "production_manager" && role !== "operation_manager" && role !== "administrator") return accessDenied("Only a Production Manager, Operation Manager, or administrator can complete and approve this work order.");
@@ -829,10 +864,10 @@ export async function POST(request: Request) {
           photographer_name = ?, model_name = ?, location = ?, call_time = ?, production_options_json = ?, production_note = ?,
           status = 'ready_for_operations', production_manager_user_id = ?, production_manager_name = ?,
           production_submitted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND status = 'pending_production'`)
+        WHERE id = ? AND status = 'pending_production' AND (content_required = 0 OR content_submitted_at <> '')`)
         .bind(firstOption(options, "photographer"), firstOption(options, "model"), firstOption(options, "location") || firstOption(options, "studio"),
           payload.data.callTime, JSON.stringify(options), payload.data.productionNote, session.userId, actorName, payload.id).run();
-      if (Number(updated.meta.changes) !== 1) throw new Error("This work order has already been completed or is no longer pending.");
+      if (Number(updated.meta.changes) !== 1) return Response.json({ error: "Content must be submitted first, and the order must still be waiting for Production." }, { status: 409 });
       await database.prepare(`INSERT INTO production_work_order_events
         (work_order_id, event_type, actor_user_id, actor_name, actor_role, note)
         VALUES (?, 'production_submitted', ?, ?, ?, ?)`)
@@ -849,10 +884,10 @@ export async function POST(request: Request) {
       });
     } else if (payload.action === "managerEdit") {
       if (role !== "operation_manager" && role !== "administrator") return accessDenied("Only an Operation Manager or administrator can edit work orders.");
-      const existing = await database.prepare(`SELECT id, status, final_approved_at AS finalApprovedAt,
+      const existing = await database.prepare(`SELECT id, status, content_required AS contentRequired, content_submitted_at AS contentSubmittedAt, final_approved_at AS finalApprovedAt,
           created_by_user_id AS createdByUserId, production_manager_user_id AS productionManagerUserId
         FROM production_work_orders WHERE id = ?`)
-        .bind(payload.id).first<{ id: number; status: string; finalApprovedAt: string; createdByUserId: number; productionManagerUserId: number | null }>();
+        .bind(payload.id).first<{ id: number; status: string; contentRequired: number; contentSubmittedAt: string; finalApprovedAt: string; createdByUserId: number; productionManagerUserId: number | null }>();
       if (!existing) return Response.json({ error: "Work order not found." }, { status: 404 });
       const scope = await resolveScope(payload.data);
       const { client, bundles, addons } = scope;
@@ -884,7 +919,7 @@ export async function POST(request: Request) {
       if (Number(updated.meta.changes) !== 1) return Response.json({ error: "Work order not found." }, { status: 404 });
       const workflowRecipients = existing.finalApprovedAt
         ? []
-        : await workflowRecipientUserIds(existing.status === "pending_production" ? "production_manager" : "operation_manager", session.userId);
+        : await workflowRecipientUserIds(existing.status === "pending_production" ? existing.contentRequired && !existing.contentSubmittedAt ? "content_creator" : "production_manager" : "operation_manager", session.userId);
       const recipients = [...new Set([existing.createdByUserId, ...(existing.productionManagerUserId ? [existing.productionManagerUserId] : []), ...workflowRecipients])]
         .filter((userId) => userId !== session.userId);
       await notifyUsers(recipients, {

@@ -80,3 +80,5 @@ export function effectivePermissions(permissions: AccessPermission[], roleLabel:
 export function canAccess(permissions: AccessPermission[], permission: AccessPermission, isAdmin = false) {
   return isAdmin || permissions.includes(permission);
 }
+
+export const CONTENT_CREATOR_PERMISSIONS: AccessPermission[] = ["production", "tasks", "requests"];

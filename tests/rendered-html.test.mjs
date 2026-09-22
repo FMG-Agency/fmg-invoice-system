@@ -310,7 +310,7 @@ test("ships the locked Media Guide production workflow", async () => {
   assert.match(permissions, /key: "production"/);
   assert.match(component, /label: "Production"/);
   assert.match(component, /permission: "production"/);
-  assert.match(workOrder, /Approve & send to Production/);
+  assert.match(workOrder, /Approve & send to Content Creator/);
   assert.match(workOrder, /Approve & send to Operations/);
   assert.match(workOrder, /Final approve & lock/);
   assert.match(workOrder, /cannot edit or cancel/i);

@@ -11,7 +11,7 @@ type NotificationInput = {
   actorUserId?: number | null;
 };
 
-type WorkflowRole = "production_manager" | "operation_manager";
+type WorkflowRole = "content_creator" | "production_manager" | "operation_manager";
 
 const notificationSchema = [
   `CREATE TABLE IF NOT EXISTS system_notifications (
@@ -104,6 +104,7 @@ export async function workflowRecipientUserIds(role: WorkflowRole, excludeUserId
   const matches = rows.results.filter((row) => {
     if (Number(row.isAdmin) === 1) return false;
     const label = normalizedRole(row.roleLabel);
+    if (role === "content_creator") return label.includes("content") && label.includes("creator");
     if (role === "production_manager") return label.includes("production") && label.includes("manager");
     return (label.includes("operation") || label.includes("operations")) && label.includes("manager");
   }).map((row) => Number(row.id)).filter((id) => id !== excludeUserId);

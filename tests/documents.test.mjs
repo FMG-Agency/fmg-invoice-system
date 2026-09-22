@@ -44,6 +44,7 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   const manual=state.documents[0];
   assert.notEqual(Number(manual.generatedCode.match(/(\d+)$/)[1]),order.id);
   globalThis.documentTestSession={...globalThis.documentTestSession,userId:102,displayName:'Approving Manager'};
+  await call(app.production,{action:'submitContent',id:order.id,data:{contentNote:'Creative direction',contentReferences:['https://example.com/reference']}});
   await call(app.production,{action:'complete',id:order.id,data:{callTime:'13:00',options,productionNote:''}});
   await call(app.production,{action:'finalApprove',id:order.id,data:{...scope,callTime:'13:00',options,productionNote:'',operationNote:''}});
   state=await app.state(new Request('https://fixture.test/api/state')).then(r=>r.json());

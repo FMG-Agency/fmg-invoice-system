@@ -5,7 +5,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
-test('isolated Account Manager work order reaches only Production Manager; device ownership and delivery failures', async () => {
+test('isolated Account → Content → Production workflow; device ownership and delivery failures', async () => {
   // Never load .env.local, contact production, or generate VAPID keys in this test.
   process.env.TURSO_DATABASE_URL = 'file::memory:';
   delete process.env.TURSO_AUTH_TOKEN;
@@ -33,13 +33,43 @@ test('isolated Account Manager work order reaches only Production Manager; devic
   await db.prepare("ALTER TABLE clients ADD COLUMN agency_key TEXT NOT NULL DEFAULT 'fmg'").run();
   await db.prepare("INSERT INTO clients (id, name, owner_name, phone) VALUES (1, 'Isolated client', 'Fixture', '')").run();
   await db.prepare("INSERT INTO categories (name, prefix) VALUES ('Media Guide', 'MG')").run();
-  for (const [id, role, admin, client] of [[101, 'Account Manager', 0, null], [102, 'Production Manager', 0, null], [103, 'Operation Manager', 0, null], [104, 'Administrator', 1, null], [105, 'Client', 0, 1]]) {
+  for (const [id, role, admin, client] of [[101, 'Account Manager', 0, null], [102, 'Production Manager', 0, null], [103, 'Operation Manager', 0, null], [104, 'Administrator', 1, null], [105, 'Client', 0, 1], [106, 'Content Creator', 0, null]]) {
     await db.prepare('INSERT INTO auth_users (id, username, role_label, password_hash, password_salt, password_iterations, is_admin, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(id, 'test-' + id, role, 'fixture', 'fixture', 1, admin, client).run();
   }
   const request = body => new Request('https://fmg.test/api/notifications', { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://fmg.test' }, body: JSON.stringify(body) });
   const response = await app.createOrder(request({ action: 'create', data: { documentType: 'media_guide', clientId: 1, bundles: [{ id: 'test-bundle', catalogId: 3, name: 'Test bundle', price: 10, inputs: [], outputs: [] }], addons: [], workDate: '2026-09-07', accountNote: 'Isolated test only' } }));
   const body = await response.json();
   assert.equal(response.status, 200, JSON.stringify(body));
+  assert.equal(body.orders[0].status, 'pending_content');
+  const id = body.orders[0].id;
+  const contentPayload = { action: 'submitContent', id, data: { contentNote: 'Natural light and warm colours', contentReferences: ['https://example.com/moodboard'] } };
+  const inbox = await db.prepare("SELECT user_id FROM system_notifications WHERE type='work_order_pending_content'").all();
+  assert.deepEqual(inbox.results.map(row => row.user_id), [106]);
+  assert.equal((await app.getNotificationsState(102)).unreadCount, 0);
+  assert.equal((await app.createOrder(request(contentPayload))).status, 403);
+  globalThis.fmgTestSession = { ...globalThis.fmgTestSession, userId: 102, roleLabel: 'Production Manager' };
+  const completePayload = { action: 'complete', id, data: {callTime:'13:00', options:[{id:'location',type:'location',name:'Studio',price:0,billingMode:'included'}],productionNote:''} };
+  assert.equal((await app.createOrder(request(completePayload))).status, 409);
+  assert.equal((await app.createOrder(request(contentPayload))).status, 403);
+  globalThis.fmgTestSession = { ...globalThis.fmgTestSession, userId: 106, roleLabel: 'Content Creator' };
+  assert.equal((await app.createOrder(request(completePayload))).status, 403);
+  assert.equal((await app.createOrder(request({...contentPayload,data:{...contentPayload.data,contentReferences:['javascript:alert(1)']}}))).status, 400);
+  const contentResult = await app.createOrder(request(contentPayload));
+  assert.equal(contentResult.status, 200);
+  const submitted = (await contentResult.json()).orders.find(order => order.id === id);
+  assert.equal(submitted.status, 'pending_production');
+  assert.equal(submitted.contentNote, contentPayload.data.contentNote);
+  assert.deepEqual(submitted.contentReferences, contentPayload.data.contentReferences);
+  assert.equal((await app.createOrder(request(contentPayload))).status, 409);
+  globalThis.fmgTestSession = { ...globalThis.fmgTestSession, userId: 101, roleLabel: 'Account Manager' };
+  globalThis.fmgTestSession = { ...globalThis.fmgTestSession, userId: 102, roleLabel: 'Production Manager' };
+  const productionResult = await app.createOrder(request(completePayload));
+  assert.equal(productionResult.status, 200);
+  assert.equal((await productionResult.json()).orders.find(order => order.id === id).status, 'pending_operations');
+  // A pre-existing order retains the original route without a content stage.
+  await db.prepare("UPDATE production_work_orders SET content_required=0, content_submitted_at='', status='pending_production' WHERE id=?").bind(id).run();
+  assert.equal((await app.createOrder(request(completePayload))).status, 200);
+  globalThis.fmgTestSession = { ...globalThis.fmgTestSession, userId: 101, roleLabel: 'Account Manager' };
   const delivered = await db.prepare("SELECT user_id, type, entity_id FROM system_notifications WHERE type='work_order_pending_production'").all();
   assert.equal(delivered.results.length, 1);
   assert.equal(delivered.results[0].user_id, 102);

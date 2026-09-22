@@ -67,6 +67,7 @@ const emptyState: ProductionState = {
   crew: [],
   modelCatalogUrl: "",
   canManageDirectory: false,
+  pendingContentCount: 0,
   pendingProductionCount: 0,
   pendingOperationsCount: 0,
   finalApprovedCount: 0,
@@ -341,12 +342,14 @@ function createdDate(value: string) {
 }
 
 function statusLabel(order: ProductionWorkOrder) {
+  if (order.status === "pending_content") return "Waiting for Content Creator";
   if (order.status === "pending_production") return "Waiting for Production Manager";
   if (order.status === "pending_operations") return "Waiting for Operation Manager";
   return "Final approved";
 }
 
 function roleLabel(role: ProductionState["role"]) {
+  if (role === "content_creator") return "Content Creator";
   if (role === "account_manager") return "Account Manager";
   if (role === "production_manager") return "Production Manager";
   if (role === "operation_manager") return "Operation Manager";
@@ -363,6 +366,11 @@ function WorkflowModal({ title, description, onClose, children }: { title: strin
   </div>;
 }
 
+function ContentBrief({ order }: { order: ProductionWorkOrder }) {
+  if (!order.contentSubmittedAt) return null;
+  return <section className={styles.contentBrief}><strong>Content brief · {order.contentCreatorName}</strong><p>{order.contentNote}</p><div>{order.contentReferences.map((url, index) => <a key={index} href={url} target="_blank" rel="noopener noreferrer">Reference {index + 1} <ExternalLink size={13} /></a>)}</div></section>;
+}
+
 function ValueField({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
   return <div className={styles.valueField}><span>{icon}{label}</span><strong>{value || "—"}</strong></div>;
 }
@@ -376,6 +384,9 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
   const [state, setState] = useState<ProductionState>(emptyState);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [contentOrder, setContentOrder] = useState<ProductionWorkOrder | null>(null);
+  const [contentNote, setContentNote] = useState("");
+  const [references, setReferences] = useState<string[]>([""]);
   const [createOpen, setCreateOpen] = useState(false);
   const [completing, setCompleting] = useState<ProductionWorkOrder | null>(null);
   const [reviewing, setReviewing] = useState<ProductionWorkOrder | null>(null);
@@ -486,17 +497,27 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
     }
   }
 
+  async function submitContent(event: React.FormEvent) {
+    event.preventDefault();
+    if (!contentOrder) return;
+    try {
+      await mutate({ action: "submitContent", id: contentOrder.id, data: { contentNote, contentReferences: references } });
+      setContentOrder(null);
+      showToast("References and notes sent to the Production Manager.");
+    } catch (error) { showToast(error instanceof Error ? error.message : "Could not submit content."); }
+  }
+
   async function createOrder(event: React.FormEvent) {
     event.preventDefault();
     if (!accountDraft.clientId || !accountDraft.bundles.length || !accountDraft.workDate) return showToast("Choose the client, at least one bundle, and production date.");
-    const confirmed = window.confirm("تأكيد إرسال أمر الشغل؟ بعد الإرسال لن يمكنك تعديله أو إلغاؤه، وسيصل مباشرة إلى Production Manager.\n\nConfirm submission? You cannot edit or cancel this work order after sending it.");
+    const confirmed = window.confirm("تأكيد إرسال أمر الشغل؟ بعد الإرسال لن يمكنك تعديله أو إلغاؤه، وسيصل إلى Content Creator.\n\nConfirm submission? You cannot edit or cancel this work order after sending it.");
     if (!confirmed) return;
     try {
       await mutate({ action: "create", data: accountDraft });
       setAccountDraft(blankAccountDraft());
       setCreateOpen(false);
       setFilter("all");
-      showToast("Work order approved and sent to the Production Manager. It is now locked.");
+      showToast("Work order approved and sent to the Content Creator. It is now locked.");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Could not submit the work order.");
     }
@@ -634,7 +655,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
   return <section className={styles.workspace}>
     <div className={styles.workflowHeader}>
       <div className={styles.roleCard}><span><FileCheck2 size={18} /></span><div><small>YOUR WORKFLOW ROLE</small><strong>{roleLabel(state.role)}</strong><p>Submitted stages stay locked for their sender; Operations and Admin can correct them.</p></div></div>
-      <div className={styles.stageStats}>
+      <div className={styles.stageStats}><article><span className={styles.pendingDot} /><div><small>CONTENT INBOX</small><strong>{state.pendingContentCount}</strong></div></article>
         <article><span className={styles.pendingDot} /><div><small>PRODUCTION INBOX</small><strong>{state.pendingProductionCount}</strong></div></article>
         <article><span className={styles.operationsDot} /><div><small>OPERATIONS REVIEW</small><strong>{state.pendingOperationsCount}</strong></div></article>
         <article><span className={styles.readyDot} /><div><small>FINAL APPROVED</small><strong>{state.finalApprovedCount}</strong></div></article>
@@ -642,11 +663,12 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
       {canCreate && <button className="primary-button" onClick={() => setCreateOpen(true)}><Plus size={16} /> New work order</button>}
     </div>
 
-    {state.role === "viewer" && <div className={styles.roleWarning}><LockKeyhole size={21} /><div><strong>Production role is not configured</strong><p>Ask the administrator to set this account&apos;s role to Account Manager, Production Manager, or Operation Manager.</p></div></div>}
+    {state.role === "viewer" && <div className={styles.roleWarning}><LockKeyhole size={21} /><div><strong>Production role is not configured</strong><p>Ask the administrator to set this account&apos;s role to Account Manager, Content Creator, Production Manager, or Operation Manager.</p></div></div>}
 
     <section className={styles.inboxPanel}>
-      <div className={styles.inboxHeading}><div><span>PRODUCTION PIPELINE</span><h2>Media Guide work orders</h2><p>Account submission → Production completion → Operations review → Final approval</p></div><div className={styles.filters}>
+      <div className={styles.inboxHeading}><div><span>PRODUCTION PIPELINE</span><h2>Media Guide work orders</h2><p>Account submission → Content references & notes → Production completion → Operations review → Final approval</p></div><div className={styles.filters}>
         <button className={filter === "all" ? styles.active : ""} onClick={() => setFilter("all")}>All <span>{state.orders.length}</span></button>
+        <button className={filter === "pending_content" ? styles.active : ""} onClick={() => setFilter("pending_content")}>Content <span>{state.pendingContentCount}</span></button>
         <button className={filter === "pending_production" ? styles.active : ""} onClick={() => setFilter("pending_production")}>Production <span>{state.pendingProductionCount}</span></button>
         <button className={filter === "pending_operations" ? styles.active : ""} onClick={() => setFilter("pending_operations")}>Operations <span>{state.pendingOperationsCount}</span></button>
         <button className={filter === "final_approved" ? styles.active : ""} onClick={() => setFilter("final_approved")}>Final <span>{state.finalApprovedCount}</span></button>
@@ -665,14 +687,15 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
       </div>
 
       {visibleOrders.length ? <div className={styles.orderGrid}>{visibleOrders.map((order, index) => {
+        const pendingContent = order.status === "pending_content";
         const pending = order.status === "pending_production";
         const pendingOperations = order.status === "pending_operations";
         const finalApproved = order.status === "final_approved";
         const expanded = expandedOrderIds.includes(order.id);
-        return <article key={order.id} className={`${styles.orderCard} ${pending ? styles.cardPending : pendingOperations ? styles.cardOperations : styles.cardReady}`}>
+        return <article key={order.id} className={`${styles.orderCard} ${pending || pendingContent ? styles.cardPending : pendingOperations ? styles.cardOperations : styles.cardReady}`}>
           <header className={`${styles.orderCardHeader} ${expanded ? styles.orderCardHeaderOpen : ""}`}>
             <button type="button" className={styles.orderCardToggle} aria-expanded={expanded} aria-controls={`work-order-details-${order.id}`} onClick={() => toggleOrderDetails(order.id)}>
-              <div className={styles.orderIdentity}><b className={styles.rowNumber}>#{index + 1}</b><span className={pending ? styles.statusPending : pendingOperations ? styles.statusOperations : styles.statusReady}>{finalApproved ? <CheckCircle2 size={13} /> : <Clock3 size={13} />}{statusLabel(order)}</span><div><h3>{order.clientName}</h3><span className={styles.orderCode}>{order.code}</span></div><p>Media Guide work order</p></div>
+              <div className={styles.orderIdentity}><b className={styles.rowNumber}>#{index + 1}</b><span className={pending || pendingContent ? styles.statusPending : pendingOperations ? styles.statusOperations : styles.statusReady}>{finalApproved ? <CheckCircle2 size={13} /> : <Clock3 size={13} />}{statusLabel(order)}</span><div><h3>{order.clientName}</h3><span className={styles.orderCode}>{order.code}</span></div><p>Media Guide work order</p></div>
               <div className={styles.orderDates}>
                 <div className={styles.orderSchedule}><CalendarDays size={18} /><span><small>PRODUCTION DATE</small><strong>{prettyDate(order.workDate)}</strong>{!pending && order.callTime && <em><Clock3 size={11} /> {order.callTime}</em>}</span></div>
                 <div className={styles.orderSchedule}><NotebookPen size={18} /><span><small>ORDER CREATED</small><strong>{createdDate(order.createdAt)}</strong><em>By {order.createdByName || "Account Manager"}</em></span></div>
@@ -691,16 +714,19 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
 
           <div className={styles.workflowTrack} aria-label="Work-order approval route">
             <div className={styles.stepComplete}><i>1</i><span><small>ACCOUNT</small><strong>{order.createdByName || "Account Manager"}</strong><em>Submitted</em></span></div><ArrowRight size={15} />
-            <div className={pending ? styles.stepCurrent : styles.stepComplete}><i>2</i><span><small>PRODUCTION</small><strong>{pending ? "Action required" : order.productionManagerName || "Production Manager"}</strong><em>{pending ? "Waiting for completion" : "Approved"}</em></span></div><ArrowRight size={15} />
-            <div className={pendingOperations ? styles.stepCurrent : finalApproved ? styles.stepComplete : styles.stepWaiting}><i>3</i><span><small>OPERATIONS</small><strong>{finalApproved ? order.operationManagerName || "Operation Manager" : pendingOperations ? "Action required" : "Operation Manager"}</strong><em>{finalApproved ? "Final approved" : pendingOperations ? "Waiting for review" : "Next stage"}</em></span></div>
+            {order.contentRequired && <><div className={pendingContent ? styles.stepCurrent : styles.stepComplete}><i>2</i><span><small>CONTENT</small><strong>{order.contentCreatorName || "Content Creator"}</strong><em>{pendingContent ? "References & notes needed" : "Submitted"}</em></span></div><ArrowRight size={15} /></>}
+            <div className={pendingContent ? styles.stepWaiting : pending ? styles.stepCurrent : styles.stepComplete}><i>{order.contentRequired ? 3 : 2}</i><span><small>PRODUCTION</small><strong>{pending ? "Action required" : order.productionManagerName || "Production Manager"}</strong><em>{pendingContent ? "Next stage" : pending ? "Waiting for completion" : "Approved"}</em></span></div><ArrowRight size={15} />
+            <div className={pendingOperations ? styles.stepCurrent : finalApproved ? styles.stepComplete : styles.stepWaiting}><i>{order.contentRequired ? 4 : 3}</i><span><small>OPERATIONS</small><strong>{finalApproved ? order.operationManagerName || "Operation Manager" : pendingOperations ? "Action required" : "Operation Manager"}</strong><em>{finalApproved ? "Final approved" : pendingOperations ? "Waiting for review" : "Next stage"}</em></span></div>
           </div>
 
+          <ContentBrief order={order} />
           {order.accountNote && <p className={styles.cardNote}><NotebookPen size={14} /><span><strong>Account note</strong>{order.accountNote}</span></p>}
-          {!pending && <section className={styles.productionSummary}><header><span><UsersRound size={15} /> PRODUCTION RESOURCES</span><strong>{order.productionOptions.length} assigned</strong></header><div>{order.productionOptions.slice(0, 5).map((option) => <span key={option.id}><small>{optionLabels[option.type]}</small><strong>{option.name}</strong><em>{option.billingMode === "extra" ? `${money(option.price)} extra` : "Included"}</em></span>)}{order.productionOptions.length > 5 && <span className={styles.moreResources}><strong>+{order.productionOptions.length - 5}</strong><small>more resources</small></span>}</div></section>}
+          {!pending && !pendingContent && <section className={styles.productionSummary}><header><span><UsersRound size={15} /> PRODUCTION RESOURCES</span><strong>{order.productionOptions.length} assigned</strong></header><div>{order.productionOptions.slice(0, 5).map((option) => <span key={option.id}><small>{optionLabels[option.type]}</small><strong>{option.name}</strong><em>{option.billingMode === "extra" ? `${money(option.price)} extra` : "Included"}</em></span>)}{order.productionOptions.length > 5 && <span className={styles.moreResources}><strong>+{order.productionOptions.length - 5}</strong><small>more resources</small></span>}</div></section>}
           {finalApproved && order.draftInvoiceCode && <div className={styles.invoiceDraftBadge}><FileCheck2 size={15} /><span><small>DRAFT INVOICE CREATED</small><strong>{order.draftInvoiceCode}</strong></span></div>}
           <footer>
-            <small>{pending ? `Submitted ${order.accountSubmittedAt.slice(0, 10)}` : pendingOperations ? `Production approved by ${order.productionManagerName}` : `Final approved by ${order.operationManagerName}`}</small>
+            <small>{pendingContent ? "Waiting for content references and notes" : pending ? `Submitted ${order.accountSubmittedAt.slice(0, 10)}` : pendingOperations ? `Production approved by ${order.productionManagerName}` : `Final approved by ${order.operationManagerName}`}</small>
             <div>
+              {pendingContent && (state.role === "content_creator" || state.role === "administrator") && <button className={styles.completeButton} onClick={() => { setContentOrder(order); setContentNote(""); setReferences([""]); }}><NotebookPen size={15} /> Add references & notes</button>}
               {pending && canComplete && <button className={styles.completeButton} onClick={() => openCompletion(order)}><FileCheck2 size={15} /> Complete & approve</button>}
               {pendingOperations && canFinalApprove && <button className={styles.completeButton} onClick={() => openFinalReview(order)}><FileCheck2 size={15} /> Review & final approve</button>}
               {canManagerEdit && <button className={styles.previewButton} onClick={() => openAdminEdit(order)}><Pencil size={15} /> Edit work order</button>}
@@ -711,7 +737,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
           </footer>
           </div>}
         </article>;
-      })}</div> : <div className={styles.empty}><Inbox size={27} /><h3>No work orders in this view</h3><p>{canCreate ? "Create the first Media Guide work order and send it to Production." : "New work orders will appear here when they reach your workflow stage."}</p>{canCreate && <button className="small-primary" onClick={() => setCreateOpen(true)}><Plus size={15} /> New work order</button>}</div>}
+      })}</div> : <div className={styles.empty}><Inbox size={27} /><h3>No work orders in this view</h3><p>{canCreate ? "Create the first Media Guide work order and send it to Content Creator." : "New work orders will appear here when they reach your workflow stage."}</p>{canCreate && <button className="small-primary" onClick={() => setCreateOpen(true)}><Plus size={15} /> New work order</button>}</div>}
     </section>
 
     {previewOrder && <div className={styles.previewModalLayer} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !downloadingPdf && setPreviewOrder(null)}>
@@ -731,7 +757,7 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
             </div></section>
             <section className={styles.formSection}><div className={styles.sectionHeading}><span>03</span><div><strong>Scope & pricing</strong><small>Bundles and add-on inputs, outputs, and prices</small></div></div><table className={styles.scopeTable}><thead><tr><th>TYPE</th><th>NAME</th><th>INPUTS</th><th>OUTPUTS</th><th>PRICE · EGP</th></tr></thead><tbody>{previewOrder.bundles.map((bundle) => <tr key={bundle.id}><td>BUNDLE</td><td>{bundle.name}</td><td>{bundle.inputs.join(" · ") || "—"}</td><td>{bundle.outputs.join(" · ") || "—"}</td><td>{money(bundle.price)}</td></tr>)}{previewOrder.addons.map((addon) => <tr key={addon.id}><td>{addon.catalogId ? "ADD-ON" : "CUSTOM"}</td><td>{addon.name}</td><td>{addon.inputs.join(" · ") || "—"}</td><td>{addon.outputs.join(" · ") || "—"}</td><td>{money(addon.price)}</td></tr>)}</tbody></table></section>
             <section className={styles.formSection}><div className={styles.sectionHeading}><span>04</span><div><strong>Production options</strong><small>Approved resources and their billing treatment</small></div></div><table className={styles.optionsTable}><thead><tr><th>#</th><th>OPTION</th><th>NAME / DETAILS</th><th>TREATMENT</th><th>PRICE · EGP</th></tr></thead><tbody>{previewOrder.productionOptions.map((option, index) => <tr key={option.id}><td>{index + 1}</td><td>{optionLabels[option.type]}</td><td>{option.name}</td><td><span className={option.billingMode === "extra" ? styles.extraTreatment : styles.includedTreatment}>{option.billingMode === "extra" ? "EXTRA COST" : "INCLUDED IN BUNDLE"}</span></td><td>{money(productionOptionPrice(option))}</td></tr>)}</tbody><tfoot><tr><td colSpan={4}>EXTRA PRODUCTION CHARGES</td><td>{money(previewOrder.productionOptionsTotal)}</td></tr></tfoot></table></section>
-            <section className={`${styles.formSection} ${styles.notesSection}`}><div className={styles.sectionHeading}><span>05</span><div><strong>Additional notes</strong><small>Final instructions approved by Operations</small></div></div><div className={styles.finalNotes}><span>NOTES</span><p><strong>Account Manager:</strong> {previewOrder.accountNote || "—"}</p><p><strong>Production Manager:</strong> {previewOrder.productionNote || "—"}</p><p className={styles.operationNote}><strong>Operation Manager:</strong> {previewOrder.operationNote || "—"}</p></div></section>
+            <section className={`${styles.formSection} ${styles.notesSection}`}><div className={styles.sectionHeading}><span>05</span><div><strong>Additional notes</strong><small>Final instructions approved by Operations</small></div></div><div className={styles.finalNotes}><span>NOTES</span><p><strong>Account Manager:</strong> {previewOrder.accountNote || "—"}</p><ContentBrief order={previewOrder} /><p><strong>Production Manager:</strong> {previewOrder.productionNote || "—"}</p><p className={styles.operationNote}><strong>Operation Manager:</strong> {previewOrder.operationNote || "—"}</p></div></section>
           </div>
           <footer className={styles.sheetFooter}><span>FMG AGENCY<br /><strong>MEDIA GUIDE PRODUCTION</strong></span><p><small>INSTRUCTION</small>Keep this work order with the production team on the shoot day.</p><strong><small>STATUS</small>FINAL APPROVED</strong></footer>
         </article>
@@ -750,12 +776,27 @@ export function WorkOrderPanel({ showToast, onWorkspaceChanged, onOpenDraftInvoi
           <label className={styles.wide}><span>Account Manager note <small>Optional</small></span><textarea rows={4} maxLength={5000} value={accountDraft.accountNote} onChange={(event) => setAccountDraft({ ...accountDraft, accountNote: event.target.value })} placeholder="Add client instructions, references, or anything Production should know." /></label>
         </div>
         <div className={styles.finalWarning}><LockKeyhole size={18} /><span><strong>Final submission</strong><small>After approval, you cannot edit or cancel this work order.</small></span></div>
-        <footer><button type="button" className="secondary-button" onClick={() => setCreateOpen(false)} disabled={saving}>Back</button><button className="primary-button" disabled={saving}>{saving ? <><LoaderCircle size={16} /> Sending…</> : <><Send size={16} /> Approve & send to Production</>}</button></footer>
+        <footer><button type="button" className="secondary-button" onClick={() => setCreateOpen(false)} disabled={saving}>Back</button><button className="primary-button" disabled={saving}>{saving ? <><LoaderCircle size={16} /> Sending…</> : <><Send size={16} /> Approve & send to Content Creator</>}</button></footer>
+      </form>
+    </WorkflowModal>}
+
+    {contentOrder && <WorkflowModal title={`Content brief · ${contentOrder.code}`} description={`${contentOrder.clientName} · Submit references and notes before Production selects shoot resources.`} onClose={() => !saving && setContentOrder(null)}>
+      <form className={styles.workflowForm} onSubmit={submitContent}>
+        <p className={styles.cardNote}>Account note: {contentOrder.accountNote || "No additional instructions"}</p>
+        {contentOrder.bundles.map(bundle => <CatalogDetails key={bundle.id} label="BUNDLE" name={bundle.name} price={bundle.price} inputs={bundle.inputs} outputs={bundle.outputs} />)}
+        {contentOrder.addons.map(addon => <CatalogDetails key={addon.id} label="ADD-ON" name={addon.name} price={addon.price} inputs={addon.inputs} outputs={addon.outputs} />)}
+        <div className={styles.formGrid}>
+          <label className={styles.wide}><span>Content notes</span><textarea required rows={5} maxLength={5000} value={contentNote} onChange={e => setContentNote(e.target.value)} placeholder="Creative direction, shot ideas, styling and instructions…" /></label>
+          {references.map((url, index) => <label className={styles.wide} key={index}><span>Reference {index + 1}</span><input required type="url" maxLength={2000} value={url} placeholder="https://…" onChange={e => setReferences(current => current.map((value, i) => i === index ? e.target.value : value))} />{references.length > 1 && <button type="button" className="secondary-button" onClick={() => setReferences(current => current.filter((_, i) => i !== index))}>Remove reference</button>}</label>)}
+        </div>
+        <button type="button" className="secondary-button" disabled={references.length >= 20 || saving} onClick={() => setReferences(current => [...current, ""])}>Add reference link</button>
+        <footer><button type="button" className="secondary-button" disabled={saving} onClick={() => setContentOrder(null)}>Back</button><button className="primary-button" disabled={saving}>{saving ? "Sending…" : "Submit & send to Production"}</button></footer>
       </form>
     </WorkflowModal>}
 
     {completing && <WorkflowModal title={`Complete ${completing.code}`} description={`${completing.clientName} · ${completing.bundles.length} bundle${completing.bundles.length === 1 ? "" : "s"} · ${prettyDate(completing.workDate)}`} onClose={() => !saving && setCompleting(null)}>
       <div className={styles.lockedScope}><LockKeyhole size={16} /><span><strong>Account Manager fields are locked</strong><small>{completing.bundles.length} bundle{completing.bundles.length === 1 ? "" : "s"}{completing.addons.length ? ` + ${completing.addons.length} add-on${completing.addons.length === 1 ? "" : "s"}` : ""} · {money(completing.bundlesTotal + completing.addonsTotal)}</small></span></div>
+      <ContentBrief order={completing} />
       <form className={styles.workflowForm} onSubmit={completeOrder}>
         <div className={styles.formGrid}>
           <label><span>Call time</span><input required type="time" value={productionDraft.callTime} onChange={(event) => setProductionDraft({ ...productionDraft, callTime: event.target.value })} /></label>

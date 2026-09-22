@@ -2,7 +2,7 @@
 
 import { Building2, Check, KeyRound, Pencil, Plus, ShieldCheck, UserCog, UserRound, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { ACCESS_PERMISSIONS, ACCOUNT_MANAGER_PERMISSIONS, OPERATION_MANAGER_PERMISSIONS, PRODUCTION_MANAGER_PERMISSIONS, type AccessPermission } from "../lib/permissions";
+import { ACCESS_PERMISSIONS, CONTENT_CREATOR_PERMISSIONS, ACCOUNT_MANAGER_PERMISSIONS, OPERATION_MANAGER_PERMISSIONS, PRODUCTION_MANAGER_PERMISSIONS, type AccessPermission } from "../lib/permissions";
 import type { ManagedUser } from "../types";
 
 type UserDraft = {
@@ -129,10 +129,10 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
     }));
   }
 
-  function applyWorkflowPreset(role: "account" | "production" | "operation") {
+  function applyWorkflowPreset(role: "account" | "content" | "production" | "operation") {
     const preset = role === "account"
       ? { roleLabel: "Account Manager", permissions: ACCOUNT_MANAGER_PERMISSIONS }
-      : role === "production"
+      : role === "content" ? { roleLabel: "Content Creator", permissions: CONTENT_CREATOR_PERMISSIONS } : role === "production"
         ? { roleLabel: "Production Manager", permissions: PRODUCTION_MANAGER_PERMISSIONS }
         : { roleLabel: "Operation Manager", permissions: OPERATION_MANAGER_PERMISSIONS };
     setDraft((current) => ({ ...current, roleLabel: preset.roleLabel, permissions: [...preset.permissions], clientId: null }));
@@ -200,7 +200,7 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
       description={modalGroup === "clients" ? "Link this login to one client. The account can only open that client's private portal." : "Link an internal account to an employee and choose exactly which FMG areas it can open."}
       onClose={() => setOpen(false)}>
       <form className="modal-form" onSubmit={save}>
-        {modalGroup === "employees" && <div className="access-preset"><div><ShieldCheck size={17} /><span><strong>Ready-made employee presets</strong><small>Start with a workflow role, then adjust individual permissions if needed.</small></span></div><div className="access-preset-actions"><button type="button" className="secondary-button" onClick={() => applyWorkflowPreset("account")}>Account Manager</button><button type="button" className="secondary-button" onClick={() => applyWorkflowPreset("production")}>Production Manager</button><button type="button" className="secondary-button" onClick={() => applyWorkflowPreset("operation")}>Operation Manager</button></div></div>}
+        {modalGroup === "employees" && <div className="access-preset"><div><ShieldCheck size={17} /><span><strong>Ready-made employee presets</strong><small>Start with a workflow role, then adjust individual permissions if needed.</small></span></div><div className="access-preset-actions"><button type="button" className="secondary-button" onClick={() => applyWorkflowPreset("account")}>Account Manager</button><button type="button" className="secondary-button" onClick={() => applyWorkflowPreset("content")}>Content Creator</button><button type="button" className="secondary-button" onClick={() => applyWorkflowPreset("production")}>Production Manager</button><button type="button" className="secondary-button" onClick={() => applyWorkflowPreset("operation")}>Operation Manager</button></div></div>}
         <div className="form-grid">
           <label className="field"><span>Display name</span><input required value={draft.displayName} onChange={(event) => setDraft({ ...draft, displayName: event.target.value })} placeholder={modalGroup === "clients" ? "e.g. Lewis Jewellery" : "e.g. Ahmed Hassan"} /></label>
           {modalGroup === "employees" && <label className="field"><span>Role / title</span><input required value={draft.roleLabel} onChange={(event) => setDraft({ ...draft, roleLabel: event.target.value })} /></label>}

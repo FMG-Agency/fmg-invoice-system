@@ -420,3 +420,15 @@
   .workflowForm input:not([type="checkbox"]):not([type="radio"]), .workflowForm select, .workflowForm textarea { font-size: 16px; }
   .modalCard { max-height: calc(100dvh - 20px); overscroll-behavior: contain; }
 }
+
+.contentBrief { margin: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.contentBrief p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 10px 0; }
+.contentBrief > div { display: flex; flex-wrap: wrap; gap: 12px; }
+.contentBrief a { display: inline-flex; align-items: center; gap: 6px; text-decoration: underline; }
+.stageStats { flex-wrap: wrap; }
+.workflowTrack { display: flex; flex-wrap: wrap; }
+.workflowTrack > div { flex: 1 1 150px; }
+@media (max-width: 700px) { .workflowTrack { display: grid; grid-template-columns: 1fr; } }
+
+.sheet .contentBrief { color: #111; background: #fff; border-color: #ddd; margin: 8px 0; }
+@media (min-width: 390px) and (max-width: 760px) { .stageStats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

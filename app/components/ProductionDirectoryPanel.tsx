@@ -30,6 +30,7 @@ const emptyState: ProductionState = {
   crew: [],
   modelCatalogUrl: "",
   canManageDirectory: false,
+  pendingContentCount: 0,
   pendingProductionCount: 0,
   pendingOperationsCount: 0,
   finalApprovedCount: 0,

@@ -557,8 +557,8 @@ export type TasksState = {
   currentDate: string;
 };
 
-export type ProductionWorkflowRole = "account_manager" | "production_manager" | "operation_manager" | "administrator" | "viewer";
-export type ProductionWorkOrderStatus = "pending_production" | "pending_operations" | "final_approved";
+export type ProductionWorkflowRole = "account_manager" | "content_creator" | "production_manager" | "operation_manager" | "administrator" | "viewer";
+export type ProductionWorkOrderStatus = "pending_content" | "pending_production" | "pending_operations" | "final_approved";
 
 export type ProductionClientOption = {
   id: number;
@@ -650,6 +650,11 @@ export type ProductionWorkOrder = {
   location: string;
   modelName: string;
   photographerName: string;
+  contentRequired: boolean;
+  contentNote: string;
+  contentReferences: string[];
+  contentCreatorName: string;
+  contentSubmittedAt: string;
   accountNote: string;
   productionNote: string;
   operationNote: string;
@@ -681,6 +686,7 @@ export type ProductionState = {
   crew: ProductionCrewMember[];
   modelCatalogUrl: string;
   canManageDirectory: boolean;
+  pendingContentCount: number;
   pendingProductionCount: number;
   pendingOperationsCount: number;
   finalApprovedCount: number;
