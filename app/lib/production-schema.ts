@@ -146,6 +146,7 @@ export async function ensureProductionDatabase() {
     const crewColumns = await database.prepare("PRAGMA table_info(production_crew_members)").all<{ name: string }>();
     const crewColumnNames = new Set(crewColumns.results.map((column) => column.name));
     const crewAdditions = [
+      ["deleted_at", "ALTER TABLE production_crew_members ADD COLUMN deleted_at TEXT NOT NULL DEFAULT ''"],
       ["model_group", "ALTER TABLE production_crew_members ADD COLUMN model_group TEXT NOT NULL DEFAULT ''"],
       ["photo_key", "ALTER TABLE production_crew_members ADD COLUMN photo_key TEXT NOT NULL DEFAULT ''"],
       ["model_nationality", "ALTER TABLE production_crew_members ADD COLUMN model_nationality TEXT CHECK(model_nationality IN ('egyptian','foreign'))"],

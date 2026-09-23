@@ -61,6 +61,14 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   globalThis.documentTestSession=null;
   assert.equal((await app.directoryGet(new Request('https://fixture.test/api/production-directory?photo=crew&id='+person.id))).status,401);
   globalThis.documentTestSession=adminSession;
+  globalThis.documentTestSession={...adminSession,isAdmin:false,roleLabel:'Content Creator',permissions:['production']};
+  assert.equal((await app.production(request({action:'deleteCrew',id:person.id}))).status,403);
+  globalThis.documentTestSession=adminSession;
+  const afterCrewDelete=await call(app.production,{action:'deleteCrew',id:person.id});
+  assert.equal(afterCrewDelete.crew.some(item=>item.id===person.id),false);
+  assert.equal((await app.production(request({action:'deleteCrew',id:person.id}))).status,404);
+  assert.equal((await app.database.prepare('SELECT COUNT(*) AS count FROM production_crew_reviews WHERE crew_id=?').bind(person.id).first()).count,1);
+  assert.equal((await app.production(request({action:'saveCrew',id:person.id,data:crewData}))).status,404);
   const options=[{id:'location',type:'location',name:'Fixture studio',price:0,billingMode:'included'}];
   // A manual invoice in between must not consume this work order's reserved number.
   state=await call(app.save,{action:'saveDocument',data:{...data,type:'invoice'}});

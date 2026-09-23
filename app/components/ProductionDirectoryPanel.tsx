@@ -10,6 +10,7 @@ import {
   Phone,
   Plus,
   Search,
+  Trash2,
   UserRound,
   UsersRound,
   Video,
@@ -167,6 +168,12 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
     });
   }
 
+  async function deleteCrew(member: ProductionCrewMember) {
+    if (!window.confirm(`Delete ${member.name} from the directory? Existing work orders and shoot reviews will be preserved.`)) return;
+    try { await mutate({ action: "deleteCrew", id: member.id }, "Person removed from the directory."); }
+    catch (error) { showToast(error instanceof Error ? error.message : "Could not delete this person."); }
+  }
+
   async function saveCrew(event: React.FormEvent) {
     event.preventDefault();
     if (!crewDraft) return;
@@ -236,7 +243,7 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
           {member.notes && <p>{member.notes}</p>}
           <button className={styles.secondaryAction} onClick={() => setHistoryMember(member)}>Shoot history & reviews</button>
           {state.canManageDirectory && <ResourcePhoto kind="crew" id={member.id} showToast={showToast} onSaved={async () => { const response = await fetch("/api/production", { cache: "no-store" }); if (!response.ok) throw new Error("Could not refresh photo."); setState(normalizeState(await response.json())); }} />}
-          <footer>{member.profileUrl ? <a href={member.profileUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open portfolio</a> : <span>No personal portfolio link</span>}{state.canManageDirectory && <button type="button" onClick={() => openCrew(member)}><Pencil size={14} /> Edit</button>}</footer>
+          <footer>{member.profileUrl ? <a href={member.profileUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open portfolio</a> : <span>No personal portfolio link</span>}{state.canManageDirectory && <button type="button" onClick={() => openCrew(member)}><Pencil size={14} /> Edit</button>}{state.canManageDirectory && <button type="button" disabled={saving} onClick={() => void deleteCrew(member)} aria-label={`Delete ${member.name}`}><Trash2 size={14} /> Delete</button>}</footer>
         </article>;
       })}</div> : <div className={styles.empty}><UsersRound size={27} /><h3>No matching people</h3><p>{state.crew.length ? "Try another search or category." : "Add the first model, photographer, or videographer to start the directory."}</p>{state.canManageDirectory && !state.crew.length && <button type="button" className={styles.primaryAction} onClick={openNewCrew}><Plus size={15} /> Add first person</button>}</div>}
     </section>

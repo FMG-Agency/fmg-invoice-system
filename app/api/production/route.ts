@@ -127,6 +127,10 @@ const payloadSchema = z.discriminatedUnion("action", [
     id: z.number().int().positive(),
   }),
   z.object({
+    action: z.literal("deleteCrew"),
+    id: z.number().int().positive(),
+  }),
+  z.object({
     action: z.literal("saveCrew"),
     id: z.number().int().positive().nullable(),
     data: crewDataSchema,
@@ -330,7 +334,7 @@ async function getProductionState(session: AuthSession): Promise<ProductionState
     database.prepare(`SELECT id, category, name, phone, profile_url AS profileUrl,
         model_group AS modelGroup, photo_key AS photoKey, model_nationality AS modelNationality, hourly_rate AS hourlyRate, daily_rate AS dailyRate, notes, active,
         created_at AS createdAt, updated_at AS updatedAt
-      FROM production_crew_members ORDER BY active DESC, category, name COLLATE NOCASE`).all<Record<string, unknown>>(),
+      FROM production_crew_members WHERE deleted_at = '' ORDER BY active DESC, category, name COLLATE NOCASE`).all<Record<string, unknown>>(),
     database.prepare("SELECT model_catalog_url AS modelCatalogUrl FROM production_settings WHERE id = 1").first<{ modelCatalogUrl: string }>(),
   ]);
 
@@ -575,7 +579,11 @@ export async function POST(request: Request) {
     const role = workflowRole(session);
     const payload = payloadSchema.parse(await request.json());
 
-    if (payload.action === "saveCrew") {
+    if (payload.action === "deleteCrew") {
+      if (!canManageProductionDirectory(role)) return accessDenied("Only Production, Operations, or an administrator can delete crew members.");
+      const result = await database.prepare("UPDATE production_crew_members SET deleted_at = CURRENT_TIMESTAMP, active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at = ''").bind(payload.id).run();
+      if (Number(result.meta.changes) !== 1) return Response.json({ error: "Crew member not found." }, { status: 404 });
+    } else if (payload.action === "saveCrew") {
       if (!canManageProductionDirectory(role)) return accessDenied("Only Production, Operations, or an administrator can manage the talent and crew directory.");
       const modelNationality = payload.data.category === "model" ? payload.data.modelNationality : null;
       const hourlyRate = payload.data.category === "model" ? payload.data.hourlyRate : null;
@@ -583,7 +591,7 @@ export async function POST(request: Request) {
       if (payload.id) {
         const updated = await database.prepare(`UPDATE production_crew_members SET
             category = ?, name = ?, phone = ?, profile_url = ?, model_group = ?, model_nationality = ?, hourly_rate = ?, daily_rate = ?, notes = ?, active = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE id = ?`)
+          WHERE id = ? AND deleted_at = ''`)
           .bind(payload.data.category, payload.data.name, payload.data.phone, payload.data.profileUrl,
             payload.data.modelGroup ?? modelNationality ?? "", modelNationality, hourlyRate, dailyRate, payload.data.notes, payload.data.active ? 1 : 0, payload.id).run();
         if (Number(updated.meta.changes) !== 1) return Response.json({ error: "Crew member not found." }, { status: 404 });
