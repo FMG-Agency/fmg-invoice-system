@@ -17,10 +17,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ProductionCrewCategory, ProductionCrewMember, ProductionState } from "../types";
+import { ProductionResources, ResourcePhoto } from "./ProductionResources";
 import styles from "./ProductionDirectoryPanel.module.css";
 
-type CrewDraft = Pick<ProductionCrewMember, "category" | "name" | "phone" | "profileUrl" | "modelNationality" | "hourlyRate" | "dailyRate" | "notes" | "active">;
-type DirectoryFilter = "all" | ProductionCrewCategory;
+type CrewDraft = Pick<ProductionCrewMember, "modelGroup" | "category" | "name" | "phone" | "profileUrl" | "modelNationality" | "hourlyRate" | "dailyRate" | "notes" | "active">;
+type DirectoryFilter = "location" | ProductionCrewCategory;
 
 const emptyState: ProductionState = {
   role: "viewer",
@@ -43,6 +44,7 @@ const categoryDetails: Record<ProductionCrewCategory, { label: string; plural: s
 };
 
 const blankCrew: CrewDraft = {
+  modelGroup: "egyptian",
   category: "model",
   name: "",
   phone: "",
@@ -94,7 +96,9 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
   const [state, setState] = useState<ProductionState>(emptyState);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [filter, setFilter] = useState<DirectoryFilter>("all");
+  const [filter, setFilter] = useState<DirectoryFilter>("model");
+  const [modelGroup, setModelGroup] = useState<"all" | "stories" | "egyptian" | "foreign">("all");
+  const [historyMember, setHistoryMember] = useState<ProductionCrewMember | null>(null);
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [crewDraft, setCrewDraft] = useState<CrewDraft | null>(null);
@@ -117,12 +121,13 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
   const filteredCrew = useMemo(() => {
     const query = search.trim().toLowerCase();
     return state.crew.filter((member) => {
-      if (filter !== "all" && member.category !== filter) return false;
+      if (member.category !== filter) return false;
+      if (filter === "model" && modelGroup !== "all" && member.modelGroup !== modelGroup) return false;
       if (!query) return true;
       return [member.name, member.phone, member.notes, categoryDetails[member.category].label,
         member.modelNationality ? modelNationalityLabel(member.modelNationality) : ""].some((value) => value.toLowerCase().includes(query));
     });
-  }, [filter, search, state.crew]);
+  }, [filter, modelGroup, search, state.crew]);
 
   async function mutate(body: Record<string, unknown>, successMessage: string) {
     setSaving(true);
@@ -143,12 +148,13 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
 
   function openNewCrew() {
     setEditingId(null);
-    setCrewDraft({ ...blankCrew });
+    setCrewDraft({ ...blankCrew, category: filter === "location" ? "model" : filter, modelNationality: modelGroup === "foreign" ? "foreign" : "egyptian", modelGroup: modelGroup === "all" ? "egyptian" : modelGroup });
   }
 
   function openCrew(member: ProductionCrewMember) {
     setEditingId(member.id);
     setCrewDraft({
+      modelGroup: member.modelGroup,
       category: member.category,
       name: member.name,
       phone: member.phone,
@@ -206,29 +212,36 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
 
     <section className={styles.directoryPanel}>
       <header className={styles.directoryHeader}>
-        <div><span>RESOURCE LIST</span><h2>Available people</h2><p>{filteredCrew.length} shown · inactive entries stay out of new work orders.</p></div>
+        <div><span>RESOURCE LIST</span><h2>{filter === "location" ? "Shoot locations" : categoryDetails[filter].plural}</h2><p>{filter === "location" ? "Saved places, maps and photos for your shoots." : `${filteredCrew.length} shown · inactive entries stay out of new work orders.`}</p></div>
         <label className={styles.searchBox}><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, phone, or notes…" aria-label="Search talent and crew" />{search && <button type="button" onClick={() => setSearch("")} aria-label="Clear search"><X size={14} /></button>}</label>
       </header>
       <nav className={styles.filters} aria-label="Filter production directory">
-        <button type="button" className={filter === "all" ? styles.active : ""} onClick={() => setFilter("all")}>All <span>{state.crew.length}</span></button>
+        <button type="button" className={filter === "location" ? styles.active : ""} onClick={() => setFilter("location")}>Locations</button>
         {counts.map(({ category, total }) => <button key={category} type="button" className={filter === category ? styles.active : ""} onClick={() => setFilter(category)}>{categoryDetails[category].plural} <span>{total}</span></button>)}
       </nav>
 
-      {filteredCrew.length ? <div className={styles.crewGrid}>{filteredCrew.map((member) => {
+      {filter === "model" && <nav className={styles.filters} aria-label="Model groups">{(["all", "stories", "egyptian", "foreign"] as const).map(group => <button key={group} className={modelGroup === group ? styles.active : ""} onClick={() => setModelGroup(group)}>{group === "all" ? "All models" : group === "stories" ? "Stories" : group === "egyptian" ? "Egyptian" : "Foreign"} <span>{state.crew.filter(member => member.category === "model" && (group === "all" || member.modelGroup === group)).length}</span></button>)}</nav>}
+      {filter === "location" ? <ProductionResources search={search} orders={state.orders} canManage={state.canManageDirectory} showToast={showToast} /> : filteredCrew.length ? <div className={styles.crewGrid}>{filteredCrew.map((member) => {
         const details = categoryDetails[member.category];
         const Icon = details.icon;
         return <article key={member.id} className={`${styles.crewCard} ${!member.active ? styles.inactive : ""}`}>
-          <header><span className={styles.memberIcon}><Icon size={20} /></span><div><small>{details.label.toUpperCase()}{member.category === "model" ? ` · ${modelNationalityLabel(member.modelNationality)}` : ""}</small><h3>{member.name}</h3></div>{!member.active && <em>Inactive</em>}</header>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {member.photoUrl && <img className={styles.resourcePhoto} src={member.photoUrl} alt={member.name} />}
+          <header><span className={styles.memberIcon}><Icon size={20} /></span><div><small>{details.label.toUpperCase()}{member.category === "model" ? ` · ${member.modelGroup === "stories" ? "Stories" : modelNationalityLabel(member.modelNationality)}` : ""}</small><h3>{member.name}</h3></div>{!member.active && <em>Inactive</em>}</header>
           <a className={styles.phoneLine} href={`tel:${member.phone.replace(/\s+/g, "")}`}><Phone size={15} /><span><small>PHONE NUMBER</small><strong>{member.phone || "Phone not added"}</strong></span></a>
           {member.category === "model" && (member.hourlyRate !== null || member.dailyRate !== null) && <div className={styles.modelRates}>
             {member.hourlyRate !== null && <span><small>PER HOUR</small><strong>{money(member.hourlyRate)}</strong></span>}
             {member.dailyRate !== null && <span><small>PER DAY</small><strong>{money(member.dailyRate)}</strong></span>}
           </div>}
           {member.notes && <p>{member.notes}</p>}
+          <button className={styles.secondaryAction} onClick={() => setHistoryMember(member)}>Shoot history & reviews</button>
+          {state.canManageDirectory && <ResourcePhoto kind="crew" id={member.id} showToast={showToast} onSaved={async () => { const response = await fetch("/api/production", { cache: "no-store" }); if (!response.ok) throw new Error("Could not refresh photo."); setState(normalizeState(await response.json())); }} />}
           <footer>{member.profileUrl ? <a href={member.profileUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open portfolio</a> : <span>No personal portfolio link</span>}{state.canManageDirectory && <button type="button" onClick={() => openCrew(member)}><Pencil size={14} /> Edit</button>}</footer>
         </article>;
       })}</div> : <div className={styles.empty}><UsersRound size={27} /><h3>No matching people</h3><p>{state.crew.length ? "Try another search or category." : "Add the first model, photographer, or videographer to start the directory."}</p>{state.canManageDirectory && !state.crew.length && <button type="button" className={styles.primaryAction} onClick={openNewCrew}><Plus size={15} /> Add first person</button>}</div>}
     </section>
+
+    {historyMember && <DirectoryModal title={historyMember.name} description="Shoot history, ratings and team comments" onClose={() => setHistoryMember(null)}><ProductionResources member={historyMember} orders={state.orders} canManage={state.canManageDirectory} showToast={showToast} /></DirectoryModal>}
 
     {crewDraft && <DirectoryModal title={editingId ? "Edit talent or crew" : "Add talent or crew"} description="These details will appear as selectable options inside production work orders." onClose={() => !saving && setCrewDraft(null)}>
       <form className={styles.form} onSubmit={saveCrew}>
@@ -247,7 +260,8 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
           <label><span>Phone number</span><input required type="tel" maxLength={100} value={crewDraft.phone} onChange={(event) => setCrewDraft({ ...crewDraft, phone: event.target.value })} placeholder="e.g. +20 100 000 0000" /></label>
           <label><span>Portfolio / personal catalogue link <small>Optional</small></span><input type="url" maxLength={2000} value={crewDraft.profileUrl} onChange={(event) => setCrewDraft({ ...crewDraft, profileUrl: event.target.value })} placeholder="https://…" /></label>
           {crewDraft.category === "model" && <>
-            <label><span>Model nationality</span><select required value={crewDraft.modelNationality ?? "egyptian"} onChange={(event) => setCrewDraft({ ...crewDraft, modelNationality: event.target.value as "egyptian" | "foreign" })}><option value="egyptian">Egyptian</option><option value="foreign">Foreign</option></select></label>
+            <label><span>Model group</span><select value={crewDraft.modelGroup} onChange={event => { const group = event.target.value as CrewDraft["modelGroup"]; setCrewDraft({ ...crewDraft, modelGroup: group, modelNationality: group === "foreign" ? "foreign" : "egyptian" }); }}><option value="stories">Stories</option><option value="egyptian">Egyptian</option><option value="foreign">Foreign</option></select></label>
+            <label><span>Model nationality</span><select required value={crewDraft.modelNationality ?? "egyptian"} onChange={(event) => setCrewDraft({ ...crewDraft, modelNationality: event.target.value as "egyptian" | "foreign", modelGroup: crewDraft.modelGroup === "stories" ? "stories" : event.target.value as "egyptian" | "foreign" })}><option value="egyptian">Egyptian</option><option value="foreign">Foreign</option></select></label>
             <label><span>Hourly rate · EGP <small>Optional</small></span><input type="number" min="0" step="0.01" value={crewDraft.hourlyRate ?? ""} onChange={(event) => setCrewDraft({ ...crewDraft, hourlyRate: optionalRate(event.target.value) })} placeholder="Optional hourly rate" /></label>
             <label><span>Daily rate · EGP <small>Optional</small></span><input type="number" min="0" step="0.01" value={crewDraft.dailyRate ?? ""} onChange={(event) => setCrewDraft({ ...crewDraft, dailyRate: optionalRate(event.target.value) })} placeholder="Optional daily rate" /></label>
           </>}

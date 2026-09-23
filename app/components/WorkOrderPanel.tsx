@@ -140,7 +140,7 @@ function money(value: number) {
 
 function modelDirectoryLabel(member: ProductionState["crew"][number]) {
   if (member.category !== "model") return "";
-  return member.modelNationality === "foreign" ? "Foreign" : "Egyptian";
+  return member.modelGroup === "stories" ? "Stories" : member.modelNationality === "foreign" ? "Foreign" : "Egyptian";
 }
 
 function modelRateSummary(member: ProductionState["crew"][number]) {

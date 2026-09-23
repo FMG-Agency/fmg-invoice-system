@@ -122,3 +122,15 @@
   .form input:not([type="checkbox"]):not([type="radio"]), .form select, .form textarea { font-size: 16px; }
   .modalCard { max-height: calc(100dvh - 20px); overscroll-behavior: contain; }
 }
+
+.resourcePhoto { width: 100%; height: 220px; object-fit: cover; border-radius: 12px; background: var(--surface-2); }
+.photoUpload { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; font-size: 12px; }
+.photoUpload input { max-width: 100%; }
+.photoUpload small { color: var(--muted); }
+.history { padding: 18px; display: grid; gap: 12px; }
+.history article { border: 1px solid var(--line); padding: 14px; border-radius: 12px; }
+.history p { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.crewCard > .secondaryAction, .crewCard > .photoUpload, .crewCard > h3, .crewCard > a:not(.phoneLine) { margin: 12px 13px; }
+.crewCard > .resourcePhoto { border-radius: 12px 12px 0 0; }
+.history .form { padding: 0; }

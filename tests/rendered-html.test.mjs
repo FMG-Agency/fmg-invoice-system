@@ -299,7 +299,7 @@ test("ships the locked Media Guide production workflow", async () => {
     readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
     readFile(new URL("app/components/WorkOrderPanel.tsx", root), "utf8"),
     readFile(new URL("app/components/WorkOrderPanel.module.css", root), "utf8"),
-    readFile(new URL("app/api/production/route.ts", root), "utf8"),
+    Promise.all([readFile(new URL("app/api/production/route.ts", root), "utf8"), readFile(new URL("app/lib/production-schema.ts", root), "utf8")]).then(parts => parts.join("\n")),
     readFile(new URL("app/lib/permissions.ts", root), "utf8"),
     readFile(new URL("drizzle/0011_stormy_nightshade.sql", root), "utf8"),
     readFile(new URL("drizzle/0012_demonic_gunslinger.sql", root), "utf8"),
@@ -418,7 +418,7 @@ test("ships role-targeted in-app and device push notifications", async () => {
     readFile(new URL("app/components/NotificationCenter.tsx", root), "utf8"),
     readFile(new URL("app/api/notifications/route.ts", root), "utf8"),
     readFile(new URL("app/lib/notifications.ts", root), "utf8"),
-    readFile(new URL("app/api/production/route.ts", root), "utf8"),
+    Promise.all([readFile(new URL("app/api/production/route.ts", root), "utf8"), readFile(new URL("app/lib/production-schema.ts", root), "utf8")]).then(parts => parts.join("\n")),
     readFile(new URL("app/api/requests/route.ts", root), "utf8"),
     readFile(new URL("public/sw.js", root), "utf8"),
     readFile(new URL("public/manifest.webmanifest", root), "utf8"),
@@ -489,7 +489,7 @@ test("ships the Production talent and crew directory with work-order pickers", a
     readFile(new URL("app/components/ProductionDirectoryPanel.tsx", root), "utf8"),
     readFile(new URL("app/components/ProductionDirectoryPanel.module.css", root), "utf8"),
     readFile(new URL("app/components/WorkOrderPanel.tsx", root), "utf8"),
-    readFile(new URL("app/api/production/route.ts", root), "utf8"),
+    Promise.all([readFile(new URL("app/api/production/route.ts", root), "utf8"), readFile(new URL("app/lib/production-schema.ts", root), "utf8")]).then(parts => parts.join("\n")),
     readFile(new URL("drizzle/0016_outgoing_ken_ellis.sql", root), "utf8"),
   ]);
   assert.match(component, /label: "Production"[\s\S]*items: \["work-order", "production-directory"\]/);

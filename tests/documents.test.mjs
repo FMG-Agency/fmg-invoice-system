@@ -12,7 +12,7 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   globalThis.documentTestSession = { userId: 101, username: 'fixture', displayName: 'Original Author', roleLabel: 'Administrator', isAdmin: true, permissions: [], clientId: null, employeeId: null };
   await mkdir(new URL('../work/', import.meta.url), { recursive: true });
   const bundle = new URL('../work/document-test.mjs', import.meta.url);
-  await build({ stdin: { contents: `export { database } from './app/lib/database'; export { POST as production } from './app/api/production/route'; export { GET as state, POST as save } from './app/api/state/route'; export { reserveWorkOrderNumber } from './app/lib/document-metadata'; export {POST as tasks, GET as taskState} from './app/api/tasks/route'; export {GET as pdf} from './app/api/pdf/[id]/route';`, resolveDir: process.cwd() }, outfile: fileURLToPath(bundle), bundle: true, platform: 'node', format: 'esm', packages: 'external', plugins: [{ name: 'isolated-auth-storage', setup(b) {
+  await build({ stdin: { contents: `export { POST as directorySave, GET as directoryGet } from './app/api/production-directory/route'; export { database } from './app/lib/database'; export { POST as production } from './app/api/production/route'; export { GET as state, POST as save } from './app/api/state/route'; export { reserveWorkOrderNumber } from './app/lib/document-metadata'; export {POST as tasks, GET as taskState} from './app/api/tasks/route'; export {GET as pdf} from './app/api/pdf/[id]/route';`, resolveDir: process.cwd() }, outfile: fileURLToPath(bundle), bundle: true, platform: 'node', format: 'esm', packages: 'external', plugins: [{ name: 'isolated-auth-storage', setup(b) {
     b.onResolve({ filter: /auth-server$/ }, () => ({ path: 'auth', namespace: 'fixture' }));
     b.onResolve({ filter: /^@vercel\/blob$/ }, () => ({ path: 'blob', namespace: 'fixture' }));
     b.onLoad({ filter: /.*/, namespace: 'fixture' }, ({path}) => ({ contents: path === 'auth' ? `export async function ensureAuthDatabase(){} export async function getSession(){return globalThis.documentTestSession;} export async function requireAuth(){return globalThis.documentTestSession ? null : Response.json({}, {status:401});} export async function requireAnyPermission(){return requireAuth();} export async function requirePermission(){return requireAuth();}` : `export async function get(){return null;} export async function put(){return {url:'mock-only'};} export async function del(){}` }));
@@ -38,6 +38,29 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   const prod=await call(app.production,{action:'create',data:{...scope,documentType:'media_guide'}});
   const order=prod.orders[0];
   assert.ok(order.id>category.counter);
+  // Directory writes and uploads run against the in-memory DB and mocked Blob only.
+  const adminSession = {...globalThis.documentTestSession};
+  const crewData = {category:'model',name:'Stories fixture',phone:'01000000000',profileUrl:'',modelGroup:'stories',modelNationality:'egyptian',hourlyRate:null,dailyRate:null,notes:'',active:true};
+  const crewState = await call(app.production,{action:'saveCrew',id:null,data:crewData});
+  const person = crewState.crew.find(item=>item.name==='Stories fixture');
+  assert.equal(person.modelGroup,'stories');
+  let directory = await call(app.directorySave,{action:'saveLocation',id:null,data:{name:'Fixture studio',mapUrl:'https://maps.google.com/?q=studio',notes:'Indoor set',active:true}});
+  assert.equal(directory.locations[0].name,'Fixture studio');
+  directory = await call(app.directorySave,{action:'saveReview',data:{crewId:person.id,workOrderId:order.id,shootName:'Fixture shoot',shootDate:'2026-09-20',rating:4,comment:'On time'}});
+  assert.equal(directory.reviews[0].rating,4);
+  assert.equal(directory.reviews[0].authorName,'Original Author');
+  assert.equal((await app.directorySave(request({action:'saveReview',data:{crewId:person.id,workOrderId:null,shootName:'Old shoot',shootDate:'2026-09-20',rating:9,comment:''}}))).status,400);
+  globalThis.documentTestSession={...adminSession,isAdmin:false,roleLabel:'Content Creator',permissions:['production']};
+  assert.equal((await app.directorySave(request({action:'saveLocation',id:null,data:{name:'Forbidden',mapUrl:'https://example.com',notes:'',active:true}}))).status,403);
+  globalThis.documentTestSession=adminSession;
+  function photoRequest(bytes,type='image/png') {const form=new FormData();form.set('kind','crew');form.set('id',String(person.id));form.set('photo',new File([bytes],'photo.png',{type}));return new Request('https://fixture.test/api/production-directory',{method:'POST',body:form});}
+  assert.equal((await app.directorySave(photoRequest('not an image'))).status,400);
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=','base64');
+  assert.equal((await app.directorySave(photoRequest(png))).status,200);
+  assert.ok((await app.database.prepare('SELECT photo_key AS key FROM production_crew_members WHERE id=?').bind(person.id).first()).key.startsWith('production-directory/crew/'));
+  globalThis.documentTestSession=null;
+  assert.equal((await app.directoryGet(new Request('https://fixture.test/api/production-directory?photo=crew&id='+person.id))).status,401);
+  globalThis.documentTestSession=adminSession;
   const options=[{id:'location',type:'location',name:'Fixture studio',price:0,billingMode:'included'}];
   // A manual invoice in between must not consume this work order's reserved number.
   state=await call(app.save,{action:'saveDocument',data:{...data,type:'invoice'}});
