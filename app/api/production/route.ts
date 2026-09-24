@@ -1,5 +1,5 @@
 import { ensureProductionDatabase } from "../../lib/production-schema";
-import { reserveWorkOrderNumber } from "../../lib/document-metadata";
+import { reserveWorkOrderNumber, releaseDocumentSerial } from "../../lib/document-metadata";
 import { z } from "zod";
 import { database } from "../../lib/database";
 import { getSession, requirePermission, type AuthSession } from "../../lib/auth-server";
@@ -531,8 +531,7 @@ async function ensureDraftInvoice(input: DraftInvoiceInput) {
     .first<{ preparedBy: string; paymentTerms: string }>();
   const clientPart = input.scope.client.name.trim().replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, "-").replace(/^-|-$/g, "") || "CLIENT";
   const generatedCode = `${clientPart}-${category.prefix}${String(input.workOrderId).padStart(4, "0")}`;
-  const archived = await database.prepare("SELECT id FROM deleted_document_history WHERE generated_code = ?").bind(generatedCode).first();
-  if (archived) throw new Error("This invoice was deleted and its serial is reserved. Create a new work order for a new invoice.");
+
   await database.prepare(`INSERT OR IGNORE INTO documents
     (type, company_key, generated_code, client_id, category_id, date, valid_until, prepared_by, currency, project,
       status, items_json, subtotal, discount, tax, total, payment_terms, notes_exclusions, pdf_key, production_work_order_id, created_by_user_id, created_by_name)
@@ -611,10 +610,15 @@ export async function POST(request: Request) {
       if (!session.isAdmin) return accessDenied("Only an administrator can delete production work orders.");
       const existing = await database.prepare("SELECT id FROM production_work_orders WHERE id = ?").bind(payload.id).first<{ id: number }>();
       if (!existing) return Response.json({ error: "Work order not found." }, { status: 404 });
+      const category = await database.prepare("SELECT id FROM categories WHERE LOWER(TRIM(name))='media guide'").first<{id:number}>();
+      const hasReviews = await database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='production_crew_reviews'").first();
       await database.batch([
+        ...(hasReviews ? [database.prepare("UPDATE production_crew_reviews SET work_order_id = NULL WHERE work_order_id = ?").bind(payload.id)] : []),
+        database.prepare("UPDATE system_notifications SET entity_id = NULL WHERE target_view = 'work-order' AND entity_id = ?").bind(payload.id),
         database.prepare("UPDATE documents SET production_work_order_id = NULL WHERE production_work_order_id = ?").bind(payload.id),
         database.prepare("DELETE FROM production_work_order_events WHERE work_order_id = ?").bind(payload.id),
         database.prepare("DELETE FROM production_work_orders WHERE id = ?").bind(payload.id),
+        ...(category ? [releaseDocumentSerial(category.id, payload.id)] : []),
       ]);
     } else if (payload.action === "create") {
       if (role !== "account_manager" && role !== "operation_manager" && role !== "administrator") return accessDenied("Only an Account Manager, Operation Manager, or administrator can create and submit a work order.");

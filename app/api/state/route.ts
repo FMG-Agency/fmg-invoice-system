@@ -1,7 +1,7 @@
 import type { DocumentRecord } from "../../types";
 import { put } from "@vercel/blob";
 import { z } from "zod";
-import { ensureDocumentMetadata } from "../../lib/document-metadata";
+import { ensureDocumentMetadata, reserveDocumentNumber, releaseDocumentSerial } from "../../lib/document-metadata";
 import { database } from "../../lib/database";
 import { ensureClientFinanceDatabase, importClientWorkbookData } from "../../lib/client-finance";
 import { getSession, requireAuth, type AuthSession } from "../../lib/auth-server";
@@ -542,8 +542,7 @@ export async function POST(request: Request) {
         generatedCode = existing.generatedCode;
         pdfKey = existing.pdfKey || `documents/${data.type}/${generatedCode}.pdf`;
       } else {
-        const category = await database.prepare("UPDATE categories SET counter = counter + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? RETURNING prefix, counter")
-          .bind(data.categoryId).first<{ prefix: string; counter: number }>();
+        const category = await reserveDocumentNumber(data.categoryId);
         const client = await database.prepare("SELECT name, company_name AS companyName FROM clients WHERE id = ?").bind(data.clientId).first<{ name: string; companyName: string }>();
         if (!category || !client) throw new Error("Choose a valid client and category.");
         const clientPart = (client.companyName || client.name).trim().replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, "-").replace(/^-|-$/g, "") || "CLIENT";
@@ -576,9 +575,10 @@ export async function POST(request: Request) {
       const snapshot = (await getState()).documents.find(d => Number((d as Record<string, unknown>).id) === payload.id);
       if (!snapshot) return Response.json({error:"Document not found."},{status:404});
       await database.batch([
-        database.prepare("INSERT INTO deleted_document_history (id, generated_code, snapshot_json) VALUES (?, ?, ?)").bind(payload.id, (snapshot as Record<string, unknown>).generatedCode, JSON.stringify(snapshot)),
+        database.prepare("INSERT INTO deleted_document_history (id, generated_code, snapshot_json) VALUES (?, ?, ?)").bind(payload.id, `${(snapshot as Record<string, unknown>).generatedCode}#deleted-${payload.id}`, JSON.stringify(snapshot)),
         database.prepare("UPDATE production_work_orders SET draft_invoice_id = NULL WHERE draft_invoice_id = ?").bind(payload.id),
         database.prepare("DELETE FROM documents WHERE id = ?").bind(payload.id),
+        releaseDocumentSerial(Number((snapshot as Record<string, unknown>).categoryId), Number(String((snapshot as Record<string, unknown>).generatedCode).match(/(\d+)$/)?.[1] || 0)),
       ]);
     }
 
