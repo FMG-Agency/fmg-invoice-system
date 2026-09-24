@@ -58,6 +58,12 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=','base64');
   assert.equal((await app.directorySave(photoRequest(png))).status,200);
   assert.ok((await app.database.prepare('SELECT photo_key AS key FROM production_crew_members WHERE id=?').bind(person.id).first()).key.startsWith('production-directory/crew/'));
+  globalThis.documentTestSession={...adminSession,isAdmin:false,roleLabel:'Content Creator',permissions:['production']};
+  assert.equal((await app.directorySave(request({action:'removePhoto',kind:'crew',id:person.id}))).status,403);
+  globalThis.documentTestSession=adminSession;
+  await call(app.directorySave,{action:'removePhoto',kind:'crew',id:person.id});
+  assert.equal((await app.database.prepare('SELECT photo_key AS key FROM production_crew_members WHERE id=?').bind(person.id).first()).key,'');
+  assert.equal((await app.directoryGet(new Request('https://fixture.test/api/production-directory?photo=crew&id='+person.id))).status,404);
   globalThis.documentTestSession=null;
   assert.equal((await app.directoryGet(new Request('https://fixture.test/api/production-directory?photo=crew&id='+person.id))).status,401);
   globalThis.documentTestSession=adminSession;

@@ -8,9 +8,9 @@ type Location = { id: number; name: string; mapUrl: string; notes: string; photo
 type Review = { id: number; crewId: number; workOrderId: number | null; shootName: string; shootDate: string; rating: number | null; comment: string; authorName: string };
 type DirectoryData = { locations: Location[]; reviews: Review[] };
 
-export function ResourcePhoto({ kind, id, onSaved, showToast }: { kind: "crew" | "location"; id: number; onSaved: () => Promise<void>; showToast: (message: string) => void }) {
+export function ResourcePhoto({ kind, id, hasPhoto, onSaved, showToast }: { hasPhoto: boolean; kind: "crew" | "location"; id: number; onSaved: () => Promise<void>; showToast: (message: string) => void }) {
   const [busy, setBusy] = useState(false);
-  return <label className={styles.photoUpload}>{busy ? "Uploading…" : "Upload / replace photo"}<input aria-label="Upload photo" type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={async event => {
+  return <div className={styles.photoControls}><label className={styles.photoUpload}>{busy ? "Uploading…" : "Upload / replace photo"}<input aria-label="Upload photo" type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={async event => {
     const file = event.target.files?.[0]; event.target.value = "";
     if (!file) return;
     if (file.size > 3 * 1024 * 1024) return showToast("Choose an image under 3 MB.");
@@ -22,7 +22,18 @@ export function ResourcePhoto({ kind, id, onSaved, showToast }: { kind: "crew" |
       await onSaved(); showToast("Photo saved.");
     } catch (error) { showToast(error instanceof Error ? error.message : "Could not upload photo."); }
     finally { setBusy(false); }
-  }} /><small>JPG, PNG or WebP · max 3 MB</small></label>;
+  }} /><span>JPG, PNG or WebP · max 3 MB</span></label>
+    {hasPhoto && <button type="button" className={styles.removePhoto} disabled={busy} onClick={async () => {
+      setBusy(true);
+      try {
+        const response = await fetch("/api/production-directory", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "removePhoto", kind, id }) });
+        const result = await response.json() as { error?: string };
+        if (!response.ok) throw new Error(result.error || "Could not remove photo.");
+        await onSaved(); showToast("Photo removed.");
+      } catch (error) { showToast(error instanceof Error ? error.message : "Could not remove photo."); }
+      finally { setBusy(false); }
+    }}>Remove photo</button>}
+  </div>;
 }
 
 export function ProductionResources({ member, orders, canManage, showToast, search = "" }: { search?: string; member?: ProductionCrewMember; orders: ProductionWorkOrder[]; canManage: boolean; showToast: (message: string) => void }) {
@@ -86,7 +97,7 @@ export function ProductionResources({ member, orders, canManage, showToast, sear
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {item.photoUrl && <img className={styles.resourcePhoto} src={item.photoUrl} alt={item.name} />}
       <h3>{item.name}{!item.active && " · Inactive"}</h3><p>{item.notes}</p><a href={item.mapUrl} target="_blank" rel="noopener noreferrer">Open location ↗</a>
-      {canManage && <><button className={styles.secondaryAction} onClick={() => setLocation(item)}>Edit location</button><ResourcePhoto kind="location" id={item.id} onSaved={load} showToast={showToast} /></>}
+      {canManage && <><button className={styles.secondaryAction} onClick={() => setLocation(item)}>Edit location</button><ResourcePhoto hasPhoto={Boolean(item.photoUrl)} kind="location" id={item.id} onSaved={load} showToast={showToast} /></>}
     </article>)}</div>
     {!data.locations.length && <p>No locations added yet.</p>}
   </section>;

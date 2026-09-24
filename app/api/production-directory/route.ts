@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const link = z.string().trim().max(2000).url().refine(value => /^https?:\/\//i.test(value));
 const payload = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("removePhoto"), kind: z.enum(["crew", "location"]), id: z.number().int().positive() }),
   z.object({ action: z.literal("saveLocation"), id: z.number().int().positive().nullable(), data: z.object({ name: z.string().trim().min(1).max(200), mapUrl: link, notes: z.string().trim().max(2000), active: z.boolean() }) }),
   z.object({ action: z.literal("saveReview"), data: z.object({ crewId: z.number().int().positive(), workOrderId: z.number().int().positive().nullable(), shootName: z.string().trim().min(1).max(300), shootDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), rating: z.number().int().min(1).max(5).nullable(), comment: z.string().trim().max(5000) }).refine(data => data.rating !== null || !!data.comment, "Add a rating or comment.") }),
 ]);
@@ -80,7 +81,13 @@ export async function POST(request: Request) {
       return Response.json({ ok: true });
     }
     const body = payload.parse(await request.json());
-    if (body.action === "saveLocation") {
+    if (body.action === "removePhoto") {
+      const table = body.kind === "crew" ? "production_crew_members" : "production_locations";
+      const existing = await database.prepare(`SELECT photo_key AS photoKey FROM ${table} WHERE id = ?`).bind(body.id).first<{ photoKey: string }>();
+      if (!existing) return Response.json({ error: "Directory entry not found." }, { status: 404 });
+      await database.prepare(`UPDATE ${table} SET photo_key = '', updated_at = ? WHERE id = ? AND photo_key = ?`).bind(new Date().toISOString(), body.id, existing.photoKey).run();
+      if (existing.photoKey) await del(existing.photoKey).catch(() => undefined);
+    } else if (body.action === "saveLocation") {
       const { name, mapUrl, notes, active } = body.data;
       if (body.id) {
         const result = await database.prepare("UPDATE production_locations SET name=?, map_url=?, notes=?, active=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(name, mapUrl, notes, active ? 1 : 0, body.id).run();

@@ -233,7 +233,7 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
         const Icon = details.icon;
         return <article key={member.id} className={`${styles.crewCard} ${!member.active ? styles.inactive : ""}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          {member.photoUrl && <img className={styles.resourcePhoto} src={member.photoUrl} alt={member.name} />}
+          {member.photoUrl ? <img className={styles.resourcePhoto} src={member.photoUrl} alt={member.name} /> : <div className={styles.photoPlaceholder}><Icon size={52} /><span>No photo added</span></div>}
           <header><span className={styles.memberIcon}><Icon size={20} /></span><div><small>{details.label.toUpperCase()}{member.category === "model" ? ` · ${member.modelGroup === "stories" ? "Stories" : modelNationalityLabel(member.modelNationality)}` : ""}</small><h3>{member.name}</h3></div>{!member.active && <em>Inactive</em>}</header>
           <a className={styles.phoneLine} href={`tel:${member.phone.replace(/\s+/g, "")}`}><Phone size={15} /><span><small>PHONE NUMBER</small><strong>{member.phone || "Phone not added"}</strong></span></a>
           {member.category === "model" && (member.hourlyRate !== null || member.dailyRate !== null) && <div className={styles.modelRates}>
@@ -242,7 +242,7 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
           </div>}
           {member.notes && <p>{member.notes}</p>}
           <button className={styles.secondaryAction} onClick={() => setHistoryMember(member)}>Shoot history & reviews</button>
-          {state.canManageDirectory && <ResourcePhoto kind="crew" id={member.id} showToast={showToast} onSaved={async () => { const response = await fetch("/api/production", { cache: "no-store" }); if (!response.ok) throw new Error("Could not refresh photo."); setState(normalizeState(await response.json())); }} />}
+          {state.canManageDirectory && <ResourcePhoto hasPhoto={Boolean(member.photoUrl)} kind="crew" id={member.id} showToast={showToast} onSaved={async () => { const response = await fetch("/api/production", { cache: "no-store" }); if (!response.ok) throw new Error("Could not refresh photo."); setState(normalizeState(await response.json())); }} />}
           <footer>{member.profileUrl ? <a href={member.profileUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open portfolio</a> : <span>No personal portfolio link</span>}{state.canManageDirectory && <button type="button" onClick={() => openCrew(member)}><Pencil size={14} /> Edit</button>}{state.canManageDirectory && <button type="button" disabled={saving} onClick={() => void deleteCrew(member)} aria-label={`Delete ${member.name}`}><Trash2 size={14} /> Delete</button>}</footer>
         </article>;
       })}</div> : <div className={styles.empty}><UsersRound size={27} /><h3>No matching people</h3><p>{state.crew.length ? "Try another search or category." : "Add the first model, photographer, or videographer to start the directory."}</p>{state.canManageDirectory && !state.crew.length && <button type="button" className={styles.primaryAction} onClick={openNewCrew}><Plus size={15} /> Add first person</button>}</div>}
