@@ -27,6 +27,13 @@ const taskSchema = [
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS task_submissions (
+    task_id INTEGER NOT NULL REFERENCES agency_tasks(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL, user_name TEXT NOT NULL, part TEXT NOT NULL DEFAULT '',
+    method TEXT NOT NULL, url TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
+    submitted_at TEXT NOT NULL, late_minutes INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(task_id, user_id)
+  )`,
   "CREATE INDEX IF NOT EXISTS idx_agency_tasks_assignee_status_deadline ON agency_tasks(assigned_user_id, status, deadline_at)",
   "CREATE INDEX IF NOT EXISTS idx_agency_tasks_schedule ON agency_tasks(start_at, deadline_at)",
   "CREATE INDEX IF NOT EXISTS idx_agency_tasks_creator ON agency_tasks(created_by_user_id, created_at)",
@@ -37,10 +44,28 @@ let tasksDatabaseReady: Promise<void> | null = null;
 export async function ensureTasksDatabase() {
   tasksDatabaseReady ??= database.batch(taskSchema.map((statement) => database.prepare(statement))).then(async () => {
     const columns = (await database.prepare("PRAGMA table_info(agency_tasks)").all<{name:string}>()).results;
-    for (const [name, value] of [["grid_post_notes_json", "[]"], ["task_notes", ""], ["grid_cells_json", "[]"], ["assigned_users_json", "[]"], ["submission_method", "link"], ["submission_notes", ""], ["submitted_by_name", ""]]) {
+    for (const [name, value] of [["individual_tracking", ""], ["grid_post_notes_json", "[]"], ["task_notes", ""], ["grid_cells_json", "[]"], ["assigned_users_json", "[]"], ["submission_method", "link"], ["submission_notes", ""], ["submitted_by_name", ""]]) {
       if (columns.some(c => c.name === name)) continue;
       try { await database.prepare(`ALTER TABLE agency_tasks ADD COLUMN ${name} TEXT NOT NULL DEFAULT '${value}'`).run(); }
       catch(error) { if (!/duplicate column/i.test(String(error))) throw error; }
+    }
+    const legacy = await database.prepare("SELECT * FROM agency_tasks WHERE individual_tracking = ''").all<Record<string,unknown>>();
+    for (const row of legacy.results) {
+      const team = JSON.parse(String(row.assigned_users_json || "[]")) as {id:number;displayName:string}[];
+      const people = team.length ? team : [{id:Number(row.assigned_user_id),displayName:String(row.assigned_user_name)}];
+      const matches = people.filter(person => person.displayName === row.submitted_by_name);
+      const sender = people.length === 1 ? people[0] : matches.length === 1 ? matches[0] : null;
+      const statements = [];
+      if (row.status === "submitted" && sender) {
+        statements.push(database.prepare(`INSERT OR IGNORE INTO task_submissions (task_id,user_id,user_name,part,method,url,notes,submitted_at,late_minutes)
+          SELECT id,?,?, '',submission_method,submission_url,submission_notes,submitted_at,late_minutes FROM agency_tasks
+          WHERE id=? AND individual_tracking='' AND NOT EXISTS (SELECT 1 FROM task_submissions WHERE task_id=agency_tasks.id)`).bind(sender.id,String(row.submitted_by_name || sender.displayName),row.id));
+        statements.push(database.prepare(`UPDATE agency_tasks SET status='assigned', submitted_at='', late_minutes=0
+          WHERE id=? AND individual_tracking='' AND (SELECT COUNT(*) FROM task_submissions WHERE task_id=agency_tasks.id)>0
+          AND (SELECT COUNT(*) FROM task_submissions WHERE task_id=agency_tasks.id) < ?`).bind(row.id,people.length));
+      }
+      statements.push(database.prepare("UPDATE agency_tasks SET individual_tracking='1' WHERE id=?").bind(row.id));
+      await database.batch(statements);
     }
   });
   try {
@@ -130,6 +155,7 @@ function taskFromRow(row: Record<string, unknown>, nowEpoch: number): AgencyTask
     ? Math.max(0, Math.ceil((nowEpoch - deadlineEpoch) / 60_000))
     : numberValue(row.lateMinutes);
   return {
+    submissions: JSON.parse(String(row.submissionsJson || "[]")),
     id: numberValue(row.id),
     title: String(row.title ?? ""),
     details: String(row.details ?? ""),
@@ -194,7 +220,7 @@ export async function getTasksState(session: AuthSession): Promise<TasksState> {
     : role === "account_manager"
       ? `(${assignedAccess} OR t.created_by_user_id = ?)`
       : assignedAccess;
-  const query = database.prepare(`SELECT t.grid_post_notes_json AS gridPostNotesJson, t.task_notes AS taskNotes, t.grid_cells_json AS gridCellsJson, t.assigned_users_json AS assignedUsersJson, t.submission_method AS submissionMethod, t.submission_notes AS submissionNotes, t.submitted_by_name AS submittedByName, t.id, t.title, t.details, t.brief, t.grid_notes AS gridNotes,
+  const query = database.prepare(`SELECT (SELECT json_group_array(json_object('userId',s.user_id,'userName',s.user_name,'part',s.part,'method',s.method,'url',s.url,'notes',s.notes,'submittedAt',s.submitted_at,'lateMinutes',s.late_minutes)) FROM task_submissions s WHERE s.task_id=t.id) AS submissionsJson, t.grid_post_notes_json AS gridPostNotesJson, t.task_notes AS taskNotes, t.grid_cells_json AS gridCellsJson, t.assigned_users_json AS assignedUsersJson, t.submission_method AS submissionMethod, t.submission_notes AS submissionNotes, t.submitted_by_name AS submittedByName, t.id, t.title, t.details, t.brief, t.grid_notes AS gridNotes,
       t.references_json AS referencesJson, t.start_at AS startAt, t.deadline_at AS deadlineAt,
       t.assigned_user_id AS assignedUserId, t.assigned_user_name AS assignedUserName,
       t.assigned_user_role AS assignedUserRole, t.created_by_user_id AS createdByUserId,

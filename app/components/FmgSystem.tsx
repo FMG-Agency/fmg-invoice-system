@@ -31,6 +31,7 @@ import {
   Plus,
   Printer,
   ReceiptText,
+  RefreshCw,
   Search,
   Settings2,
   ShieldCheck,
@@ -752,6 +753,7 @@ export function FmgSystem() {
             </div>}
           </div>
           <div className="top-actions">
+            <button type="button" className="icon-button" disabled={busy || loading} title="Refresh workspace" aria-label="Refresh workspace" onClick={() => { if (window.confirm("Refresh this screen? Any unsaved changes will be discarded.")) void loadWorkspace(); }}><RefreshCw size={18} /></button>
             <button className="icon-button theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
             <NotificationCenter onNavigate={(target) => chooseView(target)} showToast={showToast} />
             <div className="top-avatar">{initials(auth.displayName || auth.username)}</div>

@@ -32,6 +32,7 @@ const taskData = z.object({
   startAt: localDateTime,
   deadlineAt: localDateTime,
   assignedUserId: z.number().int().positive(),
+  assignments: z.array(z.object({userId:z.number().int().positive(),part:z.string().trim().max(300)})).max(50).default([]),
   additionalUserIds: z.array(z.number().int().positive()).max(49).default([]),
   gridPostNotes: z.array(z.string().trim().max(2000)).max(36).default([]),
   gridCells: z.array(z.enum(["design", "carousel", "video"])).max(36).default([]),
@@ -39,7 +40,7 @@ const taskData = z.object({
 const payloadSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("delete"), id: z.number().int().positive() }),
   z.object({ action: z.literal("create"), data: taskData }),
-  z.object({ action: z.literal("submit"), id: z.number().int().positive(), submissionMethod: z.enum(["link", "flash_drive", "other"]).default("link"), submissionNotes: z.string().trim().max(2000).default(""), submissionUrl: z.union([httpUrl, z.literal("")]).default("") }),
+  z.object({ action: z.literal("submit"), id: z.number().int().positive(), submissionPart: z.string().trim().max(300).default(""), submissionMethod: z.enum(["link", "flash_drive", "other"]).default("link"), submissionNotes: z.string().trim().max(2000).default(""), submissionUrl: z.union([httpUrl, z.literal("")]).default("") }),
 ]);
 
 function sessionName(session: { displayName: string; username: string }) {
@@ -83,8 +84,8 @@ export async function POST(request: Request) {
 
     if (payload.action === "delete") {
       if (!session.isAdmin) return Response.json({ error: "Only administrators can delete tasks." }, { status: 403 });
-      const deleted = await database.prepare("DELETE FROM agency_tasks WHERE id = ?").bind(payload.id).run();
-      if (!Number(deleted.meta.changes)) return Response.json({ error: "Task not found." }, { status: 404 });
+      const deleted = await database.batch([database.prepare("DELETE FROM task_submissions WHERE task_id = ?").bind(payload.id), database.prepare("DELETE FROM agency_tasks WHERE id = ?").bind(payload.id)]);
+      if (!Number(deleted[1].rowsAffected)) return Response.json({ error: "Task not found." }, { status: 404 });
       return Response.json(await getTasksState(session));
     }
 
@@ -100,7 +101,7 @@ export async function POST(request: Request) {
       const ids = [...new Set([payload.data.assignedUserId, ...payload.data.additionalUserIds])];
       const available = await taskAssignees(session);
       if (ids.some(id => !available.some(a => a.id === id))) return Response.json({error:"You cannot assign a task to this user."}, {status:403});
-      const team = ids.map(id => { const a = available.find(a => a.id === id)!; return {id, displayName:a.displayName, roleLabel:a.roleLabel}; });
+      const team = ids.map(id => { const a = available.find(a => a.id === id)!; return {id, displayName:a.displayName, roleLabel:a.roleLabel, part:payload.data.assignments.find(item=>item.userId===id)?.part || ""}; });
       const creatorName = sessionName(session);
       const result = await database.prepare(`INSERT INTO agency_tasks
           (grid_post_notes_json, task_notes, grid_cells_json, assigned_users_json, title, details, brief, grid_notes, references_json, start_at, deadline_at,
@@ -131,11 +132,22 @@ export async function POST(request: Request) {
       const now = cairoNow();
       const deadlineEpoch = cairoLocalEpoch(String(task.deadlineAt ?? ""));
       const lateMinutes = Number.isFinite(deadlineEpoch) ? Math.max(0, Math.ceil((Date.now() - deadlineEpoch) / 60_000)) : 0;
-      const updated = await database.prepare(`UPDATE agency_tasks SET status = 'submitted', submission_method = ?, submission_notes = ?, submitted_by_name = ?, submission_url = ?,
-          submitted_at = ?, late_minutes = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND status = 'assigned' AND (assigned_user_id = ? OR EXISTS (SELECT 1 FROM json_each(assigned_users_json) a WHERE json_extract(a.value, '$.id') = ?))`)
-        .bind(payload.submissionMethod, payload.submissionNotes, sessionName(session), payload.submissionMethod === "link" ? payload.submissionUrl : "", now.dateTime, lateMinutes, payload.id, session.userId, session.userId).run();
-      if (!Number(updated.meta.changes)) return Response.json({ error: "This task was already submitted." }, { status: 409 });
+      const updated = await database.batch([
+        database.prepare(`INSERT OR IGNORE INTO task_submissions (task_id,user_id,user_name,part,method,url,notes,submitted_at,late_minutes)
+          SELECT id,?,?,?,?,?,?,?,? FROM agency_tasks
+          WHERE id = ? AND status = 'assigned' AND (assigned_user_id = ? OR EXISTS (SELECT 1 FROM json_each(assigned_users_json) a WHERE json_extract(a.value, '$.id') = ?))`)
+          .bind(session.userId,sessionName(session),payload.submissionPart,payload.submissionMethod,payload.submissionMethod === "link" ? payload.submissionUrl : "",payload.submissionNotes,now.dateTime,lateMinutes,payload.id,session.userId,session.userId),
+        database.prepare(`UPDATE agency_tasks SET status = 'submitted',
+          submitted_at = (SELECT MAX(submitted_at) FROM task_submissions WHERE task_id = agency_tasks.id),
+          late_minutes = (SELECT MAX(late_minutes) FROM task_submissions WHERE task_id = agency_tasks.id),
+          submission_method = ?, submission_notes = ?, submitted_by_name = ?, submission_url = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND status = 'assigned' AND NOT EXISTS (
+            SELECT user_id FROM (SELECT assigned_user_id AS user_id UNION SELECT CAST(json_extract(value,'$.id') AS INTEGER) FROM json_each(assigned_users_json)) team
+            WHERE NOT EXISTS (SELECT 1 FROM task_submissions s WHERE s.task_id = agency_tasks.id AND s.user_id = team.user_id)
+          )`).bind(payload.submissionMethod,payload.submissionNotes,sessionName(session),payload.submissionMethod === "link" ? payload.submissionUrl : "",payload.id),
+      ]);
+      if (!updated[0].rowsAffected) return Response.json({ error: "Your part was already submitted." }, { status: 409 });
+      const finished = Boolean(updated[1].rowsAffected);
       const recipients = [
         Number(task.createdByUserId),
         ...await administratorUserIds(session.userId),
@@ -143,8 +155,8 @@ export async function POST(request: Request) {
       ];
       await notifyUsers(recipients, {
         type: "task_submitted",
-        title: "Task submitted",
-        message: `${sessionName(session)} submitted “${String(task.title ?? "Task")}”${lateMinutes ? ` ${lateMinutes} minutes late` : " on time"}.`,
+        title: finished ? "Task fully submitted" : "Task part submitted",
+        message: `${sessionName(session)} submitted their part of “${String(task.title ?? "Task")}”${lateMinutes ? ` ${lateMinutes} minutes late` : " on time"}. ${finished ? "All employees have delivered." : "Waiting for remaining employees."}`,
         targetView: "tasks",
         entityId: payload.id,
         actorUserId: session.userId,

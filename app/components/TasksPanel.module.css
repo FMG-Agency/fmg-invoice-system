@@ -208,3 +208,10 @@
 .gridCell:has(.postNoteInput),.gridCell:has(.postNote) { aspect-ratio:auto; min-height:160px; }
 .postNote { width:100%; white-space:pre-wrap; overflow-wrap:anywhere; text-transform:none; margin:5px 0 0 !important; font-size:12px; text-align:left; }
 .postNote b { display:block; margin-bottom:4px; }
+
+.deliveries { padding: 18px; display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,240px),1fr)); gap: 12px; }
+.deliveries > h3, .deliveries > p { grid-column: 1 / -1; }
+.deliveries article { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--surface-2); min-width: 0; }
+.deliveries header { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.deliveries p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
+.deliveries a { color: var(--yellow-ink); }

@@ -103,6 +103,18 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   assert.equal((await app.database.prepare('SELECT generated_code AS code FROM documents WHERE id=?').bind(linked.id).first()).code,'Legacy-MG0099');
   const count=await app.database.prepare('SELECT COUNT(*) AS total FROM documents WHERE production_work_order_id=?').bind(order.id).first();
   assert.equal(count.total,1);
+  // Recover the known sender of legacy shared deliveries without closing teammates' work.
+  for (const [name,value] of [['assigned_users_json','[]'],['submitted_by_name',''],['submission_method','link'],['submission_notes','']]) {
+    await app.database.prepare("ALTER TABLE agency_tasks ADD COLUMN " + name + " TEXT NOT NULL DEFAULT '" + value + "'").run();
+  }
+  const legacyTeam=JSON.stringify([{id:101,displayName:'Old Designer',roleLabel:'Designer'},{id:102,displayName:'Old Editor',roleLabel:'Editor'}]);
+  await app.database.prepare("INSERT INTO agency_tasks (title,start_at,deadline_at,assigned_user_id,assigned_user_name,created_by_user_id,created_by_name,status,submitted_at,assigned_users_json,submitted_by_name,submission_method) VALUES ('Legacy shared','2026-09-13T09:00','2026-09-14T18:00',101,'Old Designer',101,'Manager','submitted','2026-09-14T17:00',?,'Old Designer','flash_drive')").bind(legacyTeam).run();
+  const recovered=(await app.taskState(request({})).then(r=>r.json())).tasks.find(t=>t.title==='Legacy shared');
+  assert.equal(recovered.status,'assigned');
+  assert.equal(recovered.submissions.length,1);
+  assert.equal(recovered.submissions[0].userId,101);
+  assert.equal(recovered.submissions[0].submittedAt,'2026-09-14T17:00');
+  await call(app.tasks,{action:'delete',id:recovered.id});
   // Shared task visibility, optional grids and delivery authorization use isolated storage.
   globalThis.documentTestSession={...globalThis.documentTestSession,userId:101,displayName:'Task Creator'};
   const taskResult=await call(app.tasks,{action:'create',data:{title:'Shared grid',notes:'First line\nSecond line',details:'Create three posts',assignedUserId:101,additionalUserIds:[102,102],gridCells:['design','carousel','video'],gridPostNotes:['Design note\nسطر ثاني','','Video note'],startAt:'2026-09-13T09:00',deadlineAt:'2026-09-14T18:00'}});
@@ -117,11 +129,17 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   globalThis.documentTestSession={...globalThis.documentTestSession,userId:102,displayName:'Second Employee'};
   assert.equal((await app.taskState(request({})).then(r=>r.json())).tasks.length,1);
   const submitted=await call(app.tasks,{action:'submit',id:shared.id,submissionMethod:'flash_drive',submissionUrl:'unfinished link',submissionNotes:'USB handed to manager'});
-  assert.equal(submitted.tasks[0].submissionMethod,'flash_drive');
-  assert.equal(submitted.tasks[0].submittedByName,'Second Employee');
-  assert.equal(submitted.tasks[0].status,'submitted');
+  assert.equal(submitted.tasks[0].submissions[0].method,'flash_drive');
+  assert.equal(submitted.tasks[0].submissions[0].userName,'Second Employee');
+  assert.equal(submitted.tasks[0].status,'assigned');
+  assert.equal(submitted.tasks[0].submissions.length,1);
   assert.equal((await app.tasks(request({action:'submit',id:shared.id,submissionMethod:'flash_drive'}))).status,409);
   globalThis.documentTestSession={...globalThis.documentTestSession,userId:101,isAdmin:true,roleLabel:'Administrator'};
+  const finished=await call(app.tasks,{action:'submit',id:shared.id,submissionMethod:'link',submissionUrl:'https://example.com/video',submissionPart:'Video'});
+  assert.equal(finished.tasks[0].status,'submitted');
+  assert.equal(finished.tasks[0].submissions.length,2);
+  assert.equal(finished.tasks[0].submissions.find(s=>s.userId===102).notes,'USB handed to manager');
+  assert.ok(finished.tasks[0].submissions.every(s=>s.submittedAt && s.lateMinutes>0));
   const noGrid=await call(app.tasks,{action:'create',data:{title:'No grid',details:'Ordinary work',assignedUserId:101,startAt:'2026-09-13T09:00',deadlineAt:'2026-09-14T18:00'}});
   assert.deepEqual(noGrid.tasks.find(t=>t.title==='No grid').gridCells,[]);
   const deleteId=noGrid.tasks.find(t=>t.title==='No grid').id;

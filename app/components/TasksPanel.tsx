@@ -41,6 +41,7 @@ type TaskDraft = {
   startAt: string;
   deadlineAt: string;
   assignedUserId: number;
+  assignments: {userId:number;part:string}[];
   additionalUserIds: number[];
   gridCells: TaskGridCell[];
   gridPostNotes: string[];
@@ -69,7 +70,7 @@ function initialSchedule() {
 
 function blankDraft(): TaskDraft {
   const schedule = initialSchedule();
-  return { title: "", details: "", brief: "", notes: "", gridNotes: "", references: [], startAt: schedule.startAt, deadlineAt: schedule.deadlineAt, assignedUserId: 0, additionalUserIds: [], gridCells: [], gridPostNotes: [] };
+  return { title: "", details: "", brief: "", notes: "", gridNotes: "", references: [], startAt: schedule.startAt, deadlineAt: schedule.deadlineAt, assignedUserId: 0, additionalUserIds: [], assignments: [], gridCells: [], gridPostNotes: [] };
 }
 
 function dateTimeLabel(value: string) {
@@ -96,6 +97,10 @@ function durationLabel(minutes: number) {
   return [days ? `${days}d` : "", hours ? `${hours}h` : "", rest ? `${rest}m` : ""].filter(Boolean).join(" ");
 }
 
+function personalTask(task: AgencyTask, userId: number): AgencyTask {
+  const delivery = task.submissions.find(item => item.userId === userId);
+  return delivery ? {...task,status:"submitted",submittedAt:delivery.submittedAt,lateMinutes:delivery.lateMinutes,liveLateMinutes:delivery.lateMinutes} : task;
+}
 function statusCopy(task: AgencyTask) {
   if (task.status === "submitted") return task.lateMinutes ? `Submitted · ${durationLabel(task.lateMinutes)} late` : "Submitted on time";
   return task.liveLateMinutes ? `Overdue · ${durationLabel(task.liveLateMinutes)}` : "In progress";
@@ -129,6 +134,7 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
   const [dailyEmployee, setDailyEmployee] = useState("all");
   const [submitting, setSubmitting] = useState<AgencyTask | null>(null);
   const [submissionMethod, setSubmissionMethod] = useState("link");
+  const [submissionPart, setSubmissionPart] = useState("");
   const [submissionNotes, setSubmissionNotes] = useState("");
   const [submissionUrl, setSubmissionUrl] = useState("");
 
@@ -190,11 +196,11 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
   async function submitTask(event: React.FormEvent) {
     event.preventDefault();
     if (!submitting) return;
-    const done = await mutate({ action: "submit", id: submitting.id, submissionUrl: submissionMethod === "link" ? submissionUrl.trim() : "", submissionMethod, submissionNotes });
+    const done = await mutate({ action: "submit", id: submitting.id, submissionUrl: submissionMethod === "link" ? submissionUrl.trim() : "", submissionMethod, submissionNotes, submissionPart });
     if (!done) return;
     setSubmitting(null);
     setSubmissionUrl("");
-    showToast("Task submitted successfully.");
+    showToast("Your part was submitted. The task closes when everyone has delivered.");
   }
 
   function updateReference(index: number, key: keyof TaskReference, value: string) {
@@ -203,27 +209,28 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
 
   const stats = useMemo(() => {
     const currentDate = state.currentDate;
+    const relevant = state.role === "member" ? state.tasks.map(task=>personalTask(task,state.userId)) : state.tasks;
     return {
-      mine: state.tasks.filter((task) => task.assignedUsers.some(a => a.id === state.userId) && task.status === "assigned").length,
-      dueToday: state.tasks.filter((task) => taskTouchesDate(task, currentDate) && task.status === "assigned").length,
-      submittedToday: state.tasks.filter((task) => task.submittedAt.slice(0, 10) === currentDate).length,
-      overdue: state.tasks.filter((task) => task.status === "assigned" && task.liveLateMinutes > 0).length,
+      mine: state.tasks.filter((task) => task.assignedUsers.some(a => a.id === state.userId) && personalTask(task,state.userId).status === "assigned").length,
+      dueToday: relevant.filter((task) => taskTouchesDate(task, currentDate) && task.status === "assigned").length,
+      submittedToday: relevant.filter((task) => task.submittedAt.slice(0, 10) === currentDate).length,
+      overdue: relevant.filter((task) => task.status === "assigned" && task.liveLateMinutes > 0).length,
     };
   }, [state]);
 
   const filteredTasks = useMemo(() => state.tasks.filter((task) => {
     if (scope === "mine") return task.assignedUsers.some(a => a.id === state.userId);
     if (scope === "created") return task.createdByUserId === state.userId;
-    if (scope === "submitted") return task.status === "submitted";
+    if (scope === "submitted") return (state.role === "member" ? personalTask(task,state.userId) : task).status === "submitted";
     return true;
   }), [scope, state]);
 
-  const dailyTasks = useMemo(() => state.tasks.filter((task) => taskTouchesDate(task, dailyDate) && (dailyEmployee === "all" || task.assignedUsers.some(a => a.id === Number(dailyEmployee)))), [dailyDate, dailyEmployee, state.tasks]);
+  const dailyTasks = useMemo(() => state.tasks.filter((task) => taskTouchesDate(task, dailyDate) && (dailyEmployee === "all" || task.assignedUsers.some(a => a.id === Number(dailyEmployee)))).map(task => dailyEmployee === "all" ? task : personalTask(task, Number(dailyEmployee))), [dailyDate, dailyEmployee, state.tasks]);
   const dailyGroups = useMemo(() => {
     const groups = new Map<number, { name: string; role: string; tasks: AgencyTask[] }>();
     dailyTasks.forEach((task) => task.assignedUsers.filter(a => dailyEmployee === "all" || a.id === Number(dailyEmployee)).forEach((assignee) => {
       const group = groups.get(assignee.id) ?? { name: assignee.displayName, role: assignee.roleLabel, tasks: [] };
-      group.tasks.push(task);
+      group.tasks.push(personalTask(task, assignee.id));
       groups.set(assignee.id, group);
     }));
     return [...groups.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name));
@@ -271,18 +278,20 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
         <button className={scope === "mine" ? styles.activeFilter : ""} onClick={() => setScope("mine")}>Assigned to me <span>{state.tasks.filter((task) => task.assignedUsers.some(a => a.id === state.userId)).length}</span></button>
         {state.canCreate && <button className={scope === "created" ? styles.activeFilter : ""} onClick={() => setScope("created")}>Created by me <span>{state.tasks.filter((task) => task.createdByUserId === state.userId).length}</span></button>}
         {state.canViewDaily && <button className={scope === "all" ? styles.activeFilter : ""} onClick={() => setScope("all")}>All <span>{state.tasks.length}</span></button>}
-        <button className={scope === "submitted" ? styles.activeFilter : ""} onClick={() => setScope("submitted")}>Submitted <span>{state.tasks.filter((task) => task.status === "submitted").length}</span></button>
+        <button className={scope === "submitted" ? styles.activeFilter : ""} onClick={() => setScope("submitted")}>Submitted <span>{state.tasks.filter((task) => (state.role === "member" ? personalTask(task,state.userId) : task).status === "submitted").length}</span></button>
       </div></header>
 
       {loading ? <div className={styles.loading}><LoaderCircle size={28} /><strong>Loading tasks…</strong></div> : filteredTasks.length ? <div className={styles.taskList}>{filteredTasks.map((task) => {
         const open = expanded.has(task.id);
-        return <article id={`task-${task.id}`} key={task.id} className={`${styles.taskCard} ${task.liveLateMinutes && task.status === "assigned" ? styles.overdueCard : ""}`}>
+        const mine = task.assignedUsers.some(person => person.id === state.userId);
+        const displayTask = mine ? personalTask(task,state.userId) : task;
+        return <article id={`task-${task.id}`} key={task.id} className={`${styles.taskCard} ${displayTask.liveLateMinutes && displayTask.status === "assigned" ? styles.overdueCard : ""}`}>
           <button type="button" className={styles.taskToggle} onClick={() => toggleTask(task.id)} aria-expanded={open}>
-            <span className={task.status === "submitted" ? styles.doneIcon : task.liveLateMinutes ? styles.lateIcon : styles.progressIcon}>{task.status === "submitted" ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}</span>
-            <span className={styles.taskIdentity}><small>#{String(task.id).padStart(4, "0")} · {task.assignedUsers.map(a => a.displayName).join(", ")}</small><strong>{task.title}</strong><em>Assigned by {task.createdByName}</em></span>
+            <span className={displayTask.status === "submitted" ? styles.doneIcon : displayTask.liveLateMinutes ? styles.lateIcon : styles.progressIcon}>{displayTask.status === "submitted" ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}</span>
+            <span className={styles.taskIdentity}><small>#{String(task.id).padStart(4, "0")} · {task.assignedUsers.map(a => a.displayName).join(", ")}</small><strong>{task.title}</strong><em>Assigned by {task.createdByName} · {task.status === "submitted" ? "All delivered" : `${task.submissions.length}/${task.assignedUsers.length} delivered`}{mine && displayTask.status === "submitted" && task.status !== "submitted" ? " · Your part is done — waiting for teammates" : ""}</em></span>
             <span className={styles.schedule}><small>START</small><strong>{dateTimeLabel(task.startAt)}</strong></span>
             <span className={styles.schedule}><small>DEADLINE</small><strong>{dateTimeLabel(task.deadlineAt)}</strong></span>
-            <span className={`${styles.statusBadge} ${task.status === "submitted" ? styles.doneText : task.liveLateMinutes ? styles.lateText : styles.openText}`}>{statusCopy(task)}</span>
+            <span className={`${styles.statusBadge} ${displayTask.status === "submitted" ? styles.doneText : displayTask.liveLateMinutes ? styles.lateText : styles.openText}`}>{statusCopy(displayTask)}</span>
             <span className={styles.expandLabel}>{open ? "Hide" : "Details"}<ChevronDown className={open ? styles.rotated : ""} size={16} /></span>
           </button>
           {open && <div className={styles.taskDetails}>
@@ -293,7 +302,18 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
               {(task.gridCells.length > 0 || task.gridNotes) && <section><span><FileText size={14} /> INSTAGRAM GRID</span><div className={styles.instagramGrid} dir="ltr">{task.gridCells.map((cell, index) => <div key={index} style={{gridRow: Math.ceil(task.gridCells.length / 3) - Math.floor(index / 3), gridColumn: 3 - index % 3}} className={styles.gridCell} data-kind={cell}><small>#{index + 1}</small><strong>{cell === "design" ? "▧" : cell === "carousel" ? "▣" : "▶"}</strong><span>{cell}</span>{task.gridPostNotes?.[index] && <p className={styles.postNote}><b>Note</b>{task.gridPostNotes[index]}</p>}</div>)}</div>{task.gridNotes && <p>{task.gridNotes}</p>}</section>}
               <section><span><Link2 size={14} /> REFERENCES · {task.references.length}</span>{task.references.length ? <div className={styles.referenceList}>{task.references.map((reference, index) => <a key={`${reference.url}-${index}`} href={reference.url} target="_blank" rel="noopener noreferrer"><span>{reference.label || `Reference ${index + 1}`}</span><ExternalLink size={13} /></a>)}</div> : <p>No references added.</p>}</section>
             </div>
-            <footer>{state.role === "administrator" && <button type="button" className={styles.deleteTaskButton} disabled={saving} onClick={() => void deleteTask(task)}><Trash2 size={14} /> Delete task</button>}<div><span>Assigned to <strong>{task.assignedUsers.map(a => a.displayName).join(", ")}</strong> · {task.assignedUserRole}</span>{task.status === "submitted" && <span>Submitted {dateTimeLabel(task.submittedAt)} · {task.lateMinutes ? `${durationLabel(task.lateMinutes)} late` : "on time"}</span>}</div>{task.status === "submitted" && <span>Delivery: {task.submissionMethod === "flash_drive" ? "Flash drive / USB" : task.submissionMethod === "other" ? "Other" : "Link"}{task.submittedByName && ` · By ${task.submittedByName}`}{task.submissionNotes && ` · ${task.submissionNotes}`}</span>}{task.submissionUrl && <a href={task.submissionUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} /> Open submitted link</a>}{task.status === "assigned" && task.assignedUsers.some(a => a.id === state.userId) && <button type="button" onClick={() => { setSubmitting(task); setSubmissionUrl(""); setSubmissionMethod("link"); setSubmissionNotes(""); }}><Send size={14} /> Submit completed task</button>}</footer>
+            <section className={styles.deliveries}><h3>Employee deliveries · {task.submissions.length}/{task.assignedUsers.length}</h3>
+              {task.status === "submitted" && !task.submissions.length ? <p>Previously completed task · historical shared delivery by {task.submittedByName || "the team"} on {dateTimeLabel(task.submittedAt)}. Individual delivery times were not recorded.</p> : task.assignedUsers.map(person => {
+                const delivery = task.submissions.find(item => item.userId === person.id);
+                return <article key={person.id}><header><strong>{person.displayName}</strong><span>{delivery ? "Delivered" : "Pending"}</span></header><p>{person.part || person.roleLabel}</p>
+                  {delivery ? <><p><strong>{delivery.part || "Assigned part"}</strong></p><p>{dateTimeLabel(delivery.submittedAt)} · {delivery.lateMinutes ? `${durationLabel(delivery.lateMinutes)} late` : "On time"}</p><p>Delivery: {delivery.method === "flash_drive" ? "Flash drive / USB" : delivery.method === "other" ? "Other" : "Link"}</p>{delivery.notes && <p>{delivery.notes}</p>}{delivery.url && <a href={delivery.url} target="_blank" rel="noopener noreferrer">Open submitted work ↗</a>}</> : <p>{task.liveLateMinutes ? `Overdue by ${durationLabel(task.liveLateMinutes)}` : "Waiting for delivery"}</p>}
+                </article>;
+              })}
+            </section>
+            <footer>{state.role === "administrator" && <button type="button" className={styles.deleteTaskButton} disabled={saving} onClick={() => void deleteTask(task)}><Trash2 size={14} /> Delete task</button>}
+              {task.status === "submitted" && !task.submissions.length && task.submissionUrl && <a href={task.submissionUrl} target="_blank" rel="noopener noreferrer">Open historical submitted link</a>}
+              {task.status === "assigned" && mine && !task.submissions.some(item=>item.userId===state.userId) && <button type="button" onClick={() => { setSubmitting(task); setSubmissionUrl(""); setSubmissionMethod("link"); setSubmissionNotes(""); setSubmissionPart(task.assignedUsers.find(person=>person.id===state.userId)?.part || ""); }}><Send size={14} /> Submit my part</button>}
+            </footer>
           </div>}
         </article>;
       })}</div> : <div className={styles.emptyTasks}><CheckCircle2 size={30} /><strong>No tasks in this view.</strong><span>Assigned work and completed submissions will appear here.</span></div>}
@@ -304,6 +324,7 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
         <div className={styles.formGrid}>
           <label><span>Assign to</span><select required value={draft.assignedUserId || ""} onChange={(event) => setDraft((current) => ({ ...current, assignedUserId: Number(event.target.value) }))}><option value="" disabled>Select a team member</option>{state.assignees.map((assignee) => <option key={assignee.id} value={assignee.id}>{assignee.displayName} · {assignee.employeeTitle || assignee.roleLabel}</option>)}</select></label>
           <div className={styles.teamEditor}>{draft.additionalUserIds.map((id,index) => <div key={index}><label><span>Additional employee {index + 1}</span><select required value={id || ""} onChange={event => setDraft(current => ({...current, additionalUserIds:current.additionalUserIds.map((value,i)=>i===index?Number(event.target.value):value)}))}><option value="" disabled>Select a team member</option>{state.assignees.filter(a => a.id !== draft.assignedUserId && (!draft.additionalUserIds.includes(a.id) || a.id===id)).map(a=><option key={a.id} value={a.id}>{a.displayName}</option>)}</select></label><button type="button" aria-label={`Remove employee ${index+1}`} onClick={()=>setDraft(current=>({...current,additionalUserIds:current.additionalUserIds.filter((_,i)=>i!==index)}))}><X size={15}/></button></div>)}<button type="button" disabled={draft.additionalUserIds.length >= state.assignees.length-1} onClick={()=>setDraft(current=>({...current,additionalUserIds:[...current.additionalUserIds,0]}))}><Plus size={15}/> Assign another employee</button></div>
+          {[...new Set([draft.assignedUserId,...draft.additionalUserIds])].filter(Boolean).map(userId => <label key={userId}><span>{state.assignees.find(person=>person.id===userId)?.displayName} · Assigned part <small>Optional</small></span><input maxLength={300} placeholder="Design, video, copywriting…" value={draft.assignments.find(item=>item.userId===userId)?.part || ""} onChange={event=>setDraft(current=>({...current,assignments:[...current.assignments.filter(item=>item.userId!==userId),{userId,part:event.target.value}]}))} /></label>)}
           <label><span>Task title</span><input required minLength={2} maxLength={200} value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Example: September grid – Part 1" /></label>
           <label><span>Start date & time</span><input required type="datetime-local" value={draft.startAt} onChange={(event) => setDraft((current) => ({ ...current, startAt: event.target.value }))} /></label>
           <label><span>Deadline</span><input required type="datetime-local" min={draft.startAt} value={draft.deadlineAt} onChange={(event) => setDraft((current) => ({ ...current, deadlineAt: event.target.value }))} /></label>
@@ -320,13 +341,14 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
       </form>
     </TaskModal>}
 
-    {submitting && <TaskModal eyebrow="TASK DELIVERY" title={`Submit “${submitting.title}”`} description="Confirm the task is complete. The completion time is recorded immediately and compared with the deadline." onClose={() => !saving && setSubmitting(null)}>
+    {submitting && <TaskModal eyebrow="TASK DELIVERY" title={`Submit “${submitting.title}”`} description="Submit only your assigned part. Your delivery time and lateness are recorded independently." onClose={() => !saving && setSubmitting(null)}>
       <form className={styles.submitForm} onSubmit={(event) => void submitTask(event)}>
         <div className={styles.submitSummary}><span><Clock3 size={17} /></span><div><small>DEADLINE</small><strong>{dateTimeLabel(submitting.deadlineAt)}</strong><p>{submitting.liveLateMinutes ? `Currently ${durationLabel(submitting.liveLateMinutes)} late` : "Still within the deadline"}</p></div></div>
+        <label><span>Your delivered part</span><input required maxLength={300} value={submissionPart} onChange={event=>setSubmissionPart(event.target.value)} placeholder="For example: final designs or edited video" /></label>
         <label><span>Delivery method</span><select value={submissionMethod} onChange={event=>{setSubmissionMethod(event.target.value); setSubmissionUrl("");}}><option value="link">Link</option><option value="flash_drive">Flash drive / USB</option><option value="other">Other delivery method</option></select></label>
         {submissionMethod === "link" && <label><span>Completed work link <small>Optional</small></span><div><Link2 size={16} /><input type="url" value={submissionUrl} onChange={(event) => setSubmissionUrl(event.target.value)} placeholder="https://drive.google.com/…" /></div></label>}
         <label><span>Delivery notes {submissionMethod !== "other" && <small>Optional</small>}</span><textarea required={submissionMethod === "other"} maxLength={2000} value={submissionNotes} onChange={event=>setSubmissionNotes(event.target.value)} placeholder="For example: handed the USB drive to the Production Manager" /></label>
-        <p className={styles.confirmNote}><CheckCircle2 size={15} /> Any assigned employee can submit for the whole team. Submission marks this shared task as completed and records the exact Cairo delivery time.</p>
+        <p className={styles.confirmNote}><CheckCircle2 size={15} /> Your submission completes only your part. Teammates can continue submitting theirs. The shared task closes after everyone delivers. Times use Cairo time.</p>
         <footer><button type="button" className={styles.cancelButton} onClick={() => setSubmitting(null)} disabled={saving}>Back</button><button className={styles.saveButton} disabled={saving}>{saving ? <><LoaderCircle size={16} /> Submitting…</> : <><CheckCircle2 size={16} /> Confirm submission</>}</button></footer>
       </form>
     </TaskModal>}
