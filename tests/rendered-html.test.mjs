@@ -144,7 +144,7 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(requestsApi, /attachment_key/);
   assert.match(requestsApi, /action: z\.literal\("delete"\)/);
   assert.match(requestsApi, /Only an administrator can delete employee requests/);
-  assert.match(requestsApi, /DELETE FROM employee_requests WHERE id = \? RETURNING id/);
+  assert.match(requestsApi, /trashDelete\("employee_requests"/);
   assert.match(requestsComponent, /Delete employee request/);
   assert.match(requestAttachmentApi, /get\(row\.attachmentKey, \{ access: "private" \}\)/);
   assert.match(requestAttachmentApi, /row\.employeeId !== session\.employeeId/);

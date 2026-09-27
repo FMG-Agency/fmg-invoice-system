@@ -1,3 +1,4 @@
+import { archivePhoto } from "../../lib/trash";
 import { z } from "zod";
 import { get, put, del } from "@vercel/blob";
 import { database } from "../../lib/database";
@@ -85,8 +86,7 @@ export async function POST(request: Request) {
       const table = body.kind === "crew" ? "production_crew_members" : "production_locations";
       const existing = await database.prepare(`SELECT photo_key AS photoKey FROM ${table} WHERE id = ?`).bind(body.id).first<{ photoKey: string }>();
       if (!existing) return Response.json({ error: "Directory entry not found." }, { status: 404 });
-      await database.prepare(`UPDATE ${table} SET photo_key = '', updated_at = ? WHERE id = ? AND photo_key = ?`).bind(new Date().toISOString(), body.id, existing.photoKey).run();
-      if (existing.photoKey) await del(existing.photoKey).catch(() => undefined);
+      await database.batch([await archivePhoto(table,body.id,session,existing.photoKey),database.prepare(`UPDATE ${table} SET photo_key = '', updated_at = ? WHERE id = ? AND photo_key = ?`).bind(new Date().toISOString(), body.id, existing.photoKey)]);
     } else if (body.action === "saveLocation") {
       const { name, mapUrl, notes, active } = body.data;
       if (body.id) {

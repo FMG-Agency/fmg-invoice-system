@@ -1,3 +1,4 @@
+import { archiveStatement } from '../../lib/trash';
 import { ensureProductionDatabase } from "../../lib/production-schema";
 import { reserveWorkOrderNumber, releaseDocumentSerial } from "../../lib/document-metadata";
 import { z } from "zod";
@@ -580,8 +581,8 @@ export async function POST(request: Request) {
 
     if (payload.action === "deleteCrew") {
       if (!canManageProductionDirectory(role)) return accessDenied("Only Production, Operations, or an administrator can delete crew members.");
-      const result = await database.prepare("UPDATE production_crew_members SET deleted_at = CURRENT_TIMESTAMP, active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at = ''").bind(payload.id).run();
-      if (Number(result.meta.changes) !== 1) return Response.json({ error: "Crew member not found." }, { status: 404 });
+      const result = await database.batch([await archiveStatement("production_crew_members", "id = ? AND deleted_at = ''", [payload.id], session), database.prepare("UPDATE production_crew_members SET deleted_at = CURRENT_TIMESTAMP, active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at = ''").bind(payload.id)]);
+      if (Number(result[1].rowsAffected) !== 1) return Response.json({ error: "Crew member not found." }, { status: 404 });
     } else if (payload.action === "saveCrew") {
       if (!canManageProductionDirectory(role)) return accessDenied("Only Production, Operations, or an administrator can manage the talent and crew directory.");
       const modelNationality = payload.data.category === "model" ? payload.data.modelNationality : null;
@@ -613,6 +614,7 @@ export async function POST(request: Request) {
       const category = await database.prepare("SELECT id FROM categories WHERE LOWER(TRIM(name))='media guide'").first<{id:number}>();
       const hasReviews = await database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='production_crew_reviews'").first();
       await database.batch([
+        await archiveStatement("production_work_orders", "id = ?", [payload.id], session),
         ...(hasReviews ? [database.prepare("UPDATE production_crew_reviews SET work_order_id = NULL WHERE work_order_id = ?").bind(payload.id)] : []),
         database.prepare("UPDATE system_notifications SET entity_id = NULL WHERE target_view = 'work-order' AND entity_id = ?").bind(payload.id),
         database.prepare("UPDATE documents SET production_work_order_id = NULL WHERE production_work_order_id = ?").bind(payload.id),

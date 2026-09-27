@@ -1,3 +1,4 @@
+import { trashDelete } from '../../lib/trash';
 import { z } from "zod";
 import { getSession } from "../../lib/auth-server";
 import { database } from "../../lib/database";
@@ -85,11 +86,9 @@ export async function POST(request: Request) {
       await database.prepare("UPDATE system_notifications SET read_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ? AND read_at = ''")
         .bind(payload.id, session.userId).run();
     } else if (payload.action === "delete") {
-      await database.prepare("DELETE FROM system_notifications WHERE id = ? AND user_id = ?")
-        .bind(payload.id, session.userId).run();
+      await trashDelete("system_notifications", "id = ? AND user_id = ?", [payload.id, session.userId], session);
     } else if (payload.action === "clearAll") {
-      await database.prepare("DELETE FROM system_notifications WHERE user_id = ?")
-        .bind(session.userId).run();
+      await trashDelete("system_notifications", "user_id = ?", [session.userId], session);
     } else {
       await database.prepare("UPDATE system_notifications SET read_at = CURRENT_TIMESTAMP WHERE user_id = ? AND read_at = ''")
         .bind(session.userId).run();

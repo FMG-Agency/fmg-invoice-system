@@ -1,3 +1,4 @@
+import { trashDelete } from '../../lib/trash';
 import { z } from "zod";
 import { getSession, requireAnyPermission, requirePermission } from "../../lib/auth-server";
 import { database } from "../../lib/database";
@@ -239,7 +240,7 @@ export async function POST(request: Request) {
     }
 
     if (payload.action === "deleteAdjustment") {
-      await database.prepare("DELETE FROM payroll_adjustments WHERE id = ?").bind(payload.id).run();
+      await trashDelete("payroll_adjustments", "id = ?", [payload.id], session);
     }
 
     return Response.json(filterHrState(await getHrState(payload.month), session.permissions, session.isAdmin));

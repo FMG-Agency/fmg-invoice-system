@@ -1,3 +1,4 @@
+import { trashDelete } from '../../lib/trash';
 import { z } from "zod";
 import { getSession, requirePermission } from "../../lib/auth-server";
 import { ensureClientAccountsDatabase, getClientAccount } from "../../lib/client-accounts";
@@ -88,7 +89,7 @@ export async function POST(request: Request) {
     const existing = await database.prepare("SELECT id FROM client_financial_transactions WHERE id = ? AND client_id = ?")
       .bind(payload.id, payload.clientId).first<{ id: number }>();
     if (!existing) return Response.json({ error: "Financial transaction not found." }, { status: 404 });
-    await database.prepare("DELETE FROM client_financial_transactions WHERE id = ? AND client_id = ?").bind(payload.id, payload.clientId).run();
+    await trashDelete("client_financial_transactions", "id = ? AND client_id = ?", [payload.id, payload.clientId], session);
     return accountResponse(payload.clientId);
   } catch (error) {
     return responseError(error);

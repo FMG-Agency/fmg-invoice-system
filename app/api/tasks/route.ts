@@ -1,3 +1,4 @@
+import { archiveStatement } from '../../lib/trash';
 import { z } from "zod";
 import { ensureAuthDatabase, getSession, requirePermission } from "../../lib/auth-server";
 import { administratorUserIds, notifyUsers, workflowRecipientUserIds } from "../../lib/notifications";
@@ -84,8 +85,8 @@ export async function POST(request: Request) {
 
     if (payload.action === "delete") {
       if (!session.isAdmin) return Response.json({ error: "Only administrators can delete tasks." }, { status: 403 });
-      const deleted = await database.batch([database.prepare("DELETE FROM task_submissions WHERE task_id = ?").bind(payload.id), database.prepare("DELETE FROM agency_tasks WHERE id = ?").bind(payload.id)]);
-      if (!Number(deleted[1].rowsAffected)) return Response.json({ error: "Task not found." }, { status: 404 });
+      const deleted = await database.batch([await archiveStatement("agency_tasks", "id = ?", [payload.id], session), database.prepare("DELETE FROM task_submissions WHERE task_id = ?").bind(payload.id), database.prepare("DELETE FROM agency_tasks WHERE id = ?").bind(payload.id)]);
+      if (!Number(deleted[2].rowsAffected)) return Response.json({ error: "Task not found." }, { status: 404 });
       return Response.json(await getTasksState(session));
     }
 

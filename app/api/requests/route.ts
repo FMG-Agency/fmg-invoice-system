@@ -1,3 +1,4 @@
+import { trashDelete } from '../../lib/trash';
 import { del, put } from "@vercel/blob";
 import { z } from "zod";
 import { ensureAuthDatabase, getDatabase, getSession } from "../../lib/auth-server";
@@ -362,9 +363,9 @@ export async function POST(request: Request) {
       const existing = await database.prepare("SELECT attachment_key AS attachmentKey FROM employee_requests WHERE id = ?")
         .bind(payload.id).first<{ attachmentKey: string }>();
       if (!existing) return accessError(404, "Request not found.");
-      const deleted = await database.prepare("DELETE FROM employee_requests WHERE id = ? RETURNING id").bind(payload.id).first<{ id: number }>();
-      if (!deleted) return accessError(404, "Request not found.");
-      if (existing.attachmentKey) await del(existing.attachmentKey).catch(() => undefined);
+      const deleted = await trashDelete("employee_requests", "id = ?", [payload.id], session);
+      if (!deleted[1].rowsAffected) return accessError(404, "Request not found.");
+
     }
 
     if (payload.action === "create") {

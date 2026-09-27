@@ -178,6 +178,7 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   const reusedState=await call(app.save,{action:'saveDocument',data:{...data,type:'invoice'}});
   const reusedDoc=reusedState.documents.find(d=>d.generatedCode===manual.generatedCode);
   assert.ok(reusedDoc && reusedDoc.id!==manual.id);
+  assert.notEqual(reusedDoc.pdfKey,manual.pdfKey, "Reused serials must not overwrite a recoverable PDF");
   await call(app.save,{action:'deleteDocument',id:reusedDoc.id});
   globalThis.documentTestSession=null;
   assert.equal((await app.pdf(request({}),{params:Promise.resolve({id:String(linked.id)})})).status,401);

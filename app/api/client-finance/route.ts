@@ -1,3 +1,4 @@
+import { getSession } from "../../lib/auth-server";
 import { z } from "zod";
 import { requirePermission } from "../../lib/auth-server";
 import { deleteRetainer, getClientFinanceState, saveRetainer, saveRetainerRange } from "../../lib/client-finance";
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
       if (payload.data.startMonth > payload.data.endMonth) return Response.json({ error: "The start month must be before the end month." }, { status: 400 });
       await saveRetainerRange(payload.data);
     }
-    if (payload.action === "deleteRetainer") await deleteRetainer(payload.clientId, payload.year, payload.month);
+    if (payload.action === "deleteRetainer") { const session=await getSession(request); if(!session) return Response.json({error:"Authentication required"},{status:401}); await deleteRetainer(payload.clientId, payload.year, payload.month, session); }
     const year = payload.action === "deleteRetainer" ? payload.year : payload.data.year;
     return Response.json(await getClientFinanceState(year));
   } catch (error) {

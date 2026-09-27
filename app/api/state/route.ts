@@ -1,3 +1,4 @@
+import { archiveStatement, trashDelete } from '../../lib/trash';
 import type { DocumentRecord } from "../../types";
 import { put } from "@vercel/blob";
 import { z } from "zod";
@@ -337,7 +338,7 @@ async function getState() {
     clients: clientsResult.results,
     categories: categoriesResult.results,
     documents,
-    deletedDocuments: (await database.prepare("SELECT snapshot_json, deleted_at FROM deleted_document_history ORDER BY id DESC").all<{snapshot_json:string;deleted_at:string}>()).results.map(row=>({...JSON.parse(row.snapshot_json),deletedAt:row.deleted_at,status:"Deleted"} as DocumentRecord)),
+    deletedDocuments: (await database.prepare("SELECT snapshot_json, deleted_at FROM deleted_document_history WHERE datetime(deleted_at,'+7 days')>datetime('now') ORDER BY id DESC").all<{snapshot_json:string;deleted_at:string}>()).results.map(row=>({...JSON.parse(row.snapshot_json),deletedAt:row.deleted_at,status:"Deleted"} as DocumentRecord)),
     quotationCatalog: catalogResult.results.map((record) => ({
       ...record,
       price: numberValue(record.price),
@@ -494,7 +495,7 @@ export async function POST(request: Request) {
     }
 
     if (payload.action === "deleteClient") {
-      await database.prepare("DELETE FROM clients WHERE id = ?").bind(payload.id).run();
+      await trashDelete("clients", "id = ?", [payload.id], session);
     }
 
     if (payload.action === "createCategory" || payload.action === "updateCategory") {
@@ -509,7 +510,7 @@ export async function POST(request: Request) {
     }
 
     if (payload.action === "deleteCategory") {
-      await database.prepare("DELETE FROM categories WHERE id = ?").bind(payload.id).run();
+      await trashDelete("categories", "id = ?", [payload.id], session);
     }
 
     if (payload.action === "createQuotationCatalogItem" || payload.action === "updateQuotationCatalogItem") {
@@ -540,14 +541,14 @@ export async function POST(request: Request) {
         const existing = await database.prepare("SELECT generated_code AS generatedCode, pdf_key AS pdfKey FROM documents WHERE id = ?").bind(data.id).first<{ generatedCode: string; pdfKey: string }>();
         if (!existing) throw new Error("Document not found.");
         generatedCode = existing.generatedCode;
-        pdfKey = existing.pdfKey || `documents/${data.type}/${generatedCode}.pdf`;
+        pdfKey = existing.pdfKey || `documents/${data.type}/${crypto.randomUUID()}/${generatedCode}.pdf`;
       } else {
         const category = await reserveDocumentNumber(data.categoryId);
         const client = await database.prepare("SELECT name, company_name AS companyName FROM clients WHERE id = ?").bind(data.clientId).first<{ name: string; companyName: string }>();
         if (!category || !client) throw new Error("Choose a valid client and category.");
         const clientPart = (client.companyName || client.name).trim().replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, "-").replace(/^-|-$/g, "") || "CLIENT";
         generatedCode = `${clientPart}-${category.prefix}${String(category.counter).padStart(4, "0")}`;
-        pdfKey = `documents/${data.type}/${generatedCode}.pdf`;
+        pdfKey = `documents/${data.type}/${crypto.randomUUID()}/${generatedCode}.pdf`;
       }
 
       await put(pdfKey, Buffer.from(decodeBase64(data.pdfBase64)), {
@@ -558,8 +559,8 @@ export async function POST(request: Request) {
       });
 
       if (data.id) {
-        await database.prepare(`UPDATE documents SET company_key = ?, client_id = ?, category_id = ?, date = ?, valid_until = ?, prepared_by = ?, currency = ?, project = ?, status = ?, items_json = ?, subtotal = ?, discount = ?, tax = ?, total = ?, payment_terms = ?, notes_exclusions = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-          .bind(data.companyKey, data.clientId, data.categoryId, data.date, data.validUntil, data.preparedBy, data.currency, data.project, data.status, JSON.stringify(data.items), math.subtotal, data.discount, data.tax, math.total, data.paymentTerms, data.notesExclusions, data.id).run();
+        await database.prepare(`UPDATE documents SET company_key = ?, client_id = ?, category_id = ?, date = ?, valid_until = ?, prepared_by = ?, currency = ?, project = ?, status = ?, items_json = ?, subtotal = ?, discount = ?, tax = ?, total = ?, payment_terms = ?, notes_exclusions = ?, pdf_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+          .bind(data.companyKey, data.clientId, data.categoryId, data.date, data.validUntil, data.preparedBy, data.currency, data.project, data.status, JSON.stringify(data.items), math.subtotal, data.discount, data.tax, math.total, data.paymentTerms, data.notesExclusions, pdfKey, data.id).run();
       } else {
         await database.prepare(`INSERT INTO documents (type, company_key, generated_code, client_id, category_id, date, valid_until, prepared_by, currency, project, status, items_json, subtotal, discount, tax, total, payment_terms, notes_exclusions, pdf_key, created_by_user_id, created_by_name)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -575,6 +576,7 @@ export async function POST(request: Request) {
       const snapshot = (await getState()).documents.find(d => Number((d as Record<string, unknown>).id) === payload.id);
       if (!snapshot) return Response.json({error:"Document not found."},{status:404});
       await database.batch([
+        await archiveStatement("documents", "id = ?", [payload.id], session),
         database.prepare("INSERT INTO deleted_document_history (id, generated_code, snapshot_json) VALUES (?, ?, ?)").bind(payload.id, `${(snapshot as Record<string, unknown>).generatedCode}#deleted-${payload.id}`, JSON.stringify(snapshot)),
         database.prepare("UPDATE production_work_orders SET draft_invoice_id = NULL WHERE draft_invoice_id = ?").bind(payload.id),
         database.prepare("DELETE FROM documents WHERE id = ?").bind(payload.id),

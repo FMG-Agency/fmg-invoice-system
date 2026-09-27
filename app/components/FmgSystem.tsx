@@ -1,4 +1,5 @@
 "use client";
+import { TrashPanel } from "./TrashPanel";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -66,7 +67,7 @@ import { DocumentPdfPreview } from "./DocumentPdfPreview";
 import { ReadingSize } from "./ReadingSize";
 import { WorkOrderPanel } from "./WorkOrderPanel";
 
-type View = "home" | "dashboard" | "tasks" | "invoice" | "quotation" | "media-guide" | "work-order" | "production-directory" | "clients" | "client-accounts" | "monthly-clients" | "client-portal-admin" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
+type View = "trash" | "home" | "dashboard" | "tasks" | "invoice" | "quotation" | "media-guide" | "work-order" | "production-directory" | "clients" | "client-accounts" | "monthly-clients" | "client-portal-admin" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
 type Mutation = (body: Record<string, unknown>) => Promise<AppState>;
 const companyNames: Record<CompanyKey, string> = { fmg: "FMG Agency", digital_empire: "The Digital Empire" };
 type AuthState = {
@@ -204,6 +205,7 @@ const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof L
   { id: "categories", label: "Categories", eyebrow: "Services", icon: Tag, permission: "categories" },
   { id: "data", label: "All Data", eyebrow: "Archive", icon: FolderKanban, permission: "all_data" },
   { id: "settings", label: "Settings", eyebrow: "Workspace", icon: Settings2, permission: "settings" },
+  { id: "trash", label: "Trash", eyebrow: "Recently deleted", icon: Trash2, permission: "users" },
   { id: "users", label: "Users & Access", eyebrow: "Administrator", icon: ShieldCheck, permission: "users" },
 ];
 
@@ -221,7 +223,7 @@ const navSections: NavSection[] = [
   { id: "clients", label: "Clients", eyebrow: "Directory & experience", icon: UsersRound, items: ["clients", "client-accounts", "monthly-clients", "client-portal-admin"] },
   { id: "services", label: "Services", eyebrow: "Catalog & categories", icon: Sparkles, items: ["media-guide", "categories"] },
   { id: "people", label: "Employees", eyebrow: "Team & payroll", icon: UserRound, items: ["employees", "attendance", "requests"] },
-  { id: "administration", label: "Administration", eyebrow: "Settings & access", icon: Settings2, items: ["settings", "users"] },
+  { id: "administration", label: "Administration", eyebrow: "Settings & access", icon: Settings2, items: ["settings", "users", "trash"] },
 ];
 
 function canOpenDocumentArchive(access: AuthState) {
@@ -234,6 +236,7 @@ function navGroupForView(next: View): NavGroupId | null {
 }
 
 const viewCopy: Record<View, { eyebrow: string; title: string; description: string }> = {
+  trash: {eyebrow:"RECENTLY DELETED",title:"Trash",description:"Recover deleted records within 7 days."},
   home: { eyebrow: "WELCOME TO FMG", title: "Make great work happen.", description: "Your people, projects and next steps. One place to begin." },
   dashboard: { eyebrow: "FMG CONTROL CENTER", title: "Good evening, FMG.", description: "Your agency documents, clients, and activity in one calm workspace." },
   tasks: { eyebrow: "TEAM DELIVERY", title: "Tasks", description: "Assign daily work, keep briefs and references together, and measure every delivery against its deadline." },
@@ -769,6 +772,7 @@ export function FmgSystem() {
 
           {view === "home" && <HomePage name={auth.displayName || auth.username} role={auth.roleLabel} chooseView={chooseView} canOpenView={canOpenView} />}
           {view === "dashboard" && <Dashboard state={state} hrState={hrState} chooseView={chooseView} canOpenView={canOpenView} />}
+          {view === "trash" && auth.isAdmin && <TrashPanel showToast={showToast} onRestored={() => void loadWorkspace()} />}
           {view === "tasks" && <TasksPanel showToast={showToast} />}
           {view === "clients" && <ClientsPanel clients={state.clients} mutate={mutate} busy={busy} showToast={showToast} />}
           {view === "client-accounts" && <ClientFinancePanel mode="accounts" initialClients={state.clients} showToast={showToast} />}

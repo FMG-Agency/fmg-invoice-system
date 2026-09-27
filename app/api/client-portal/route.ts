@@ -1,3 +1,4 @@
+import { trashDelete } from '../../lib/trash';
 import { z } from "zod";
 import { getSession, requirePermission } from "../../lib/auth-server";
 import { ensureClientPortalDatabase, getClientPortalState } from "../../lib/client-portal";
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
     }
     const existing = await database.prepare("SELECT id FROM client_portal_plans WHERE id = ? AND client_id = ?").bind(payload.id, payload.clientId).first<{ id: number }>();
     if (!existing) return Response.json({ error: "Plan part not found." }, { status: 404 });
-    await database.prepare("DELETE FROM client_portal_plans WHERE id = ? AND client_id = ?").bind(payload.id, payload.clientId).run();
+    await trashDelete("client_portal_plans", "id = ? AND client_id = ?", [payload.id, payload.clientId], session);
     return Response.json(await getClientPortalState(session, payload.clientId, payload.year));
   } catch (error) {
     return errorResponse(error);

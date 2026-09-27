@@ -1,3 +1,5 @@
+import { trashDelete } from "./trash";
+import type { AuthSession } from "./auth-server";
 import seedData from "../data/fmg-clients-2026.json";
 import type { Client, ClientFinanceState, ClientMonthlyRetainerStatus, CompanyKey } from "../types";
 import { ensureClientAccountsDatabase } from "./client-accounts";
@@ -253,8 +255,7 @@ export async function saveRetainerRange(value: Omit<RetainerInput, "month"> & { 
   await database.batch(statements);
 }
 
-export async function deleteRetainer(clientId: number, year: number, month: number) {
+export async function deleteRetainer(clientId: number, year: number, month: number, session: AuthSession) {
   await ensureClientFinanceDatabase();
-  await database.prepare("DELETE FROM client_monthly_retainers WHERE client_id = ? AND year = ? AND month = ?")
-    .bind(clientId, year, month).run();
+  await trashDelete("client_monthly_retainers", "client_id = ? AND year = ? AND month = ?", [clientId, year, month], session);
 }
