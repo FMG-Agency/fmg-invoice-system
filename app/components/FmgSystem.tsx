@@ -743,8 +743,6 @@ export function FmgSystem() {
 
       <main className="main-area" dir="ltr">
         <header className="topbar">
-          <button className="desktop-menu-toggle icon-button" onClick={() => setDesktopMenuClosed((closed) => !closed)} aria-label={desktopMenuClosed ? "Open sidebar" : "Close sidebar"} aria-expanded={!desktopMenuClosed} aria-controls="workspace-sidebar"><Menu size={21} /></button>
-          <button className="menu-button" aria-expanded={menuOpen} aria-controls="workspace-sidebar" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={21} /></button>
           <label className={cx("company-switcher", companyKey === "digital_empire" && "digital-empire")}><Building2 size={17} /><span>Company</span><select value={companyKey} onChange={(event) => switchCompany(event.target.value as CompanyKey)} aria-label="Select company"><option value="fmg">FMG Agency</option><option value="digital_empire">The Digital Empire</option></select><ChevronDown size={14} /></label>
           <div className="global-search">
             <Search size={18} />
@@ -761,6 +759,8 @@ export function FmgSystem() {
             <NotificationCenter onNavigate={(target) => chooseView(target)} showToast={showToast} />
             <div className="top-avatar">{initials(auth.displayName || auth.username)}</div>
           </div>
+          <button className="desktop-menu-toggle icon-button" onClick={() => setDesktopMenuClosed((closed) => !closed)} aria-label={desktopMenuClosed ? "Open sidebar" : "Close sidebar"} aria-expanded={!desktopMenuClosed} aria-controls="workspace-sidebar"><Menu size={21} /></button>
+          <button className="menu-button" aria-expanded={menuOpen} aria-controls="workspace-sidebar" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={21} /></button>
         </header>
 
         <div className="page-wrap">
