@@ -588,7 +588,7 @@ export type ProductionCrewMember = {
   name: string;
   phone: string;
   profileUrl: string;
-  modelGroup: "stories" | "egyptian" | "foreign";
+  modelGroup: "stories" | "egyptian" | "foreign" | "influencers" | "ugc";
   photoUrl: string;
   modelNationality: "egyptian" | "foreign" | null;
   hourlyRate: number | null;

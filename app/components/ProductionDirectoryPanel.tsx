@@ -98,7 +98,7 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState<DirectoryFilter>("model");
-  const [modelGroup, setModelGroup] = useState<"all" | "stories" | "egyptian" | "foreign">("all");
+  const [modelGroup, setModelGroup] = useState<"all" | ProductionCrewMember["modelGroup"]>("all");
   const [historyMember, setHistoryMember] = useState<ProductionCrewMember | null>(null);
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -227,14 +227,14 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
         {counts.map(({ category, total }) => <button key={category} type="button" className={filter === category ? styles.active : ""} onClick={() => setFilter(category)}>{categoryDetails[category].plural} <span>{total}</span></button>)}
       </nav>
 
-      {filter === "model" && <nav className={styles.filters} aria-label="Model groups">{(["all", "stories", "egyptian", "foreign"] as const).map(group => <button key={group} className={modelGroup === group ? styles.active : ""} onClick={() => setModelGroup(group)}>{group === "all" ? "All models" : group === "stories" ? "Stories" : group === "egyptian" ? "Egyptian" : "Foreign"} <span>{state.crew.filter(member => member.category === "model" && (group === "all" || member.modelGroup === group)).length}</span></button>)}</nav>}
+      {filter === "model" && <nav className={styles.filters} aria-label="Model groups">{(["all", "stories", "egyptian", "foreign", "influencers", "ugc"] as const).map(group => <button key={group} className={modelGroup === group ? styles.active : ""} onClick={() => setModelGroup(group)}>{group === "all" ? "All models" : group === "influencers" ? "Influencers" : group === "ugc" ? "UGC" : group === "stories" ? "Stories" : group === "egyptian" ? "Egyptian" : "Foreign"} <span>{state.crew.filter(member => member.category === "model" && (group === "all" || member.modelGroup === group)).length}</span></button>)}</nav>}
       {filter === "location" ? <ProductionResources search={search} orders={state.orders} canManage={state.canManageDirectory} showToast={showToast} /> : filteredCrew.length ? <div className={styles.crewGrid}>{filteredCrew.map((member) => {
         const details = categoryDetails[member.category];
         const Icon = details.icon;
         return <article key={member.id} className={`${styles.crewCard} ${!member.active ? styles.inactive : ""}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           {member.photoUrl ? <img className={styles.resourcePhoto} src={member.photoUrl} alt={member.name} /> : <div className={styles.photoPlaceholder}><Icon size={52} /><span>No photo added</span></div>}
-          <header><span className={styles.memberIcon}><Icon size={20} /></span><div><small>{details.label.toUpperCase()}{member.category === "model" ? ` · ${member.modelGroup === "stories" ? "Stories" : modelNationalityLabel(member.modelNationality)}` : ""}</small><h3>{member.name}</h3></div>{!member.active && <em>Inactive</em>}</header>
+          <header><span className={styles.memberIcon}><Icon size={20} /></span><div><small>{details.label.toUpperCase()}{member.category === "model" ? ` · ${member.modelGroup === "influencers" ? "Influencers" : member.modelGroup === "ugc" ? "UGC" : member.modelGroup === "stories" ? "Stories" : modelNationalityLabel(member.modelNationality)}` : ""}</small><h3>{member.name}</h3></div>{!member.active && <em>Inactive</em>}</header>
           <a className={styles.phoneLine} href={`tel:${member.phone.replace(/\s+/g, "")}`}><Phone size={15} /><span><small>PHONE NUMBER</small><strong>{member.phone || "Phone not added"}</strong></span></a>
           {member.category === "model" && (member.hourlyRate !== null || member.dailyRate !== null) && <div className={styles.modelRates}>
             {member.hourlyRate !== null && <span><small>PER HOUR</small><strong>{money(member.hourlyRate)}</strong></span>}
@@ -267,8 +267,8 @@ export function ProductionDirectoryPanel({ showToast }: { showToast: (message: s
           <label><span>Phone number</span><input required type="tel" maxLength={100} value={crewDraft.phone} onChange={(event) => setCrewDraft({ ...crewDraft, phone: event.target.value })} placeholder="e.g. +20 100 000 0000" /></label>
           <label><span>Portfolio / personal catalogue link <small>Optional</small></span><input type="url" maxLength={2000} value={crewDraft.profileUrl} onChange={(event) => setCrewDraft({ ...crewDraft, profileUrl: event.target.value })} placeholder="https://…" /></label>
           {crewDraft.category === "model" && <>
-            <label><span>Model group</span><select value={crewDraft.modelGroup} onChange={event => { const group = event.target.value as CrewDraft["modelGroup"]; setCrewDraft({ ...crewDraft, modelGroup: group, modelNationality: group === "foreign" ? "foreign" : "egyptian" }); }}><option value="stories">Stories</option><option value="egyptian">Egyptian</option><option value="foreign">Foreign</option></select></label>
-            <label><span>Model nationality</span><select required value={crewDraft.modelNationality ?? "egyptian"} onChange={(event) => setCrewDraft({ ...crewDraft, modelNationality: event.target.value as "egyptian" | "foreign", modelGroup: crewDraft.modelGroup === "stories" ? "stories" : event.target.value as "egyptian" | "foreign" })}><option value="egyptian">Egyptian</option><option value="foreign">Foreign</option></select></label>
+            <label><span>Model group</span><select value={crewDraft.modelGroup} onChange={event => { const group = event.target.value as CrewDraft["modelGroup"]; setCrewDraft({ ...crewDraft, modelGroup: group, modelNationality: group === "foreign" ? "foreign" : group === "egyptian" ? "egyptian" : crewDraft.modelNationality }); }}><option value="influencers">Influencers</option><option value="ugc">UGC</option><option value="stories">Stories</option><option value="egyptian">Egyptian</option><option value="foreign">Foreign</option></select></label>
+            <label><span>Model nationality</span><select required value={crewDraft.modelNationality ?? "egyptian"} onChange={(event) => setCrewDraft({ ...crewDraft, modelNationality: event.target.value as "egyptian" | "foreign", modelGroup: crewDraft.modelGroup === "egyptian" || crewDraft.modelGroup === "foreign" ? event.target.value as "egyptian" | "foreign" : crewDraft.modelGroup })}><option value="egyptian">Egyptian</option><option value="foreign">Foreign</option></select></label>
             <label><span>Hourly rate · EGP <small>Optional</small></span><input type="number" min="0" step="0.01" value={crewDraft.hourlyRate ?? ""} onChange={(event) => setCrewDraft({ ...crewDraft, hourlyRate: optionalRate(event.target.value) })} placeholder="Optional hourly rate" /></label>
             <label><span>Daily rate · EGP <small>Optional</small></span><input type="number" min="0" step="0.01" value={crewDraft.dailyRate ?? ""} onChange={(event) => setCrewDraft({ ...crewDraft, dailyRate: optionalRate(event.target.value) })} placeholder="Optional daily rate" /></label>
           </>}
