@@ -75,9 +75,10 @@ const adjustmentPayload = z.object({
   employeeId: z.number().int().positive(),
   type: z.enum(["commission", "bonus", "allowance", "deduction"]),
   label: z.string().trim().min(1).max(160),
-  amount: z.number().finite().positive(),
+  amount: z.number().finite().min(0).default(0),
+  days: z.number().finite().min(0).max(366).default(0),
   notes: optionalText,
-});
+}).refine(v => v.days > 0 ? v.type === "deduction" : v.amount > 0, {message:"Enter a positive amount, or deduction days."});
 
 const overtimeAllowancePayload = z.object({
   employeeId: z.number().int().positive(),
@@ -234,8 +235,8 @@ export async function POST(request: Request) {
     if (payload.action === "createAdjustment") {
       const value = payload.data;
       await database.prepare(`INSERT INTO payroll_adjustments
-        (employee_id, period_month, type, label, amount, notes) VALUES (?, ?, ?, ?, ?, ?)`).bind(
-          value.employeeId, payload.month, value.type, value.label, value.amount, value.notes,
+        (employee_id, period_month, type, label, amount, days, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(
+          value.employeeId, payload.month, value.type, value.label, value.days > 0 ? 0 : value.amount, value.days, value.notes,
         ).run();
     }
 

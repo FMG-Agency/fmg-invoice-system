@@ -26,12 +26,17 @@ export async function POST(request: Request) {
     const existing = await database.prepare("SELECT manual_data FROM employee_requests WHERE employee_id=? AND status='approved' AND manual_data<>''").bind(payload.employeeId).all();
     const seen = existing.results.map(r => manualRequestSchema.parse(JSON.parse(String(r.manual_data))));
     for (const r of payload.requests) {
+      if (r.type === "penalty") continue;
       const conflict = seen.some(other => r.dateFrom <= other.dateTo && r.dateTo >= other.dateFrom && (r.type === "leave" || other.type === "leave" || (r.type === other.type && (r.type === "early_leave" || (r.startTime < other.endTime && r.endTime > other.startTime)))));
       if (conflict) return Response.json({error:"A request overlaps an existing or queued request. Check the employee, dates and times."},{status:409});
       seen.push(r);
     }
     const statements = [database.prepare("INSERT INTO hr_manual_batches(id,actor_id,payload_json) VALUES(?,?,?)").bind(payload.batchId,session.userId,body)];
     for (const r of payload.requests) {
+      if (r.type === "penalty") {
+        statements.push(database.prepare("INSERT INTO payroll_adjustments(employee_id,period_month,type,label,amount,days,notes) VALUES(?,?,'deduction',?,0,?,?)").bind(payload.employeeId,r.dateFrom.slice(0,7),"Penalty · " + r.dateFrom,r.days,r.details));
+        continue;
+      }
       statements.push(database.prepare(`INSERT INTO hr_manual_request_guard(value) SELECT CASE WHEN EXISTS (
         SELECT 1 FROM employee_requests WHERE employee_id=? AND status='approved' AND date_from<=? AND date_to>=?
         AND (type='leave' OR ?='leave' OR (manual_data<>'' AND type=? AND (?='early_leave' OR (start_time<? AND end_time>?))))

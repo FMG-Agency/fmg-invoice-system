@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-import {mkdir} from 'node:fs/promises';
+import {mkdir,writeFile} from 'node:fs/promises';
+import ExcelJS from 'exceljs';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 
@@ -9,7 +10,7 @@ test('Attendance boundaries and manual batches use isolated payroll data',async 
   globalThis.hrSession={userId:1,permissions:['attendance'],isAdmin:true};
   await mkdir(new URL('../work/',import.meta.url),{recursive:true});
   const bundle=new URL('../work/hr-manual-test.mjs',import.meta.url);
-  await build({stdin:{contents:"export * from './app/lib/hr'; export * from './app/lib/manual-attendance'; export {database} from './app/lib/database'; export {POST} from './app/api/hr/manual-requests/route';",resolveDir:process.cwd()},outfile:fileURLToPath(bundle),bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'auth',setup(b){b.onResolve({filter:/auth-server$/},()=>({path:'auth',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:"export async function getSession(){return globalThis.hrSession} export async function requirePermission(request,permission){return !globalThis.hrSession ? Response.json({error:'Login'}, {status:401}): !globalThis.hrSession.permissions.includes(permission) ? Response.json({error:'Denied'},{status:403}):null}"}));}}]});
+  await build({stdin:{contents:"export * from './app/lib/hr'; export * from './app/lib/hr-export'; export * from './app/lib/manual-attendance'; export {database} from './app/lib/database'; export {POST} from './app/api/hr/manual-requests/route';",resolveDir:process.cwd()},outfile:fileURLToPath(bundle),bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'auth',setup(b){b.onResolve({filter:/auth-server$/},()=>({path:'auth',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:"export async function getSession(){return globalThis.hrSession} export async function requirePermission(request,permission){return !globalThis.hrSession ? Response.json({error:'Login'}, {status:401}): !globalThis.hrSession.permissions.includes(permission) ? Response.json({error:'Denied'},{status:403}):null}"}));}}]});
   const app=await import(bundle.href),db=app.database;
   await db.prepare('CREATE TABLE auth_users(id INTEGER PRIMARY KEY)').run();await db.prepare('INSERT INTO auth_users VALUES(1)').run();
   await app.ensureHrDatabase();
@@ -65,4 +66,25 @@ test('Attendance boundaries and manual batches use isolated payroll data',async 
     const rollback={batchId:crypto.randomUUID(),employeeId:1,requests:[entry({dateFrom:'2026-10-06',dateTo:'2026-10-06'})]};
     assert.equal((await post(rollback)).status,500);assert.equal(await db.prepare('SELECT id FROM hr_manual_batches WHERE id=?').bind(rollback.batchId).first(),null);globalThis.hrSession=admin;
   });
+  await t.test('Penalty days recalculate with salary and employee report keeps private data separate',async()=>{
+    const penalty=days=>entry({type:'penalty',days,dateFrom:'2026-10-10',dateTo:'2026-10-10'});
+    assert.equal((await post({batchId:crypto.randomUUID(),employeeId:1,requests:[penalty(.25),penalty(.5),penalty(2)]})).status,200);
+    let state=await app.getHrState('2026-10');assert.equal(state.payroll[0].manualDeductions,1320);
+    assert.equal(app.manualRequestSchema.safeParse({...penalty(1),days:0}).success,false);
+    await db.prepare('UPDATE employees SET base_salary=28800 WHERE id=1').run();
+    await db.prepare("INSERT INTO employees(id,name,base_salary) VALUES(2,'Private other employee',50000)").run();
+    await db.prepare("INSERT INTO attendance_records(employee_id,work_date,first_in,last_out,status) VALUES(1,'2026-10-11','11:30','22:00','present')").run();
+    state=await app.getHrState('2026-10');assert.equal(state.payroll.find(p=>p.employeeId===1).manualDeductions,2640);
+    const buffer=await app.employeePayrollWorkbookBuffer(state,1);
+    const book=new ExcelJS.Workbook();await book.xlsx.load(buffer);assert.equal(book.worksheets.length,1);
+    const sheet=book.worksheets[0];assert.equal(sheet.getCell('B10').value,28800);assert.equal(sheet.getCell('E23').value,2.75);
+    assert.ok([10,11,12].some(n=>sheet.getCell(`I${n}`).formula==='ROUND($B$10/$E$24*0.25,2)'));
+    let impact=false,time=false;
+    sheet.eachRow(row=>{if(row.getCell(1).value instanceof Date && row.getCell(1).value.toISOString().startsWith('2026-10-11')) {if(row.getCell(2).formula){impact=true;assert.match(row.getCell(5).formula,/ROUND\(\$B\$10\*/);}else{time=true;assert.equal(row.getCell(3).value,'11:30');}}});
+    assert.ok(impact&&time);assert.ok(!JSON.stringify(sheet.model).includes('Private other employee'));
+    await writeFile(new URL('../work/employee-report-fixture.xlsx',import.meta.url),buffer);
+    await db.prepare('UPDATE employees SET base_salary=0 WHERE id=1').run();
+    state=await app.getHrState('2026-10');const zero=state.attendance.find(r=>r.workDate==='2026-10-11');assert.equal(zero.overtimePay,0);assert.ok(zero.salaryFactors.overtimePay>0);
+  });
+
 });

@@ -170,6 +170,11 @@ async function ensureEmployeeRequestPolicySchema() {
 async function initializeHrDatabase() {
   await database.batch(hrSchemaStatements.map((statement) => database.prepare(statement)));
   await ensureEmployeeRequestPolicySchema();
+  const adjustmentColumns = await database.prepare("PRAGMA table_info(payroll_adjustments)").all();
+  if (!adjustmentColumns.results.some(column => column.name === "days")) {
+    try { await database.prepare("ALTER TABLE payroll_adjustments ADD COLUMN days REAL NOT NULL DEFAULT 0").run(); }
+    catch (error) { if (!/duplicate column name/i.test(String(error))) throw error; }
+  }
   const [policyColumns, attendanceColumns, requestColumns] = await Promise.all([
     database.prepare("PRAGMA table_info(hr_policy)").all<Record<string, unknown>>(),
     database.prepare("PRAGMA table_info(attendance_records)").all<Record<string, unknown>>(),
@@ -445,7 +450,13 @@ function attendanceFromRow(row: Record<string, unknown>, employees: Map<number, 
     updatedAt: String(row.updatedAt ?? ""),
   };
   const employee = employees.get(source.employeeId);
-  return manualAttendance(source, JSON.parse(String(row.manualRequests ?? "[]")), employee ?? ({ baseSalary: 0 } as Employee), policy, attendanceMath);
+  const requests = JSON.parse(String(row.manualRequests ?? "[]"));
+  const effectiveEmployee = employee ?? ({baseSalary:0} as Employee);
+  const result = manualAttendance(source, requests, effectiveEmployee, policy, attendanceMath);
+  const referenceSalary = Math.max(1, policy.salaryDivisor) * Math.max(1, policy.workdayMinutes);
+  const reference = manualAttendance(source, requests, {...effectiveEmployee,baseSalary:referenceSalary}, policy, attendanceMath);
+  result.salaryFactors = Object.fromEntries((["lateDeduction","earlyLeaveDeduction","leaveDeduction","overtimePay","fridayPay"] as const).map(key => [key,reference[key]/referenceSalary]));
+  return result;
 }
 
 function payrollForEmployee(employee: Employee, attendance: AttendanceRecord[], adjustments: PayrollAdjustment[]): PayrollSummary {
@@ -532,7 +543,7 @@ export async function getHrState(month: string): Promise<HrState> {
       imported_at AS importedAt FROM attendance_imports
       WHERE substr(period_start, 1, 7) = ? ORDER BY id DESC`).bind(month).all(),
     database.prepare(`SELECT p.id, p.employee_id AS employeeId, e.name AS employeeName, p.period_month AS periodMonth,
-      p.type, p.label, p.amount, p.notes, p.created_at AS createdAt
+      p.type, p.label, p.amount, p.days, p.notes, p.created_at AS createdAt
       FROM payroll_adjustments p JOIN employees e ON e.id = p.employee_id
       WHERE p.period_month = ? ORDER BY p.id DESC`).bind(month).all(),
   ]);
@@ -548,7 +559,8 @@ export async function getHrState(month: string): Promise<HrState> {
     periodMonth: String(row.periodMonth ?? ""),
     type: String(row.type) as PayrollAdjustment["type"],
     label: String(row.label ?? ""),
-    amount: numberValue(row.amount),
+    days: numberValue(row.days),
+    amount: numberValue(row.days) > 0 ? moneyValue(numberValue(row.days) * (employeeMap.get(numberValue(row.employeeId))?.baseSalary ?? 0) / Math.max(1, policy.salaryDivisor)) : numberValue(row.amount),
     notes: String(row.notes ?? ""),
     createdAt: String(row.createdAt ?? ""),
   }));

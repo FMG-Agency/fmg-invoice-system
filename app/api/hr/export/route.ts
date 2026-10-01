@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { requirePermission } from "../../../lib/auth-server";
 import { ensureHrDatabase, getHrState } from "../../../lib/hr";
-import { payrollWorkbookBuffer } from "../../../lib/hr-export";
+import { payrollWorkbookBuffer, employeePayrollWorkbookBuffer } from "../../../lib/hr-export";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,8 +23,11 @@ export async function GET(request: Request) {
 
     await ensureHrDatabase();
     const state = await getHrState(parsedMonth.data);
-    const buffer = await payrollWorkbookBuffer(state);
-    const fileName = `FMG-payroll-attendance-${parsedMonth.data}.xlsx`;
+    const employeeIdRaw = url.searchParams.get("employeeId");
+    const employeeId = employeeIdRaw ? Number(employeeIdRaw) : null;
+    if (employeeIdRaw && (!Number.isSafeInteger(employeeId) || !state.payroll.some(row=>row.employeeId===employeeId))) return Response.json({error:"Employee payroll not found."},{status:404});
+    const buffer = employeeId ? await employeePayrollWorkbookBuffer(state,employeeId) : await payrollWorkbookBuffer(state);
+    const fileName = employeeId ? `FMG-salary-${employeeId}-${parsedMonth.data}.xlsx` : `FMG-payroll-attendance-${parsedMonth.data}.xlsx`;
 
     return new Response(new Uint8Array(buffer), {
       headers: {

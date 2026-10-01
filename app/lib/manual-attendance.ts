@@ -7,10 +7,11 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
 }, "Choose a valid date.");
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 export const manualRequestSchema = z.object({
-  type: z.enum(["mission", "overtime", "early_arrival", "early_leave", "leave"]),
+  type: z.enum(["mission", "overtime", "early_arrival", "early_leave", "leave", "penalty"]),
   dateFrom: date, dateTo: date,
   startTime: z.union([time, z.literal("")]).default(""),
   endTime: z.union([time, z.literal("24:00"), z.literal("")]).default(""),
+  days: z.number().finite().min(0).max(366).default(0),
   dayType: z.enum(["normal", "holiday"]).default("normal"),
   leavePaid: z.boolean().default(true),
   reason: z.enum(["sick", "normal", "other"]).default("normal"),
@@ -19,8 +20,9 @@ export const manualRequestSchema = z.object({
   const issue = (message: string) => ctx.addIssue({code: "custom", message});
   if (r.dateTo < r.dateFrom || (Date.parse(r.dateTo) - Date.parse(r.dateFrom)) / 86400000 > 61) issue("Choose a date range of up to 62 days.");
   if (r.type !== "leave" && r.dateFrom !== r.dateTo) issue("Use one day per timed request.");
-  if (r.type !== "leave" && !r.startTime) issue("Choose the start time.");
+  if (!["leave", "penalty"].includes(r.type) && !r.startTime) issue("Choose the start time.");
   if (["mission", "overtime", "early_arrival"].includes(r.type) && (!r.endTime || r.endTime <= r.startTime)) issue("End time must be after start time. For overnight work, enter a separate request for each date.");
+  if (r.type === "penalty" && r.days <= 0) issue("Enter a positive number of penalty days.");
   if (r.type === "overtime" && r.startTime < "22:00") issue("Extra evening overtime starts at 22:00 or later.");
   if (r.type === "early_arrival" && r.endTime > "11:00") issue("Early overtime must end by 11:00.");
 });

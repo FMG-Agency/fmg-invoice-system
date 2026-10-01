@@ -302,6 +302,7 @@ export type HrPolicy = {
 export type AttendanceStatus = "present" | "incomplete" | "absent" | "friday" | "vacation" | "occasional_leave" | "resort_leave" | "sick_leave" | "urgent_leave" | "normal_leave" | "assignment";
 
 export type AttendanceRecord = {
+  salaryFactors?: Partial<Record<"lateDeduction" | "earlyLeaveDeduction" | "leaveDeduction" | "overtimePay" | "fridayPay", number>>;
   id: number;
   importId: number | null;
   employeeId: number;
@@ -349,6 +350,7 @@ export type AttendanceImport = {
 };
 
 export type PayrollAdjustment = {
+  days?: number;
   id: number;
   employeeId: number;
   employeeName: string;

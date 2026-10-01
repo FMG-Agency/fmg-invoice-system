@@ -187,7 +187,7 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
   const attendanceRows = Math.max(1, attendance.length);
   const adjustmentStart = 10;
   const adjustmentEnd = adjustmentStart + Math.max(1, adjustments.length) - 1;
-  const timeSectionRow = Math.max(24, adjustmentEnd + 3);
+  const timeSectionRow = Math.max(27, adjustmentEnd + 3);
   const timeHeaderRow = timeSectionRow + 1;
   const timeStart = timeHeaderRow + 1;
   const timeEnd = timeStart + attendanceRows - 1;
@@ -233,7 +233,7 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
 
   sheet.mergeCells("A6:O6");
   const employeeNoteCell = sheet.getCell("A6");
-  employeeNoteCell.value = `Employee notes: ${meaningfulText(employee?.notes, "No employee notes recorded.")}`;
+  employeeNoteCell.value = `Edit the highlighted Base salary cell B10 to recalculate overtime, attendance deductions, day penalties and net salary. Currency: ${safeCurrency(state.policy.currency)}.`;
   employeeNoteCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.yellowSoft } };
   employeeNoteCell.font = { name: "Aptos", size: 10, italic: true, color: { argb: COLORS.ink } };
   employeeNoteCell.alignment = { vertical: "middle", wrapText: true };
@@ -270,6 +270,15 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
   });
 
   sheet.getCell("B10").value = payroll.baseSalary;
+  sheet.getCell("A10").value = "Base salary (EDIT)";
+  sheet.getCell("B10").fill = {type:"pattern",pattern:"solid",fgColor:{argb:COLORS.yellowSoft}};
+  sheet.getCell("B10").font = {name:"Aptos",size:12,bold:true,color:{argb:"FF1760A5"}};
+  sheet.getCell("B10").dataValidation = {type:"decimal",operator:"greaterThanOrEqual",formulae:[0],allowBlank:false,showErrorMessage:true,error:"Enter a salary of zero or more."};
+  sheet.getCell("D23").value = "Penalty days";
+  sheet.getCell("E23").value = adjustments.reduce((sum,a)=>sum+(a.days || 0),0);
+  sheet.getCell("D24").value = "Salary divisor (days)";
+  sheet.getCell("E24").value = state.policy.salaryDivisor;
+  for (const n of [23,24]) { sheet.getRow(n).height=30; sheet.getCell(`D${n}`).alignment={wrapText:true,vertical:"middle"}; }
   sheet.getCell("B11").value = payroll.monthlyCommission;
   sheet.getCell("B12").value = formula(`SUMIF(G${adjustmentStart}:G${adjustmentEnd},"<>Deduction",I${adjustmentStart}:I${adjustmentEnd})`, payroll.manualAdditions);
   sheet.getCell("B13").value = formula(`SUM(E${impactStart}:E${impactEnd})`, payroll.overtimePay);
@@ -281,6 +290,18 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
   sheet.getCell("B19").value = formula("SUM(B16:B18)", payroll.attendanceDeduction + payroll.monthlyDeduction + payroll.manualDeductions);
   sheet.getCell("B20").value = formula("B10+B15-B19", payroll.netSalary);
   for (let row = 10; row <= 20; row += 1) sheet.getCell(`B${row}`).numFmt = currencyFormat;
+  const penaltyCells = adjustments.flatMap((a,index)=>a.days ? [`I${adjustmentStart+index}`] : []);
+  const deductionLines: Array<[number,string,string,number]> = [
+    [22,"Late deduction",`SUM(B${impactStart}:B${impactEnd})`,payroll.lateDeduction],
+    [23,"Early-leave deduction",`SUM(C${impactStart}:C${impactEnd})`,payroll.earlyLeaveDeduction],
+    [24,"Unpaid-leave deduction",`SUM(D${impactStart}:D${impactEnd})`,payroll.leaveDeduction],
+    [25,"Penalty days deduction",penaltyCells.length ? `SUM(${penaltyCells.join(",")})` : "0",adjustments.reduce((sum,a)=>sum+(a.days ? a.amount : 0),0)],
+  ];
+  for (const [n,label,expression,amount] of deductionLines) {
+    sheet.getCell(`A${n}`).value=label;sheet.getCell(`B${n}`).value=formula(expression,amount);
+    styleDataRow(sheet.getRow(n),1,2);sheet.getRow(n).height=30;
+    sheet.getCell(`A${n}`).alignment={wrapText:true,vertical:"middle"};sheet.getCell(`B${n}`).numFmt=currencyFormat;
+  }
   for (const row of [15, 19, 20]) {
     const fill = row === 15 ? COLORS.greenSoft : row === 19 ? COLORS.redSoft : COLORS.yellow;
     const fontColor = row === 15 ? COLORS.green : row === 19 ? COLORS.red : COLORS.ink;
@@ -327,8 +348,8 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
     adjustments.forEach((adjustment, index) => {
       const row = sheet.getRow(adjustmentStart + index);
       row.getCell(7).value = adjustment.type === "deduction" ? "Deduction" : adjustment.type[0].toUpperCase() + adjustment.type.slice(1);
-      row.getCell(8).value = meaningfulText(adjustment.label, "Adjustment label not provided");
-      row.getCell(9).value = adjustment.amount;
+      row.getCell(8).value = meaningfulText(adjustment.label, "Adjustment label not provided") + (adjustment.days ? ` (${adjustment.days} days)` : "");
+      row.getCell(9).value = adjustment.days ? formula(`ROUND($B$10/$E$24*${adjustment.days},2)`,adjustment.amount) : adjustment.amount;
       row.getCell(10).value = meaningfulText(adjustment.notes, "No adjustment note");
       styleDataRow(row, 7, 10);
       for (let column = 7; column <= 10; column += 1) row.getCell(column).border = denseTableBorder;
@@ -413,7 +434,14 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
       : ["No attendance date", 0, 0, 0, 0, 0, "No", "No", "No", "No", "No", "No manager note - no attendance record"];
     sheet.mergeCells(row.number, 12, row.number, 15);
     styleDataRow(row, 1, 15);
-    if (record) row.getCell(1).numFmt = "yyyy-mm-dd";
+    if (record) {
+      row.getCell(1).numFmt = "yyyy-mm-dd";
+      const keys = ["lateDeduction","earlyLeaveDeduction","leaveDeduction","overtimePay","fridayPay"] as const;
+      keys.forEach((key,index)=>{
+        const factor = record.salaryFactors?.[key] ?? (payroll.baseSalary > 0 ? record[key]/payroll.baseSalary : 0);
+        row.getCell(index+2).value = formula(`ROUND($B$10*${factor},2)`,record[key]);
+      });
+    }
     for (let column = 1; column <= 15; column += 1) {
       const cell = row.getCell(column);
       cell.border = denseTableBorder;
@@ -631,4 +659,15 @@ export async function payrollWorkbookBuffer(state: HrState) {
   const workbook = await buildPayrollWorkbook(state);
   const value = await workbook.xlsx.writeBuffer();
   return Buffer.from(value);
+}
+
+export async function employeePayrollWorkbookBuffer(state: HrState, employeeId: number) {
+  const payroll = state.payroll.find(row=>row.employeeId===employeeId);
+  if (!payroll) throw new Error("Employee payroll not found.");
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "FMG Agency";
+  workbook.title = "Employee salary report " + state.month;
+  workbook.calcProperties.fullCalcOnLoad = true;
+  addCompactEmployeeSheet(workbook, {...state, employees:state.employees.filter(e=>e.id===employeeId), attendance:state.attendance.filter(r=>r.employeeId===employeeId), adjustments:state.adjustments.filter(r=>r.employeeId===employeeId),payroll:[payroll],imports:[]},payroll,"Salary report");
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
