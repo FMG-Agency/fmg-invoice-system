@@ -262,7 +262,7 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
   sheet.getRow(9).getCell(1).value = "Component";
   sheet.getRow(9).getCell(2).value = "Amount";
   styleHeader(sheet.getRow(9), 1, 2);
-  const components = ["Base salary", "Fixed commission", "Other additions", "Overtime pay", "Friday work pay", "Total additions", "Attendance deductions", "Fixed deduction", "Other deductions", "Total deductions", "NET SALARY"];
+  const components = ["Base salary", "Fixed commission", "Other additions", "Overtime pay", "Friday / holiday work pay", "Total additions", "Attendance deductions", "Fixed deduction", "Other deductions", "Total deductions", "NET SALARY"];
   components.forEach((label, index) => {
     const row = sheet.getRow(10 + index);
     row.getCell(1).value = label;
@@ -295,7 +295,7 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
   sheet.getRow(9).getCell(4).value = "Metric";
   sheet.getRow(9).getCell(5).value = "Total";
   styleHeader(sheet.getRow(9), 4, 5);
-  const metrics = ["Present days", "Absent days", "Incomplete days", "Late days", "Late minutes", "Early-leave days", "Unpaid-leave days", "Normal OT minutes", "Early OT minutes", "Total OT minutes", `Normal Mission Time (OT ×${state.policy.overtimeMultiplier})`, `Early Mission Time (Early OT ×${state.policy.earlyOvertimeMultiplier})`, "Total Mission Time"];
+  const metrics = ["Present days", "Absent days", "Incomplete days", "Late days", "Late minutes", "Early-leave days", "Unpaid-leave days", "Normal OT minutes", "Early OT minutes", "Total OT minutes", "Normal Mission Time (weighted)", `Early Mission Time (Early OT ×${state.policy.earlyOvertimeMultiplier})`, "Total Mission Time"];
   metrics.forEach((label, index) => {
     const row = sheet.getRow(10 + index);
     row.getCell(4).value = label;
@@ -352,7 +352,7 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
   }
 
   styleSection(sheet, `A${timeSectionRow}:O${timeSectionRow}`, "DAILY ATTENDANCE & TIME DETAIL");
-  const timeHeaders = ["Date", "Day", "First in", "Last out", "All punches", "Status", "Late Time (min)", `Penalty Time (min)\nLate Time ×${state.policy.minutePenaltyMultiplier}`, "Early Leave Time (min)", "Normal OT Time (min)", `Normal Mission Time (min)\nNormal OT ×${state.policy.overtimeMultiplier}`, "Early OT Time (min)", `Early Mission Time (min)\nEarly OT ×${state.policy.earlyOvertimeMultiplier}`, "Total OT Time (min)", "Total Mission Time (min)"];
+  const timeHeaders = ["Date", "Day", "First in", "Last out", "All punches", "Status", "Late Time (min)", `Penalty Time (min)\nLate Time ×${state.policy.minutePenaltyMultiplier}`, "Early Leave Time (min)", "Normal OT Time (min)", `Normal Mission Time (min)\nWeighted OT / assignment`, "Early OT Time (min)", `Early Mission Time (min)\nEarly OT ×${state.policy.earlyOvertimeMultiplier}`, "Total OT Time (min)", "Total Mission Time (min)"];
   timeHeaders.forEach((label, index) => { sheet.getRow(timeHeaderRow).getCell(index + 1).value = label; });
   styleHeader(sheet.getRow(timeHeaderRow), 1, 15);
   sheet.getRow(timeHeaderRow).height = 56;
@@ -362,7 +362,7 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
     const normalOvertimeMinutes = record?.normalOvertimeMinutes ?? 0;
     const earlyOvertimeMinutes = record?.earlyOvertimeMinutes ?? 0;
     const calculatedPenaltyTime = formula(`G${row.number}*${state.policy.minutePenaltyMultiplier}`, lateMinutes * state.policy.minutePenaltyMultiplier);
-    const calculatedNormalMissionTime = formula(`J${row.number}*${state.policy.overtimeMultiplier}`, record?.normalMissionMinutes ?? 0);
+    const calculatedNormalMissionTime = record?.normalMissionMinutes ?? 0;
     const calculatedEarlyMissionTime = formula(`L${row.number}*${state.policy.earlyOvertimeMultiplier}`, record?.earlyMissionMinutes ?? 0);
     const calculatedTotalOvertime = formula(`J${row.number}+L${row.number}`, record?.overtimeMinutes ?? 0);
     const calculatedTotalMissionTime = formula(`K${row.number}+M${row.number}`, record?.totalMissionMinutes ?? 0);
@@ -401,7 +401,7 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
   for (const column of [11, 13, 15]) sheet.getRow(timeTotalRow).getCell(column).numFmt = "#,##0.0;[Red](#,##0.0);0.0";
 
   styleSection(sheet, `A${impactSectionRow}:O${impactSectionRow}`, "DAILY PAYROLL IMPACT & APPROVALS");
-  const impactHeaders = ["Date", "Late deduction", "Early-leave deduction", "Unpaid-leave deduction", "OT pay", "Friday pay", "Late excused", "Early leave excused", "Leave paid", "Normal OT allowed", "Early OT allowed", "Reason / manager note"];
+  const impactHeaders = ["Date", "Late deduction", "Early-leave deduction", "Unpaid-leave deduction", "OT pay", "Friday / holiday pay", "Late excused", "Early leave excused", "Leave paid", "Normal OT allowed", "Early OT allowed", "Reason / manager note"];
   impactHeaders.forEach((label, index) => { sheet.getRow(impactHeaderRow).getCell(index + 1).value = label; });
   sheet.mergeCells(impactHeaderRow, 12, impactHeaderRow, 15);
   styleHeader(sheet.getRow(impactHeaderRow), 1, 15);
@@ -443,7 +443,7 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
   const noteRow = impactTotalRow + 2;
   sheet.mergeCells(`A${noteRow}:O${noteRow + 1}`);
   const noteCell = sheet.getCell(`A${noteRow}`);
-  noteCell.value = `Policy v${state.policy.policyVersion}: only days explicitly allowed with a written reason are included in overtime; Penalty Time = Late Time ×${state.policy.minutePenaltyMultiplier}; Normal Mission Time = allowed Normal OT ×${state.policy.overtimeMultiplier}; Early Mission Time = allowed Early OT ×${state.policy.earlyOvertimeMultiplier}; Total Mission Time = Normal Mission + Early Mission; free arrival through ${state.policy.freeArrivalUntil}; on days 1–16 the ${state.policy.overtimeArrivalCutoff} arrival cutoff is waived, while from day 17 arrival must be by the cutoff; early leave ×${state.policy.earlyLeaveDayMultiplier} day; unpaid leave ×${state.policy.unpaidLeaveDayMultiplier} day; Friday counts as ${state.policy.fridayMultiplier} days; salary divisor ${state.policy.salaryDivisor}.`;
+  noteCell.value = `Policy v${state.policy.policyVersion}: automatic overtime through 22:00 for arrivals through 11:30; extra evening and early overtime require approval; Penalty Time = Late Time ×${state.policy.minutePenaltyMultiplier}; Normal Mission Time = weighted overtime and additional assignment minutes (normal assignment ×1); Early Mission Time = allowed Early OT ×${state.policy.earlyOvertimeMultiplier}; Total Mission Time = Normal Mission + Early Mission; free arrival through ${state.policy.freeArrivalUntil}; arrival cutoff is ${state.policy.overtimeArrivalCutoff} on every day; early leave ×${state.policy.earlyLeaveDayMultiplier} day; unpaid leave ×${state.policy.unpaidLeaveDayMultiplier} day; Friday counts as ${state.policy.fridayMultiplier} days; salary divisor ${state.policy.salaryDivisor}.`;
   noteCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.yellowSoft } };
   noteCell.font = { name: "Aptos", size: 10, italic: true, color: { argb: COLORS.ink } };
   noteCell.alignment = { wrapText: true, vertical: "middle" };
@@ -519,7 +519,7 @@ export async function buildPayrollWorkbook(state: HrState) {
   summary.getCell("P5").font = { name: "Aptos Display", size: 17, bold: true, color: { argb: COLORS.ink } };
   summary.getCell("P4").alignment = summary.getCell("P5").alignment = { horizontal: "center", vertical: "middle" };
 
-  const headers = ["Employee", "Title", "Department", "Biometric ID", "Base salary", "Fixed commission", "Other additions", "Overtime pay", "Friday pay", "Attendance deduction", "Fixed deduction", "Other deductions", "Total additions", "Total deductions", "Net salary", "Present days", "Absent days", "Incomplete days", "Late days", "Late minutes", "Early-leave days", "Unpaid-leave days", "Normal OT minutes", "Early OT minutes", "Total OT minutes", `Normal Mission Time ×${state.policy.overtimeMultiplier}`, `Early Mission Time ×${state.policy.earlyOvertimeMultiplier}`, "Total Mission Time"];
+  const headers = ["Employee", "Title", "Department", "Biometric ID", "Base salary", "Fixed commission", "Other additions", "Overtime pay", "Friday / holiday pay", "Attendance deduction", "Fixed deduction", "Other deductions", "Total additions", "Total deductions", "Net salary", "Present days", "Absent days", "Incomplete days", "Late days", "Late minutes", "Early-leave days", "Unpaid-leave days", "Normal OT minutes", "Early OT minutes", "Total OT minutes", "Normal Mission Time (weighted)", `Early Mission Time ×${state.policy.earlyOvertimeMultiplier}`, "Total Mission Time"];
   headers.forEach((header, index) => { summary.getRow(8).getCell(index + 1).value = header; });
   styleHeader(summary.getRow(8), 1, 28);
 
@@ -612,7 +612,7 @@ export async function buildPayrollWorkbook(state: HrState) {
   const sourceRow = checkRow + 2;
   summary.mergeCells(`A${sourceRow}:AB${sourceRow}`);
   summary.mergeCells(`A${sourceRow + 1}:AB${sourceRow + 1}`);
-  summary.getCell(`A${sourceRow}`).value = `Policy: only explicitly allowed overtime days are counted; Penalty Time = Late Time ×${state.policy.minutePenaltyMultiplier}; Normal Mission Time = allowed Normal OT ×${state.policy.overtimeMultiplier}; Early Mission Time = allowed Early OT ×${state.policy.earlyOvertimeMultiplier}; Total Mission Time is the sum of both weighted values; days 1–16 waive the ${state.policy.overtimeArrivalCutoff} arrival cutoff, while from day 17 arrival must be by the cutoff; early leave ×${state.policy.earlyLeaveDayMultiplier} day; unpaid leave ×${state.policy.unpaidLeaveDayMultiplier} day; Friday counts as ${state.policy.fridayMultiplier} days; salary divisor ${state.policy.salaryDivisor}.`;
+  summary.getCell(`A${sourceRow}`).value = `Policy: automatic overtime through 22:00 for arrivals through 11:30; extra evening and early overtime require approval; Penalty Time = Late Time ×${state.policy.minutePenaltyMultiplier}; Normal Mission Time = weighted overtime and additional assignment minutes (normal assignment ×1); Early Mission Time = allowed Early OT ×${state.policy.earlyOvertimeMultiplier}; Total Mission Time is the sum of both weighted values; arrival cutoff is ${state.policy.overtimeArrivalCutoff} on every day; early leave ×${state.policy.earlyLeaveDayMultiplier} day; unpaid leave ×${state.policy.unpaidLeaveDayMultiplier} day; Friday counts as ${state.policy.fridayMultiplier} days; salary divisor ${state.policy.salaryDivisor}.`;
   summary.getCell(`A${sourceRow + 1}`).value = state.imports.length
     ? `Biometric source: ${state.imports.map((item) => item.fileName).join(", ")}`
     : "Biometric source: no Excel import recorded for this month.";

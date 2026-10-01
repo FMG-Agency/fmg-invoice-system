@@ -1,4 +1,5 @@
 "use client";
+import { ManualRequestsPanel } from "./ManualRequestsPanel";
 import { TrashPanel } from "./TrashPanel";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -67,7 +68,7 @@ import { DocumentPdfPreview } from "./DocumentPdfPreview";
 import { ReadingSize } from "./ReadingSize";
 import { WorkOrderPanel } from "./WorkOrderPanel";
 
-type View = "trash" | "home" | "dashboard" | "tasks" | "invoice" | "quotation" | "media-guide" | "work-order" | "production-directory" | "clients" | "client-accounts" | "monthly-clients" | "client-portal-admin" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
+type View = "manual-requests" | "trash" | "home" | "dashboard" | "tasks" | "invoice" | "quotation" | "media-guide" | "work-order" | "production-directory" | "clients" | "client-accounts" | "monthly-clients" | "client-portal-admin" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
 type Mutation = (body: Record<string, unknown>) => Promise<AppState>;
 const companyNames: Record<CompanyKey, string> = { fmg: "FMG Agency", digital_empire: "The Digital Empire" };
 type AuthState = {
@@ -200,6 +201,7 @@ const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof L
   { id: "monthly-clients", label: "Retainers", eyebrow: "Monthly finance", icon: CalendarRange, permission: "clients" },
   { id: "client-portal-admin", label: "Client Portal", eyebrow: "Invoices & content plans", icon: Sparkles, permission: "client_portal" },
   { id: "employees", label: "Employees", eyebrow: "People & salaries", icon: UserRound, permission: "employees" },
+  { id: "manual-requests", label: "Manual Requests", eyebrow: "Enter employee requests", icon: ClipboardList, permission: "attendance" },
   { id: "attendance", label: "Attendance", eyebrow: "Payroll & biometric", icon: Clock3, permission: "attendance" },
   { id: "requests", label: "Employee Requests", eyebrow: "Leave, excuses & missions", icon: ClipboardList, permission: "requests" },
   { id: "categories", label: "Categories", eyebrow: "Services", icon: Tag, permission: "categories" },
@@ -222,7 +224,7 @@ const navSections: NavSection[] = [
   { id: "documents", label: "Documents", eyebrow: "Create & archive", icon: FileText, items: ["invoice", "quotation", "data"] },
   { id: "clients", label: "Clients", eyebrow: "Directory & experience", icon: UsersRound, items: ["clients", "client-accounts", "monthly-clients", "client-portal-admin"] },
   { id: "services", label: "Services", eyebrow: "Catalog & categories", icon: Sparkles, items: ["media-guide", "categories"] },
-  { id: "people", label: "Employees", eyebrow: "Team & payroll", icon: UserRound, items: ["employees", "attendance", "requests"] },
+  { id: "people", label: "Employees", eyebrow: "Team & payroll", icon: UserRound, items: ["employees", "manual-requests", "attendance", "requests"] },
   { id: "administration", label: "Administration", eyebrow: "Settings & access", icon: Settings2, items: ["settings", "users", "trash"] },
 ];
 
@@ -236,6 +238,7 @@ function navGroupForView(next: View): NavGroupId | null {
 }
 
 const viewCopy: Record<View, { eyebrow: string; title: string; description: string }> = {
+  "manual-requests": {eyebrow:"PEOPLE OPERATIONS",title:"Manual requests",description:"Record assignments, overtime, departure and absence permissions for an employee."},
   trash: {eyebrow:"RECENTLY DELETED",title:"Trash",description:"Recover deleted records within 7 days."},
   home: { eyebrow: "WELCOME TO FMG", title: "Make great work happen.", description: "Your people, projects and next steps. One place to begin." },
   dashboard: { eyebrow: "FMG CONTROL CENTER", title: "Good evening, FMG.", description: "Your agency documents, clients, and activity in one calm workspace." },
@@ -778,6 +781,7 @@ export function FmgSystem() {
           {view === "client-accounts" && <ClientFinancePanel mode="accounts" initialClients={state.clients} showToast={showToast} />}
           {view === "monthly-clients" && <ClientFinancePanel mode="monthly" initialClients={state.clients} showToast={showToast} />}
           {view === "client-portal-admin" && <ClientPortalAdmin showToast={showToast} />}
+          {view === "manual-requests" && <ManualRequestsPanel employees={hrState.employees} onSaved={async () => { showToast("All manual requests added to attendance."); await loadWorkspace(); }} />}
           {view === "employees" && <EmployeesPanel state={hrState} mutate={mutateHr} busy={busy} showToast={showToast} />}
           {view === "attendance" && <AttendancePanel state={hrState} mutate={mutateHr} busy={busy} onMonthChange={loadHr} onStateChange={setHrState} showToast={showToast} />}
           {view === "requests" && <RequestsPanel showToast={showToast} />}

@@ -1,3 +1,4 @@
+import { manualAttendance } from "./manual-attendance";
 import { database } from "./database";
 import type { AttendanceRecord, Employee, HrPolicy, HrState, PayrollAdjustment, PayrollSummary } from "../types";
 
@@ -115,6 +116,8 @@ const hrSchemaStatements = [
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS hr_manual_request_guard (value INTEGER CONSTRAINT manual_request_no_overlap CHECK(value = 1))`,
+  `CREATE TABLE IF NOT EXISTS hr_manual_batches (id TEXT PRIMARY KEY, actor_id INTEGER NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_biometric_code ON employees(biometric_code) WHERE biometric_code <> ''",
   "CREATE INDEX IF NOT EXISTS idx_employees_name ON employees(name)",
   "CREATE INDEX IF NOT EXISTS idx_attendance_work_date ON attendance_records(work_date)",
@@ -174,6 +177,7 @@ async function initializeHrDatabase() {
   ]);
   const migrations = [];
   const hasColumn = (columns: { results: Record<string, unknown>[] }, name: string) => columns.results.some((column) => String(column.name) === name);
+  if (!hasColumn(requestColumns, "manual_data")) migrations.push(database.prepare("ALTER TABLE employee_requests ADD COLUMN manual_data TEXT NOT NULL DEFAULT ''"));
   const migrateExistingRequestRules = !hasColumn(requestColumns, "decision_token");
   if (!hasColumn(policyColumns, "policy_version")) migrations.push(database.prepare("ALTER TABLE hr_policy ADD COLUMN policy_version INTEGER NOT NULL DEFAULT 1"));
   if (!hasColumn(policyColumns, "workday_starts_at")) migrations.push(database.prepare("ALTER TABLE hr_policy ADD COLUMN workday_starts_at TEXT NOT NULL DEFAULT '11:00'"));
@@ -265,12 +269,6 @@ function isFriday(value: string) {
   return new Date(`${value}T12:00:00Z`).getUTCDay() === 5;
 }
 
-function dayOfMonth(value: string) {
-  const match = /^\d{4}-\d{2}-(\d{2})$/.exec(value);
-  const day = match ? Number(match[1]) : Number.NaN;
-  return Number.isInteger(day) && day >= 1 && day <= 31 ? day : null;
-}
-
 const leaveStatuses: AttendanceRecord["status"][] = ["vacation", "occasional_leave", "resort_leave", "sick_leave", "urgent_leave", "normal_leave"];
 
 type AttendanceSource = Omit<AttendanceRecord, "lateMinutes" | "penaltyMinutes" | "earlyLeaveMinutes" | "normalOvertimeMinutes" | "overtimeMinutes" | "earlyOvertimeMinutes" | "normalMissionMinutes" | "earlyMissionMinutes" | "totalMissionMinutes" | "lateDeduction" | "earlyLeaveDeduction" | "leaveDeduction" | "overtimePay" | "fridayPay">;
@@ -289,8 +287,7 @@ export function attendanceMath(record: AttendanceSource, employee: Employee, pol
   const overtimeApprovalAfter = minutesFromTime(policy.overtimeApprovalAfter) ?? 1320;
   const overtimeCutoff = minutesFromTime(policy.overtimeArrivalCutoff) ?? 690;
   const friday = isFriday(record.workDate);
-  const workDay = dayOfMonth(record.workDate);
-  const overtimeArrivalEligible = (workDay !== null && workDay <= 16) || (arrival !== null && arrival <= overtimeCutoff);
+  const overtimeArrivalEligible = arrival !== null && arrival <= overtimeCutoff;
 
   let lateMinutes = 0;
   let penaltyMinutes = 0;
@@ -324,8 +321,7 @@ export function attendanceMath(record: AttendanceSource, employee: Employee, pol
       }
     }
 
-    const writtenOvertimeApproval = record.overtimeApproved && record.notes.trim().length > 0;
-    if (record.missionOvertimeMinutes <= 0 && departure !== null && writtenOvertimeApproval && overtimeArrivalEligible && departure > overtimeStart) {
+    if (record.missionOvertimeMinutes <= 0 && departure !== null && overtimeArrivalEligible && departure > overtimeStart) {
       const approvedPastTen = record.overtimeApproved && record.notes.trim().length > 0;
       const eligibleDeparture = approvedPastTen ? departure : Math.min(departure, overtimeApprovalAfter);
       normalOvertimeMinutes = Math.max(0, eligibleDeparture - overtimeStart);
@@ -449,7 +445,7 @@ function attendanceFromRow(row: Record<string, unknown>, employees: Map<number, 
     updatedAt: String(row.updatedAt ?? ""),
   };
   const employee = employees.get(source.employeeId);
-  return { ...source, ...attendanceMath(source, employee ?? ({ baseSalary: 0 } as Employee), policy) };
+  return manualAttendance(source, JSON.parse(String(row.manualRequests ?? "[]")), employee ?? ({ baseSalary: 0 } as Employee), policy, attendanceMath);
 }
 
 function payrollForEmployee(employee: Employee, attendance: AttendanceRecord[], adjustments: PayrollAdjustment[]): PayrollSummary {
@@ -522,8 +518,11 @@ export async function getHrState(month: string): Promise<HrState> {
       a.early_leave_excused AS earlyLeaveExcused, a.leave_paid AS leavePaid,
       a.overtime_approved AS overtimeApproved, a.early_overtime_approved AS earlyOvertimeApproved,
       COALESCE((SELECT SUM(r.duration_minutes) FROM employee_requests r
-        WHERE r.employee_id = a.employee_id AND r.type = 'mission' AND r.status = 'approved'
+        WHERE r.employee_id = a.employee_id AND r.type = 'mission' AND r.status = 'approved' AND r.manual_data = ''
           AND a.work_date BETWEEN r.date_from AND r.date_to), 0) AS missionOvertimeMinutes,
+      COALESCE((SELECT json_group_array(json(r.manual_data)) FROM employee_requests r
+        WHERE r.employee_id = a.employee_id AND r.status = 'approved' AND r.manual_data <> ''
+          AND a.work_date BETWEEN r.date_from AND r.date_to), '[]') AS manualRequests,
       a.notes, a.created_at AS createdAt, a.updated_at AS updatedAt
       FROM attendance_records a JOIN employees e ON e.id = a.employee_id
       WHERE substr(a.work_date, 1, 7) = ? AND (e.hire_date = '' OR a.work_date >= e.hire_date)

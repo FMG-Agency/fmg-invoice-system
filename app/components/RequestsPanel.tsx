@@ -138,7 +138,7 @@ function typeIcon(type: EmployeeRequestType, size: number) {
 
 function policyNote(draft: RequestDraft, state: RequestsState) {
   if (draft.type === "mission") return `Only mission time after ${timeLabel(state.overtimeStartsAt)} is added to overtime after approval.`;
-  if (draft.type === "overtime") return `Only approved requests are counted. Overtime starts at ${timeLabel(state.overtimeStartsAt)}. On days 1–16 it is counted even when arrival is after 11:30 AM; from day 17 arrival must be no later than 11:30 AM. Time after ${timeLabel(state.overtimeApprovalAfter)} still requires written manager approval.`;
+  if (draft.type === "overtime") return `Automatic overtime starts at ${timeLabel(state.overtimeStartsAt)}. Arrival must be no later than 11:30 AM on every day. Time after ${timeLabel(state.overtimeApprovalAfter)} still requires written manager approval.`;
   if (draft.type === "early_arrival") return `Submit at least one day before the task. Only approved time before ${timeLabel(state.workdayStartsAt)} is paid at ×${state.earlyOvertimeMultiplier} and shown separately as Early Mission Time.`;
   if (draft.type !== "leave") return "Approved early leave is recorded as excused and does not trigger the half-day deduction.";
   if (draft.leaveKind === "sick_leave") return `A medical report is required when sick leave exceeds ${state.sickReportAfterDays} days.`;
