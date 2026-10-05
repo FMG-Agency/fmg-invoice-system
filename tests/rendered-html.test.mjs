@@ -109,7 +109,7 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(hrExport, /No manager note/);
   assert.match(hrExport, /DATA CHECK — Employee profile is incomplete/);
   assert.match(hrExport, /Update Employees before relying on payroll amounts/);
-  assert.match(hrExport, /sheet\.pageSetup\.printArea = `A1:O/);
+  assert.match(hrExport, /sheet\.pageSetup\.printArea = `A1:Q/);
   assert.doesNotMatch(hrExport, /sheet\.views = \[\{ state: "frozen", ySplit: timeHeaderRow/);
   assert.doesNotMatch(hrExport, /Mission Time[^\n`]*×4/);
   for (const action of ["setup", "login", "logout", "change"]) {

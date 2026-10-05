@@ -39,12 +39,12 @@ export async function POST(request: Request) {
       }
       statements.push(database.prepare(`INSERT INTO hr_manual_request_guard(value) SELECT CASE WHEN EXISTS (
         SELECT 1 FROM employee_requests WHERE employee_id=? AND status='approved' AND date_from<=? AND date_to>=?
-        AND (type='leave' OR ?='leave' OR (manual_data<>'' AND type=? AND (?='early_leave' OR (start_time<? AND end_time>?))))
+        AND (type='leave' OR ?='leave' OR (manual_data<>'' AND json_extract(manual_data,'$.type')=? AND (?='early_leave' OR (start_time<? AND end_time>?))))
       ) THEN 0 ELSE 1 END`).bind(payload.employeeId,r.dateTo,r.dateFrom,r.type,r.type,r.type,r.endTime,r.startTime));
       const details = r.details + (r.type === "leave" ? " · Reason: " + r.reason : r.type === "mission" ? " · Day: " + r.dayType : "");
       statements.push(database.prepare(`INSERT INTO employee_requests(employee_id,requester_user_id,type,leave_kind,date_from,date_to,start_time,end_time,duration_minutes,leave_paid,details,status,reviewer_note,reviewed_by_user_id,reviewed_at,manual_data)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,'approved','Manually entered and approved',?,CURRENT_TIMESTAMP,?)`).bind(payload.employeeId,session.userId,r.type,r.reason === "sick" ? "sick_leave":"normal_leave",r.dateFrom,r.dateTo,r.startTime,r.endTime,r.endTime ? timeMinutes(r.endTime)-timeMinutes(r.startTime):0,r.leavePaid?1:0,details,session.userId,JSON.stringify(r)));
-      for (const date of requestDates(r)) statements.push(database.prepare("INSERT INTO attendance_records(employee_id,work_date,status) VALUES(?,?,'absent') ON CONFLICT(employee_id,work_date) DO NOTHING").bind(payload.employeeId,date));
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,'approved','Manually entered and approved',?,CURRENT_TIMESTAMP,?)`).bind(payload.employeeId,session.userId,r.type === "paid_weekend" ? "mission" : r.type,r.reason === "sick" ? "sick_leave":"normal_leave",r.dateFrom,r.dateTo,r.startTime,r.endTime,r.endTime ? timeMinutes(r.endTime)-timeMinutes(r.startTime):0,r.leavePaid?1:0,details,session.userId,JSON.stringify(r)));
+      for (const date of requestDates(r)) statements.push(database.prepare("INSERT INTO attendance_records(employee_id,work_date,status,manual_seed) VALUES(?,?,'absent',1) ON CONFLICT(employee_id,work_date) DO NOTHING").bind(payload.employeeId,date));
     }
     statements.push(database.prepare("DELETE FROM hr_manual_request_guard"));
     try { await database.batch(statements); }
@@ -57,3 +57,5 @@ export async function POST(request: Request) {
     return Response.json({error:"Could not save requests. Nothing was partially added; please retry."},{status:500});
   }
 }
+
+export { GET, PATCH, DELETE } from "../../../lib/manual-request-management";

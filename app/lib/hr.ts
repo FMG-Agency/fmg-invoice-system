@@ -183,6 +183,8 @@ async function initializeHrDatabase() {
   const migrations = [];
   const hasColumn = (columns: { results: Record<string, unknown>[] }, name: string) => columns.results.some((column) => String(column.name) === name);
   if (!hasColumn(requestColumns, "manual_data")) migrations.push(database.prepare("ALTER TABLE employee_requests ADD COLUMN manual_data TEXT NOT NULL DEFAULT ''"));
+  const migrateManualSeeds = !hasColumn(attendanceColumns, "manual_seed");
+  if (migrateManualSeeds) migrations.push(database.prepare("ALTER TABLE attendance_records ADD COLUMN manual_seed INTEGER NOT NULL DEFAULT 0"));
   const migrateExistingRequestRules = !hasColumn(requestColumns, "decision_token");
   if (!hasColumn(policyColumns, "policy_version")) migrations.push(database.prepare("ALTER TABLE hr_policy ADD COLUMN policy_version INTEGER NOT NULL DEFAULT 1"));
   if (!hasColumn(policyColumns, "workday_starts_at")) migrations.push(database.prepare("ALTER TABLE hr_policy ADD COLUMN workday_starts_at TEXT NOT NULL DEFAULT '11:00'"));
@@ -209,6 +211,10 @@ async function initializeHrDatabase() {
       if (!/duplicate column name/i.test(error instanceof Error ? error.message : String(error))) throw error;
     }
   }
+  if (migrateManualSeeds) await database.prepare(`UPDATE attendance_records SET manual_seed=1 WHERE manual_seed=0 AND import_id IS NULL
+    AND first_in='' AND last_out='' AND punches_json='[]' AND status='absent' AND notes=''
+    AND EXISTS (SELECT 1 FROM employee_requests r WHERE r.employee_id=attendance_records.employee_id AND r.manual_data<>''
+      AND r.created_at=attendance_records.created_at AND attendance_records.work_date BETWEEN r.date_from AND r.date_to)`).run();
   await database.prepare(`UPDATE hr_policy SET policy_version = 2, workday_starts_at = '11:00', free_arrival_until = '11:05',
     minor_late_until = '11:15', quarter_day_until = '11:45', overtime_starts_at = '19:15', overtime_approval_after = '22:00',
     overtime_arrival_cutoff = '11:30', minute_penalty_multiplier = 4, overtime_multiplier = 2,
@@ -276,7 +282,7 @@ function isFriday(value: string) {
 
 const leaveStatuses: AttendanceRecord["status"][] = ["vacation", "occasional_leave", "resort_leave", "sick_leave", "urgent_leave", "normal_leave"];
 
-type AttendanceSource = Omit<AttendanceRecord, "lateMinutes" | "penaltyMinutes" | "earlyLeaveMinutes" | "normalOvertimeMinutes" | "overtimeMinutes" | "earlyOvertimeMinutes" | "normalMissionMinutes" | "earlyMissionMinutes" | "totalMissionMinutes" | "lateDeduction" | "earlyLeaveDeduction" | "leaveDeduction" | "overtimePay" | "fridayPay">;
+type AttendanceSource = Omit<AttendanceRecord, "paidWeekendMinutes" | "paidWeekendMissionMinutes" | "lateMinutes" | "penaltyMinutes" | "earlyLeaveMinutes" | "normalOvertimeMinutes" | "overtimeMinutes" | "earlyOvertimeMinutes" | "normalMissionMinutes" | "earlyMissionMinutes" | "totalMissionMinutes" | "lateDeduction" | "earlyLeaveDeduction" | "leaveDeduction" | "overtimePay" | "fridayPay">;
 
 export function attendanceMath(record: AttendanceSource, employee: Employee, policy: HrPolicy) {
   const dailyRate = employee.baseSalary / Math.max(1, policy.salaryDivisor);
@@ -495,6 +501,8 @@ function payrollForEmployee(employee: Employee, attendance: AttendanceRecord[], 
     earlyLeaveDays: employeeAttendance.filter((record) => record.earlyLeaveMinutes > 0 && !record.earlyLeaveExcused).length,
     unpaidLeaveDays: employeeAttendance.filter((record) => leaveStatuses.includes(record.status) && !record.leavePaid).length,
     lateMinutes: employeeAttendance.reduce((sum, record) => sum + record.lateMinutes, 0),
+    paidWeekendMinutes: employeeAttendance.reduce((sum, record) => sum + (record.paidWeekendMinutes || 0), 0),
+    paidWeekendMissionMinutes: employeeAttendance.reduce((sum, record) => sum + (record.paidWeekendMissionMinutes || 0), 0),
     normalOvertimeMinutes: employeeAttendance.reduce((sum, record) => sum + record.normalOvertimeMinutes, 0),
     overtimeMinutes: employeeAttendance.reduce((sum, record) => sum + record.overtimeMinutes, 0),
     earlyOvertimeMinutes: employeeAttendance.reduce((sum, record) => sum + record.earlyOvertimeMinutes, 0),
@@ -536,7 +544,7 @@ export async function getHrState(month: string): Promise<HrState> {
           AND a.work_date BETWEEN r.date_from AND r.date_to), '[]') AS manualRequests,
       a.notes, a.created_at AS createdAt, a.updated_at AS updatedAt
       FROM attendance_records a JOIN employees e ON e.id = a.employee_id
-      WHERE substr(a.work_date, 1, 7) = ? AND (e.hire_date = '' OR a.work_date >= e.hire_date)
+      WHERE (a.manual_seed=0 OR EXISTS (SELECT 1 FROM employee_requests r WHERE r.employee_id=a.employee_id AND r.status='approved' AND r.manual_data<>'' AND a.work_date BETWEEN r.date_from AND r.date_to)) AND substr(a.work_date, 1, 7) = ? AND (e.hire_date = '' OR a.work_date >= e.hire_date)
       ORDER BY a.work_date DESC, e.name COLLATE NOCASE`).bind(month).all(),
     database.prepare(`SELECT id, file_name AS fileName, period_start AS periodStart, period_end AS periodEnd,
       employee_count AS employeeCount, record_count AS recordCount, created_employees AS createdEmployees,

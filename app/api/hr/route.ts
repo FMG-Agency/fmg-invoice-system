@@ -94,6 +94,7 @@ const actionPayload = z.discriminatedUnion("action", [
   z.object({ action: z.literal("allowOvertimeDay"), month: monthValue, data: overtimeAllowancePayload }),
   z.object({ action: z.literal("updatePolicy"), month: monthValue, data: policyPayload }),
   z.object({ action: z.literal("updateAttendance"), month: monthValue, id: z.number().int().positive(), data: attendancePayload }),
+  z.object({ action: z.literal("updateAdjustment"), month: monthValue, id: z.number().int().positive(), data: adjustmentPayload }),
   z.object({ action: z.literal("createAdjustment"), month: monthValue, data: adjustmentPayload }),
   z.object({ action: z.literal("deleteAdjustment"), month: monthValue, id: z.number().int().positive() }),
 ]);
@@ -223,7 +224,7 @@ export async function POST(request: Request) {
 
     if (payload.action === "updateAttendance") {
       const value = payload.data;
-      await database.prepare(`UPDATE attendance_records SET first_in = ?, last_out = ?, status = ?,
+      await database.prepare(`UPDATE attendance_records SET manual_seed=0, first_in = ?, last_out = ?, status = ?,
         late_excused = ?, early_leave_excused = ?, leave_paid = ?, overtime_approved = ?, early_overtime_approved = ?,
         notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(
         value.firstIn, value.lastOut, value.status, value.lateExcused ? 1 : 0,
@@ -240,6 +241,11 @@ export async function POST(request: Request) {
         ).run();
     }
 
+    if (payload.action === "updateAdjustment") {
+      const value=payload.data;
+      const result=await database.prepare("UPDATE payroll_adjustments SET employee_id=?,period_month=?,type=?,label=?,amount=?,days=?,notes=? WHERE id=?").bind(value.employeeId,payload.month,value.type,value.label,value.days>0?0:value.amount,value.days,value.notes,payload.id).run();
+      if(!result.meta.changes)return Response.json({error:"Adjustment no longer exists."},{status:404});
+    }
     if (payload.action === "deleteAdjustment") {
       await trashDelete("payroll_adjustments", "id = ?", [payload.id], session);
     }

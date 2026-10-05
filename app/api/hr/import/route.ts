@@ -187,7 +187,7 @@ export async function POST(request: Request) {
         attendanceStatements.push(database.prepare(`INSERT INTO attendance_records
           (import_id, employee_id, work_date, first_in, last_out, punches_json, status, overtime_approved, early_overtime_approved)
           VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
-          ON CONFLICT(employee_id, work_date) DO UPDATE SET
+          ON CONFLICT(employee_id, work_date) DO UPDATE SET manual_seed=0,
             import_id = excluded.import_id,
             first_in = excluded.first_in,
             last_out = excluded.last_out,

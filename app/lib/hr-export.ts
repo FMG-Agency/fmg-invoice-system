@@ -341,6 +341,12 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
   for (let row = 10; row <= 22; row += 1) sheet.getCell(`E${row}`).numFmt = "#,##0;[Red](#,##0);0";
   for (let row = 20; row <= 22; row += 1) sheet.getCell(`E${row}`).numFmt = "#,##0.0;[Red](#,##0.0);0.0";
 
+  sheet.getCell("D25").value="Paid weekend (min)";
+  sheet.getCell("E25").value=formula(`SUM(P${timeStart}:P${timeEnd})`,payroll.paidWeekendMinutes || 0);
+  sheet.getCell("D26").value="Paid weekend Mission Time ×2";
+  sheet.getCell("E26").value=formula(`SUM(Q${timeStart}:Q${timeEnd})`,payroll.paidWeekendMissionMinutes || 0);
+  for(const n of [25,26]){styleDataRow(sheet.getRow(n),4,5);sheet.getRow(n).height=32;sheet.getCell(`D${n}`).alignment={wrapText:true,vertical:"middle"};}
+  sheet.getCell("A13").value="Overtime + paid weekend pay";
   styleSection(sheet, "G8:J8", "MONTHLY ADJUSTMENTS");
   ["Type", "Label", "Amount", "Notes"].forEach((label, index) => { sheet.getRow(9).getCell(7 + index).value = label; });
   styleHeader(sheet.getRow(9), 7, 10);
@@ -372,10 +378,11 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
     row.height = 30;
   }
 
-  styleSection(sheet, `A${timeSectionRow}:O${timeSectionRow}`, "DAILY ATTENDANCE & TIME DETAIL");
-  const timeHeaders = ["Date", "Day", "First in", "Last out", "All punches", "Status", "Late Time (min)", `Penalty Time (min)\nLate Time ×${state.policy.minutePenaltyMultiplier}`, "Early Leave Time (min)", "Normal OT Time (min)", `Normal Mission Time (min)\nWeighted OT / assignment`, "Early OT Time (min)", `Early Mission Time (min)\nEarly OT ×${state.policy.earlyOvertimeMultiplier}`, "Total OT Time (min)", "Total Mission Time (min)"];
+  styleSection(sheet, `A${timeSectionRow}:Q${timeSectionRow}`, "DAILY ATTENDANCE & TIME DETAIL");
+  const timeHeaders = ["Date", "Day", "First in", "Last out", "All punches", "Status", "Late Time (min)", `Penalty Time (min)\nLate Time ×${state.policy.minutePenaltyMultiplier}`, "Early Leave Time (min)", "Normal OT Time (min)", `Normal Mission Time (min)\nWeighted OT / assignment`, "Early OT Time (min)", `Early Mission Time (min)\nEarly OT ×${state.policy.earlyOvertimeMultiplier}`, "Total OT Time (min)", "Total Mission Time (min)", "Paid weekend (min)", "Paid weekend Mission Time (min) ×2"];
   timeHeaders.forEach((label, index) => { sheet.getRow(timeHeaderRow).getCell(index + 1).value = label; });
-  styleHeader(sheet.getRow(timeHeaderRow), 1, 15);
+  styleHeader(sheet.getRow(timeHeaderRow), 1, 17);
+  sheet.getColumn(16).width=18;sheet.getColumn(17).width=22;
   sheet.getRow(timeHeaderRow).height = 56;
 
   const writeTimeRow = (row: ExcelJS.Row, record?: AttendanceRecord) => {
@@ -385,12 +392,14 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
     const calculatedPenaltyTime = formula(`G${row.number}*${state.policy.minutePenaltyMultiplier}`, lateMinutes * state.policy.minutePenaltyMultiplier);
     const calculatedNormalMissionTime = record?.normalMissionMinutes ?? 0;
     const calculatedEarlyMissionTime = formula(`L${row.number}*${state.policy.earlyOvertimeMultiplier}`, record?.earlyMissionMinutes ?? 0);
-    const calculatedTotalOvertime = formula(`J${row.number}+L${row.number}`, record?.overtimeMinutes ?? 0);
-    const calculatedTotalMissionTime = formula(`K${row.number}+M${row.number}`, record?.totalMissionMinutes ?? 0);
+    const calculatedTotalOvertime = formula(`J${row.number}+L${row.number}+P${row.number}`, record?.overtimeMinutes ?? 0);
+    const calculatedTotalMissionTime = formula(`K${row.number}+M${row.number}+Q${row.number}`, record?.totalMissionMinutes ?? 0);
     row.values = record
       ? [dateValue(record.workDate), dayLabel(record.workDate), meaningfulText(record.firstIn, "Not recorded"), meaningfulText(record.lastOut, "Not recorded"), record.punches.length ? record.punches.join(" | ") : "No punches recorded", STATUS_LABELS[record.status], lateMinutes, calculatedPenaltyTime, record.earlyLeaveMinutes, normalOvertimeMinutes, calculatedNormalMissionTime, earlyOvertimeMinutes, calculatedEarlyMissionTime, calculatedTotalOvertime, calculatedTotalMissionTime]
       : ["No attendance date", "N/A", "Not recorded", "Not recorded", "No punches recorded", "No attendance record", lateMinutes, calculatedPenaltyTime, 0, normalOvertimeMinutes, calculatedNormalMissionTime, earlyOvertimeMinutes, calculatedEarlyMissionTime, calculatedTotalOvertime, calculatedTotalMissionTime];
-    styleDataRow(row, 1, 15);
+    row.getCell(16).value = record?.paidWeekendMinutes || 0;
+    row.getCell(17).value = formula(`P${row.number}*2`,record?.paidWeekendMissionMinutes || 0);
+    styleDataRow(row, 1, 17);
     if (record) row.getCell(1).numFmt = "yyyy-mm-dd";
     for (let column = 1; column <= 15; column += 1) {
       const cell = row.getCell(column);
@@ -415,9 +424,11 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
     [13, `SUM(M${timeStart}:M${timeEnd})`, payroll.earlyMissionMinutes],
     [14, `SUM(N${timeStart}:N${timeEnd})`, payroll.overtimeMinutes],
     [15, `SUM(O${timeStart}:O${timeEnd})`, payroll.totalMissionMinutes],
+    [16, `SUM(P${timeStart}:P${timeEnd})`, payroll.paidWeekendMinutes || 0],
+    [17, `SUM(Q${timeStart}:Q${timeEnd})`, payroll.paidWeekendMissionMinutes || 0],
   ];
   timeTotals.forEach(([column, formulaValue, result]) => { sheet.getRow(timeTotalRow).getCell(column).value = formula(formulaValue, result); });
-  styleTotalRow(sheet.getRow(timeTotalRow), 1, 15);
+  styleTotalRow(sheet.getRow(timeTotalRow), 1, 17);
   for (let column = 7; column <= 15; column += 1) sheet.getRow(timeTotalRow).getCell(column).numFmt = "#,##0;[Red](#,##0);0";
   for (const column of [11, 13, 15]) sheet.getRow(timeTotalRow).getCell(column).numFmt = "#,##0.0;[Red](#,##0.0);0.0";
 
@@ -478,7 +489,7 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
   noteCell.border = { top: { style: "thin", color: { argb: COLORS.yellow } }, bottom: { style: "thin", color: { argb: COLORS.yellow } } };
   sheet.getRow(noteRow).height = 32;
   sheet.getRow(noteRow + 1).height = 32;
-  sheet.pageSetup.printArea = `A1:O${noteRow + 1}`;
+  sheet.pageSetup.printArea = `A1:Q${noteRow + 1}`;
 
   return { payroll, sheetName };
 }
@@ -501,8 +512,9 @@ export async function buildPayrollWorkbook(state: HrState) {
     headerFooter: { oddHeader: "&LFMG Agency&CPayroll summary&R&P / &N", oddFooter: `&L${state.month}&CConfidential&R${safeCurrency(state.policy.currency)}` },
   });
   setSummaryWidths(summary);
+  summary.getColumn(29).width=20;summary.getColumn(30).width=24;
   summary.views = [{ state: "frozen", ySplit: 8, xSplit: 2, activeCell: "C9", showGridLines: false }];
-  styleTitle(summary, "FMG PAYROLL & ATTENDANCE", `Payroll month: ${state.month}  |  Currency: ${safeCurrency(state.policy.currency)}  |  Generated: ${generatedAt()} Cairo`, "AB");
+  styleTitle(summary, "FMG PAYROLL & ATTENDANCE", `Payroll month: ${state.month}  |  Currency: ${safeCurrency(state.policy.currency)}  |  Generated: ${generatedAt()} Cairo`, "AD");
 
   const usedNames = new Set(["payroll summary"]);
   const employeeSheets = state.payroll.map((payroll) => addCompactEmployeeSheet(workbook, state, payroll, uniqueSheetName(payroll.employeeName, usedNames)));
@@ -537,8 +549,8 @@ export async function buildPayrollWorkbook(state: HrState) {
     valueCell.numFmt = currencyFormat;
   });
 
-  summary.mergeCells("P4:AB4");
-  summary.mergeCells("P5:AB6");
+  summary.mergeCells("P4:AD4");
+  summary.mergeCells("P5:AD6");
   summary.getCell("P4").value = "EMPLOYEES IN WORKBOOK";
   summary.getCell("P5").value = employeeSheets.length;
   summary.getCell("P4").fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.panel } };
@@ -547,9 +559,9 @@ export async function buildPayrollWorkbook(state: HrState) {
   summary.getCell("P5").font = { name: "Aptos Display", size: 17, bold: true, color: { argb: COLORS.ink } };
   summary.getCell("P4").alignment = summary.getCell("P5").alignment = { horizontal: "center", vertical: "middle" };
 
-  const headers = ["Employee", "Title", "Department", "Biometric ID", "Base salary", "Fixed commission", "Other additions", "Overtime pay", "Friday / holiday pay", "Attendance deduction", "Fixed deduction", "Other deductions", "Total additions", "Total deductions", "Net salary", "Present days", "Absent days", "Incomplete days", "Late days", "Late minutes", "Early-leave days", "Unpaid-leave days", "Normal OT minutes", "Early OT minutes", "Total OT minutes", "Normal Mission Time (weighted)", `Early Mission Time ×${state.policy.earlyOvertimeMultiplier}`, "Total Mission Time"];
+  const headers = ["Employee", "Title", "Department", "Biometric ID", "Base salary", "Fixed commission", "Other additions", "Overtime pay", "Friday / holiday pay", "Attendance deduction", "Fixed deduction", "Other deductions", "Total additions", "Total deductions", "Net salary", "Present days", "Absent days", "Incomplete days", "Late days", "Late minutes", "Early-leave days", "Unpaid-leave days", "Normal OT minutes", "Early OT minutes", "Total OT minutes", "Normal Mission Time (weighted)", `Early Mission Time ×${state.policy.earlyOvertimeMultiplier}`, "Total Mission Time", "Paid weekend minutes", "Paid weekend Mission Time ×2"];
   headers.forEach((header, index) => { summary.getRow(8).getCell(index + 1).value = header; });
-  styleHeader(summary.getRow(8), 1, 28);
+  styleHeader(summary.getRow(8), 1, 30);
 
   if (employeeSheets.length) {
     employeeSheets.forEach(({ payroll, sheetName }, index) => {
@@ -571,11 +583,12 @@ export async function buildPayrollWorkbook(state: HrState) {
         [22, `${quoted}!E16`, payroll.unpaidLeaveDays], [23, `${quoted}!E17`, payroll.normalOvertimeMinutes], [24, `${quoted}!E18`, payroll.earlyOvertimeMinutes],
         [25, `${quoted}!E19`, payroll.overtimeMinutes], [26, `${quoted}!E20`, payroll.normalMissionMinutes], [27, `${quoted}!E21`, payroll.earlyMissionMinutes], [28, `${quoted}!E22`, payroll.totalMissionMinutes],
       ];
+      references.push([29,`${quoted}!E25`,payroll.paidWeekendMinutes || 0],[30,`${quoted}!E26`,payroll.paidWeekendMissionMinutes || 0]);
       references.forEach(([column, formulaValue, result]) => { row.getCell(column).value = formula(formulaValue, result); });
-      styleDataRow(row, 1, 28);
+      styleDataRow(row, 1, 30);
       for (let column = 5; column <= 15; column += 1) row.getCell(column).numFmt = currencyFormat;
-      for (let column = 16; column <= 28; column += 1) row.getCell(column).numFmt = "#,##0;[Red](#,##0);0";
-      for (let column = 26; column <= 28; column += 1) row.getCell(column).numFmt = "#,##0.0;[Red](#,##0.0);0.0";
+      for (let column = 16; column <= 30; column += 1) row.getCell(column).numFmt = "#,##0;[Red](#,##0);0";
+      for (let column = 26; column <= 30; column += 1) row.getCell(column).numFmt = "#,##0.0;[Red](#,##0.0);0.0";
     });
   } else {
     const row = summary.getRow(dataStart);
@@ -583,8 +596,8 @@ export async function buildPayrollWorkbook(state: HrState) {
     row.getCell(2).value = "Title not available";
     row.getCell(3).value = "Department not available";
     row.getCell(4).value = "Biometric ID not available";
-    for (let column = 5; column <= 28; column += 1) row.getCell(column).value = 0;
-    styleDataRow(row, 1, 28);
+    for (let column = 5; column <= 30; column += 1) row.getCell(column).value = 0;
+    styleDataRow(row, 1, 30);
   }
 
   summary.mergeCells(`A${totalRow}:D${totalRow}`);
@@ -615,16 +628,18 @@ export async function buildPayrollWorkbook(state: HrState) {
     [27, state.payroll.reduce((sum, record) => sum + record.earlyMissionMinutes, 0)],
     [28, state.payroll.reduce((sum, record) => sum + record.totalMissionMinutes, 0)],
   ]);
-  for (let column = 5; column <= 28; column += 1) {
+  companyTotals.set(29,state.payroll.reduce((sum,p)=>sum+(p.paidWeekendMinutes || 0),0));
+  companyTotals.set(30,state.payroll.reduce((sum,p)=>sum+(p.paidWeekendMissionMinutes || 0),0));
+  for (let column = 5; column <= 30; column += 1) {
     const letter = summary.getColumn(column).letter;
     const result = companyTotals.get(column) ?? 0;
     summary.getRow(totalRow).getCell(column).value = formula(`SUM(${letter}${dataStart}:${letter}${dataEnd})`, result);
   }
-  styleTotalRow(summary.getRow(totalRow), 1, 28);
+  styleTotalRow(summary.getRow(totalRow), 1, 30);
   for (let column = 5; column <= 15; column += 1) summary.getRow(totalRow).getCell(column).numFmt = currencyFormat;
-  for (let column = 16; column <= 28; column += 1) summary.getRow(totalRow).getCell(column).numFmt = "#,##0;[Red](#,##0);0";
-  for (let column = 26; column <= 28; column += 1) summary.getRow(totalRow).getCell(column).numFmt = "#,##0.0;[Red](#,##0.0);0.0";
-  summary.autoFilter = { from: { row: 8, column: 1 }, to: { row: dataEnd, column: 28 } };
+  for (let column = 16; column <= 30; column += 1) summary.getRow(totalRow).getCell(column).numFmt = "#,##0;[Red](#,##0);0";
+  for (let column = 26; column <= 30; column += 1) summary.getRow(totalRow).getCell(column).numFmt = "#,##0.0;[Red](#,##0.0);0.0";
+  summary.autoFilter = { from: { row: 8, column: 1 }, to: { row: dataEnd, column: 30 } };
 
   const checkRow = totalRow + 2;
   summary.mergeCells(`A${checkRow}:C${checkRow}`);
@@ -638,9 +653,9 @@ export async function buildPayrollWorkbook(state: HrState) {
   summary.getCell(`A${checkRow}`).alignment = summary.getCell(`D${checkRow}`).alignment = { horizontal: "center", vertical: "middle" };
 
   const sourceRow = checkRow + 2;
-  summary.mergeCells(`A${sourceRow}:AB${sourceRow}`);
-  summary.mergeCells(`A${sourceRow + 1}:AB${sourceRow + 1}`);
-  summary.getCell(`A${sourceRow}`).value = `Policy: automatic overtime through 22:00 for arrivals through 11:30; extra evening and early overtime require approval; Penalty Time = Late Time ×${state.policy.minutePenaltyMultiplier}; Normal Mission Time = weighted overtime and additional assignment minutes (normal assignment ×1); Early Mission Time = allowed Early OT ×${state.policy.earlyOvertimeMultiplier}; Total Mission Time is the sum of both weighted values; arrival cutoff is ${state.policy.overtimeArrivalCutoff} on every day; early leave ×${state.policy.earlyLeaveDayMultiplier} day; unpaid leave ×${state.policy.unpaidLeaveDayMultiplier} day; Friday counts as ${state.policy.fridayMultiplier} days; salary divisor ${state.policy.salaryDivisor}.`;
+  summary.mergeCells(`A${sourceRow}:AD${sourceRow}`);
+  summary.mergeCells(`A${sourceRow + 1}:AD${sourceRow + 1}`);
+  summary.getCell(`A${sourceRow}`).value = `Policy: automatic overtime through 22:00 for arrivals through 11:30; extra evening and early overtime require approval; Penalty Time = Late Time ×${state.policy.minutePenaltyMultiplier}; Normal Mission Time = weighted overtime and additional assignment minutes (normal assignment ×1); Early Mission Time = allowed Early OT ×${state.policy.earlyOvertimeMultiplier}; Total Mission Time includes normal, early and Paid weekend minutes ×2; Paid weekend is included once in overtime pay; arrival cutoff is ${state.policy.overtimeArrivalCutoff} on every day; early leave ×${state.policy.earlyLeaveDayMultiplier} day; unpaid leave ×${state.policy.unpaidLeaveDayMultiplier} day; Friday counts as ${state.policy.fridayMultiplier} days; salary divisor ${state.policy.salaryDivisor}.`;
   summary.getCell(`A${sourceRow + 1}`).value = state.imports.length
     ? `Biometric source: ${state.imports.map((item) => item.fileName).join(", ")}`
     : "Biometric source: no Excel import recorded for this month.";
@@ -650,7 +665,7 @@ export async function buildPayrollWorkbook(state: HrState) {
     cell.font = { name: "Aptos", size: 10, italic: true, color: { argb: COLORS.ink } };
     cell.alignment = { wrapText: true, vertical: "middle" };
   }
-  summary.pageSetup.printArea = `A1:AB${sourceRow + 1}`;
+  summary.pageSetup.printArea = `A1:AD${sourceRow + 1}`;
 
   return workbook;
 }

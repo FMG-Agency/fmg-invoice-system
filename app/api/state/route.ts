@@ -1,5 +1,6 @@
 import { archiveStatement, trashDelete } from '../../lib/trash';
 import type { DocumentRecord } from "../../types";
+import { invoicePaymentSummary, setPartialInvoicePayment } from "../../lib/invoice-payments";
 import { put } from "@vercel/blob";
 import { z } from "zod";
 import { ensureDocumentMetadata, reserveDocumentNumber, releaseDocumentSerial } from "../../lib/document-metadata";
@@ -114,7 +115,7 @@ const actionPayload = z.discriminatedUnion("action", [
   z.object({ action: z.literal("updateCategory"), id: z.number().int().positive(), data: categoryPayload }),
   z.object({ action: z.literal("deleteCategory"), id: z.number().int().positive() }),
   z.object({ action: z.literal("saveDocument"), data: documentPayload }),
-  z.object({ action: z.literal("setDocumentStatus"), id: z.number().int().positive(), status: z.string().trim().min(1).max(40) }),
+  z.object({ action: z.literal("setDocumentStatus"), id: z.number().int().positive(), status: z.string().trim().min(1).max(40), paidAmount: z.number().finite().positive().optional() }),
   z.object({ action: z.literal("deleteDocument"), id: z.number().int().positive() }),
   z.object({ action: z.literal("updateSettings"), data: settingsPayload }),
   z.object({ action: z.literal("createQuotationCatalogItem"), data: quotationCatalogPayload }),
@@ -303,6 +304,9 @@ async function getState() {
     database.prepare(`SELECT d.id, d.type, d.company_key AS companyKey, d.generated_code AS generatedCode, d.client_id AS clientId,
       d.category_id AS categoryId, d.date, d.valid_until AS validUntil, d.prepared_by AS preparedBy,
       d.currency, d.project, d.status, d.items_json AS itemsJson, d.subtotal, d.discount, d.tax,
+      (SELECT COALESCE(SUM(amount),0) FROM client_financial_transactions WHERE document_id=d.id AND type='payment') AS paid,
+      (SELECT COALESCE(SUM(amount),0) FROM client_financial_transactions WHERE document_id=d.id AND type='credit') AS credited,
+      (SELECT COALESCE(SUM(amount),0) FROM client_financial_transactions WHERE document_id=d.id AND type='refund') AS refunded,
       d.total, d.payment_terms AS paymentTerms, d.notes_exclusions AS notesExclusions,
       d.pdf_key AS pdfKey, d.production_work_order_id AS productionWorkOrderId,
       d.created_at AS createdAt, d.updated_at AS updatedAt,
@@ -331,6 +335,7 @@ async function getState() {
       discount: numberValue(row.discount),
       tax: numberValue(row.tax),
       total: numberValue(row.total),
+      ...invoicePaymentSummary(numberValue(row.total),String(row.status),numberValue(row.paid),numberValue(row.credited),numberValue(row.refunded)),
     };
   });
 
@@ -534,6 +539,17 @@ export async function POST(request: Request) {
     if (payload.action === "saveDocument") {
       const data = payload.data;
       const math = documentMath(data);
+      if(data.id) {
+        const paid = await database.prepare(`SELECT d.client_id,d.currency,d.status,
+          (SELECT COUNT(*) FROM client_financial_transactions WHERE document_id=d.id) AS entries,
+          (SELECT COALESCE(SUM(CASE type WHEN 'payment' THEN amount WHEN 'credit' THEN amount WHEN 'refund' THEN -amount ELSE 0 END),0) FROM client_financial_transactions WHERE document_id=d.id) AS settled
+          FROM documents d WHERE d.id=?`).bind(data.id).first();
+        if(paid && Number(paid.entries)>0) {
+          if(Number(paid.client_id)!==data.clientId || paid.currency!==data.currency) return Response.json({error:"An invoice with recorded payments must keep its client and currency."},{status:400});
+          if(math.total < Number(paid.settled)) return Response.json({error:"The new total is less than the settled amount. Correct the client account payments first."},{status:400});
+          if(paid.status==="Paid" || paid.status==="Partially paid") data.status=math.total===Number(paid.settled)?"Paid":"Partially paid";
+        }
+      } else if(data.status==="Partially paid") return Response.json({error:"Save the invoice, then enter its partial payment from All Data."},{status:400});
       let generatedCode = "";
       let pdfKey = "";
 
@@ -569,7 +585,11 @@ export async function POST(request: Request) {
     }
 
     if (payload.action === "setDocumentStatus") {
-      await database.prepare("UPDATE documents SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(payload.status, payload.id).run();
+      const invoice = await database.prepare("SELECT type FROM documents WHERE id=?").bind(payload.id).first();
+      if(payload.status === "Partially paid" || (payload.status === "Paid" && invoice?.type === "invoice")) {
+        if(payload.status === "Partially paid" && payload.paidAmount===undefined)return Response.json({error:"Enter the total amount paid."},{status:400});
+        try {await setPartialInvoicePayment(payload.id,payload.paidAmount || 0,session.userId,payload.status === "Paid");} catch(error){return Response.json({error:error instanceof Error?error.message:"Could not save payment."},{status:400});}
+      } else await database.prepare("UPDATE documents SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(payload.status, payload.id).run();
     }
 
     if (payload.action === "deleteDocument") {

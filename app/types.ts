@@ -69,6 +69,8 @@ export type QuotationCatalogItem = {
 };
 
 export type DocumentRecord = {
+  paid?: number;
+  remaining?: number;
   deletedAt?: string;
   id: number;
   type: "invoice" | "quotation";
@@ -322,6 +324,8 @@ export type AttendanceRecord = {
   lateMinutes: number;
   penaltyMinutes: number;
   earlyLeaveMinutes: number;
+  paidWeekendMinutes?: number;
+  paidWeekendMissionMinutes?: number;
   normalOvertimeMinutes: number;
   overtimeMinutes: number;
   earlyOvertimeMinutes: number;
@@ -385,6 +389,8 @@ export type PayrollSummary = {
   earlyLeaveDays: number;
   unpaidLeaveDays: number;
   lateMinutes: number;
+  paidWeekendMinutes?: number;
+  paidWeekendMissionMinutes?: number;
   normalOvertimeMinutes: number;
   overtimeMinutes: number;
   earlyOvertimeMinutes: number;

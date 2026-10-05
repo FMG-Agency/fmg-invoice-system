@@ -191,6 +191,20 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   assert.equal(await app.database.prepare('SELECT serial FROM reusable_document_serials WHERE category_id=? AND serial=?').bind(category.id,order.id).first(),null);
   await call(app.production,{action:'delete',id:order.id});
   assert.equal(await app.reserveWorkOrderNumber(),order.id);
+  globalThis.documentTestSession=adminSession;
+  const paymentState=await call(app.save,{action:'saveDocument',data:{...data,type:'invoice',items:[{id:'payment',description:'Payment fixture',qty:1,unitPrice:1000}]}});
+  const invoice=paymentState.documents.find(d=>d.total===1000);
+  const partial={action:'setDocumentStatus',id:invoice.id,status:'Partially paid',paidAmount:300};
+  for(let i=0;i<2;i++) {const s=await call(app.save,partial);const d=s.documents.find(d=>d.id===invoice.id);assert.equal(d.paid,300);assert.equal(d.remaining,700);}
+  assert.equal((await app.database.prepare('SELECT count(*) AS n FROM client_financial_transactions WHERE document_id=?').bind(invoice.id).first()).n,1);
+  for(const paidAmount of [0,-1,1000,1200]) assert.equal((await app.save(request({...partial,paidAmount}))).status,400);
+  await app.database.prepare("INSERT INTO client_financial_transactions(client_id,document_id,type,amount,currency,transaction_date) VALUES(?,?,'payment',100,'EGP','2026-10-01')").bind(client.id,invoice.id).run();
+  assert.equal((await app.save(request({...partial,paidAmount:50}))).status,400);
+  let paid=await call(app.save,{...partial,paidAmount:500});assert.equal(paid.documents.find(d=>d.id===invoice.id).remaining,500);
+  paid=await call(app.save,{action:'setDocumentStatus',id:invoice.id,status:'Paid'});assert.equal(paid.documents.find(d=>d.id===invoice.id).paid,1000);assert.equal(paid.documents.find(d=>d.id===invoice.id).remaining,0);
+  assert.equal((await app.database.prepare("SELECT SUM(amount) AS n FROM client_financial_transactions WHERE document_id=? AND type='payment'").bind(invoice.id).first()).n,1000);
+  globalThis.documentTestSession={...adminSession,isAdmin:false,permissions:['tasks']};assert.equal((await app.save(request(partial))).status,403);
   globalThis.documentTestSession=null;
+  assert.equal((await app.save(request(partial))).status,401);
   assert.equal((await app.save(request({action:'saveDocument',data}))).status,401);
 });
