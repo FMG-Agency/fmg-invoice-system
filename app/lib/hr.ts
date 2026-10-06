@@ -181,6 +181,8 @@ async function initializeHrDatabase() {
     database.prepare("PRAGMA table_info(employee_requests)").all<Record<string, unknown>>(),
   ]);
   const migrations = [];
+  if (!attendanceColumns.results.some(c=>c.name === "last_out_next_day")) migrations.push(database.prepare("ALTER TABLE attendance_records ADD COLUMN last_out_next_day INTEGER NOT NULL DEFAULT 0"));
+  if (!attendanceColumns.results.some(c=>c.name === "raw_punches_json")) migrations.push(database.prepare("ALTER TABLE attendance_records ADD COLUMN raw_punches_json TEXT"));
   const hasColumn = (columns: { results: Record<string, unknown>[] }, name: string) => columns.results.some((column) => String(column.name) === name);
   if (!hasColumn(requestColumns, "manual_data")) migrations.push(database.prepare("ALTER TABLE employee_requests ADD COLUMN manual_data TEXT NOT NULL DEFAULT ''"));
   const migrateManualSeeds = !hasColumn(attendanceColumns, "manual_seed");
@@ -288,7 +290,8 @@ export function attendanceMath(record: AttendanceSource, employee: Employee, pol
   const dailyRate = employee.baseSalary / Math.max(1, policy.salaryDivisor);
   const minuteRate = dailyRate / Math.max(1, policy.workdayMinutes);
   const arrival = minutesFromTime(record.firstIn);
-  const departure = minutesFromTime(record.lastOut);
+  const clockDeparture = minutesFromTime(record.lastOut);
+  const departure = clockDeparture===null?null:clockDeparture+(record.lastOutNextDay?1440:0);
   const workdayStart = minutesFromTime(policy.workdayStartsAt) ?? 660;
   const freeArrival = minutesFromTime(policy.freeArrivalUntil) ?? 665;
   const minorLateEnd = minutesFromTime(policy.minorLateUntil) ?? 675;
@@ -443,6 +446,7 @@ function attendanceFromRow(row: Record<string, unknown>, employees: Map<number, 
     workDate: String(row.workDate ?? ""),
     firstIn: String(row.firstIn ?? ""),
     lastOut: String(row.lastOut ?? ""),
+    lastOutNextDay: boolValue(row.lastOutNextDay),
     punches: JSON.parse(String(row.punchesJson ?? "[]")) as string[],
     status: String(row.status ?? "present") as AttendanceRecord["status"],
     lateExcused: boolValue(row.lateExcused),
@@ -532,7 +536,7 @@ export async function getHrState(month: string): Promise<HrState> {
       absence_deduction_enabled AS absenceDeductionEnabled, absence_day_multiplier AS absenceDayMultiplier,
       updated_at AS updatedAt FROM hr_policy WHERE id = 1`).first(),
     database.prepare(`SELECT a.id, a.import_id AS importId, a.employee_id AS employeeId, e.name AS employeeName,
-      e.biometric_code AS biometricCode, a.work_date AS workDate, a.first_in AS firstIn, a.last_out AS lastOut,
+      e.biometric_code AS biometricCode, a.work_date AS workDate, a.first_in AS firstIn, a.last_out AS lastOut, a.last_out_next_day AS lastOutNextDay,
       a.punches_json AS punchesJson, a.status, a.late_excused AS lateExcused,
       a.early_leave_excused AS earlyLeaveExcused, a.leave_paid AS leavePaid,
       a.overtime_approved AS overtimeApproved, a.early_overtime_approved AS earlyOvertimeApproved,

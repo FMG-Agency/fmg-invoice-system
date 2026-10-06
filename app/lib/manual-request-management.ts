@@ -3,7 +3,7 @@ import { database } from "./database";
 import { getSession, requirePermission } from "./auth-server";
 import { ensureHrDatabase } from "./hr";
 import { archiveStatement } from "./trash";
-import { manualRequestSchema, requestDates, timeMinutes, type SavedManualEntry } from "./manual-attendance";
+import { manualRequestSchema, requestDates, requestEndMinutes, timeMinutes, type SavedManualEntry } from "./manual-attendance";
 const identity = z.object({kind:z.enum(["request","penalty"]),id:z.number().int().positive(),version:z.string().min(1).max(20000)});
 const adjustmentVersion = "json_array(employee_id,period_month,type,label,amount,days,notes)";
 function failure(error:unknown) {
@@ -55,9 +55,9 @@ async function change(request:Request,remove:boolean) {
       }else{
         statements.push(database.prepare(`INSERT INTO hr_manual_request_guard SELECT CASE WHEN EXISTS (
           SELECT 1 FROM employee_requests WHERE employee_id=? AND id<>? AND status='approved' AND date_from<=? AND date_to>=?
-          AND (type='leave' OR ?='leave' OR (manual_data<>'' AND json_extract(manual_data,'$.type')=? AND (?='early_leave' OR (start_time<? AND end_time>?))))
-        ) THEN 0 ELSE 1 END`).bind(employeeId,payload.id,data.dateTo,data.dateFrom,data.type,data.type,data.type,data.endTime,data.startTime));
-        statements.push(database.prepare(`UPDATE employee_requests SET type=?,leave_kind=?,date_from=?,date_to=?,start_time=?,end_time=?,duration_minutes=?,leave_paid=?,details=?,manual_data=?,reviewed_by_user_id=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(data.type === "paid_weekend" ? "mission" : data.type,data.reason==="sick"?"sick_leave":"normal_leave",data.dateFrom,data.dateTo,data.startTime,data.endTime,data.endTime&&data.startTime?timeMinutes(data.endTime)-timeMinutes(data.startTime):0,data.leavePaid?1:0,data.details,JSON.stringify(data),session.userId,payload.id));
+          AND (type='leave' OR ?='leave' OR (manual_data<>'' AND json_extract(manual_data,'$.type')=? AND (?='early_leave' OR ((CAST(substr(start_time,1,2) AS INTEGER)*60+CAST(substr(start_time,4,2) AS INTEGER))<? AND (CAST(substr(start_time,1,2) AS INTEGER)*60+CAST(substr(start_time,4,2) AS INTEGER)+duration_minutes)>?))))
+        ) THEN 0 ELSE 1 END`).bind(employeeId,payload.id,data.dateTo,data.dateFrom,data.type,data.type,data.type,requestEndMinutes(data),data.startTime?timeMinutes(data.startTime):0));
+        statements.push(database.prepare(`UPDATE employee_requests SET type=?,leave_kind=?,date_from=?,date_to=?,start_time=?,end_time=?,duration_minutes=?,leave_paid=?,details=?,manual_data=?,reviewed_by_user_id=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(data.type === "paid_weekend" ? "mission" : data.type,data.reason==="sick"?"sick_leave":"normal_leave",data.dateFrom,data.dateTo,data.startTime,data.endTime,data.endTime&&data.startTime?requestEndMinutes(data)-timeMinutes(data.startTime):0,data.leavePaid?1:0,data.details,JSON.stringify(data),session.userId,payload.id));
         for(const date of requestDates(data))statements.push(database.prepare("INSERT INTO attendance_records(employee_id,work_date,status,manual_seed) VALUES(?,?,'absent',1) ON CONFLICT(employee_id,work_date) DO NOTHING").bind(employeeId,date));
       }
     }

@@ -313,6 +313,7 @@ export type AttendanceRecord = {
   workDate: string;
   firstIn: string;
   lastOut: string;
+  lastOutNextDay?: boolean;
   punches: string[];
   status: AttendanceStatus;
   lateExcused: boolean;

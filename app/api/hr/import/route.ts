@@ -1,3 +1,4 @@
+import {adjacentDate,normalizeBiometricDay,type BiometricDay} from "../../../lib/biometric-days";
 import ExcelJS from "exceljs";
 import { requirePermission } from "../../../lib/auth-server";
 import { database } from "../../../lib/database";
@@ -10,7 +11,7 @@ type ParsedEmployee = {
   biometricCode: string;
   name: string;
   department: string;
-  days: Array<{ date: string; punches: string[]; firstIn: string; lastOut: string; status: "present" | "incomplete" | "absent" | "friday" }>;
+  days: BiometricDay[];
 };
 
 function cellText(row: ExcelJS.Row, column: number) {
@@ -28,10 +29,6 @@ function timeMinutes(value: string) {
 
 function parsePunches(value: string) {
   return (value.match(/(?:[01]\d|2[0-3]):[0-5]\d/g) ?? []).sort((left, right) => timeMinutes(left) - timeMinutes(right));
-}
-
-function isFriday(value: string) {
-  return new Date(`${value}T12:00:00Z`).getUTCDay() === 5;
 }
 
 function isoDate(year: number, month: number, day: number) {
@@ -109,28 +106,12 @@ export function parseWorksheet(worksheet: ExcelJS.Worksheet) {
       const date = isoDate(year, month, day);
       if (!date || date < periodStart || date > periodEnd) return null;
       const punches = dataRows.flatMap((row) => parsePunches(cellText(row, column))).sort((left, right) => timeMinutes(left) - timeMinutes(right));
-      const distinctPunches = punches.filter((punch, index) => punch !== punches[index - 1]);
-      let firstIn = "";
-      let lastOut = "";
-      if (distinctPunches.length >= 2) {
-        const earliest = distinctPunches[0];
-        const latest = distinctPunches[distinctPunches.length - 1];
-        if (timeMinutes(earliest) <= 14 * 60 && timeMinutes(latest) > 14 * 60) {
-          firstIn = earliest;
-          lastOut = latest;
-        } else if (timeMinutes(latest) <= 14 * 60) {
-          firstIn = earliest;
-        } else {
-          lastOut = latest;
-        }
-      } else if (distinctPunches.length === 1) {
-        if (timeMinutes(distinctPunches[0]) <= 14 * 60) firstIn = distinctPunches[0]; else lastOut = distinctPunches[0];
-      }
-      const status = distinctPunches.length === 0 ? (isFriday(date) ? "friday" : "absent") : firstIn && lastOut ? "present" : "incomplete";
-      return { date, punches, firstIn, lastOut, status };
-    }).filter((day): day is ParsedEmployee["days"][number] => Boolean(day));
+      return {date,punches};
+    }).filter((day): day is {date:string;punches:string[]} => Boolean(day));
+    const raw = new Map(days.map(day=>[day.date,day.punches]));
+    const normalized = days.map(day=>normalizeBiometricDay(day.date,day.punches,raw.get(adjacentDate(day.date,1)) || []));
 
-    employees.push({ biometricCode, name, department, days });
+    employees.push({ biometricCode, name, department, days:normalized });
   }
 
   if (!employees.length) throw new Error("No employee attendance rows were found in this workbook.");
@@ -182,20 +163,33 @@ export async function POST(request: Request) {
         await database.prepare("UPDATE employees SET biometric_code = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(parsedEmployee.biometricCode, employee.id).run();
       }
 
-      for (const day of parsedEmployee.days) {
+      const previousDate=adjacentDate(parsed.periodStart,-1),nextDate=adjacentDate(parsed.periodEnd,1);
+      const stored=await database.prepare("SELECT work_date,raw_punches_json,punches_json,first_in,last_out,last_out_next_day FROM attendance_records WHERE employee_id=? AND work_date IN (?,?)").bind(employee.id,previousDate,nextDate).all();
+      const raw=new Map(parsedEmployee.days.map(day=>[day.date,day.rawPunches]));
+      for(const row of stored.results) {
+        let punches=JSON.parse(String(row.raw_punches_json ?? row.punches_json)).filter((p:string)=>/^([01]\d|2[0-3]):[0-5]\d$/.test(p));
+        if(row.raw_punches_json===null && !punches.length) punches=[row.first_in,...(row.last_out_next_day?[]:[row.last_out])].filter(Boolean);
+        raw.set(String(row.work_date),punches);
+      }
+      const targets=[...parsedEmployee.days.map(day=>day.date)];
+      if(stored.results.some(row=>row.work_date===previousDate && row.last_out_next_day) || (raw.get(parsed.periodStart)||[]).some(p=>p<="06:00")) targets.unshift(previousDate);
+      for (const date of targets) {
+        const day=normalizeBiometricDay(date,raw.get(date)||[],raw.get(adjacentDate(date,1))||[]);
         if (employee.hireDate && day.date < employee.hireDate) continue;
         attendanceStatements.push(database.prepare(`INSERT INTO attendance_records
-          (import_id, employee_id, work_date, first_in, last_out, punches_json, status, overtime_approved, early_overtime_approved)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
+          (import_id, employee_id, work_date, first_in, last_out, punches_json, status, last_out_next_day, raw_punches_json, overtime_approved, early_overtime_approved)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
           ON CONFLICT(employee_id, work_date) DO UPDATE SET manual_seed=0,
             import_id = excluded.import_id,
             first_in = excluded.first_in,
             last_out = excluded.last_out,
+            last_out_next_day = excluded.last_out_next_day,
+            raw_punches_json = excluded.raw_punches_json,
             punches_json = excluded.punches_json,
             status = CASE WHEN attendance_records.status IN ('vacation','occasional_leave','resort_leave','sick_leave','urgent_leave','normal_leave','assignment')
               THEN attendance_records.status ELSE excluded.status END,
             updated_at = CURRENT_TIMESTAMP`).bind(
-              importId, employee.id, day.date, day.firstIn, day.lastOut, JSON.stringify(day.punches), day.status,
+              importId, employee.id, day.date, day.firstIn, day.lastOut, JSON.stringify(day.punches), day.status, day.lastOutNextDay?1:0, JSON.stringify(day.rawPunches),
             ));
         recordCount += 1;
       }

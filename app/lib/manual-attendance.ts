@@ -21,7 +21,7 @@ export const manualRequestSchema = z.object({
   if (r.dateTo < r.dateFrom || (Date.parse(r.dateTo) - Date.parse(r.dateFrom)) / 86400000 > 61) issue("Choose a date range of up to 62 days.");
   if (r.type !== "leave" && r.dateFrom !== r.dateTo) issue("Use one day per timed request.");
   if (!["leave", "penalty"].includes(r.type) && !r.startTime) issue("Choose the start time.");
-  if (["mission", "paid_weekend", "overtime", "early_arrival"].includes(r.type) && (!r.endTime || r.endTime <= r.startTime)) issue("End time must be after start time. For overnight work, enter a separate request for each date.");
+  if (["mission", "paid_weekend", "overtime", "early_arrival"].includes(r.type) && (!r.endTime || (r.endTime <= r.startTime && !(r.type === "overtime" && r.endTime <= "06:00")))) issue("End time must be after start time; evening overtime may end by 06:00 the next day.");
   if (r.type === "penalty" && r.days <= 0) issue("Enter a positive number of penalty days.");
   if (r.type === "overtime" && r.startTime < "22:00") issue("Extra evening overtime starts at 22:00 or later.");
   if (r.type === "early_arrival" && r.endTime > "11:00") issue("Early overtime must end by 11:00.");
@@ -32,6 +32,7 @@ export function requestDates(r: Pick<ManualRequest, "dateFrom" | "dateTo">) {
   for (let value = Date.parse(r.dateFrom); value <= Date.parse(r.dateTo); value += 86400000) dates.push(new Date(value).toISOString().slice(0,10));
   return dates;
 }
+export function requestEndMinutes(r: Pick<ManualRequest,"type"|"startTime"|"endTime">) { return r.endTime ? timeMinutes(r.endTime)+(r.type==="overtime" && r.endTime<=r.startTime ? 1440:0):0; }
 export function timeMinutes(time: string) { const [h,m] = time.split(":").map(Number); return h * 60 + m; }
 type Source = Omit<AttendanceRecord, "paidWeekendMinutes" | "paidWeekendMissionMinutes" | "lateMinutes" | "penaltyMinutes" | "earlyLeaveMinutes" | "normalOvertimeMinutes" | "overtimeMinutes" | "earlyOvertimeMinutes" | "normalMissionMinutes" | "earlyMissionMinutes" | "totalMissionMinutes" | "lateDeduction" | "earlyLeaveDeduction" | "leaveDeduction" | "overtimePay" | "fridayPay">;
 type MathResult = Omit<AttendanceRecord, keyof Source>;
@@ -49,18 +50,18 @@ export function manualAttendance(source: Source, requests: ManualRequest[], empl
   if (missions.length) {
     record.status = "present";
     record.firstIn = [source.firstIn,...missions.map(r => r.startTime)].filter(Boolean).sort()[0];
-    record.lastOut = [source.lastOut,...missions.map(r => r.endTime)].filter(Boolean).sort().at(-1)!;
+    if(!source.lastOutNextDay) record.lastOut = [source.lastOut,...missions.map(r => r.endTime)].filter(Boolean).sort().at(-1)!;
     record.lateExcused ||= !hasPunches || missions.some(r => r.startTime <= policy.workdayStartsAt && r.endTime >= policy.workdayStartsAt);
     record.earlyLeaveExcused ||= !hasPunches || missions.some(r => r.startTime <= policy.workdayEndsAt && r.endTime >= policy.workdayEndsAt);
   }
   if (requests.some(r => r.type === "early_leave")) record.earlyLeaveExcused = true;
-  record.notes = [source.notes,...requests.map(r => "Manual " + r.type.replaceAll("_", " ") + ": " + r.details + (r.type === "leave" ? (r.leavePaid ? " (paid)" : " (unpaid)") : " · " + r.startTime + "–" + r.endTime) + (r.type === "mission" ? " · " + (friday || r.dayType === "holiday" ? "Holiday ×2" : "Normal ×1") : ""))].filter(Boolean).join("\n");
+  record.notes = [source.notes,...requests.map(r => "Manual " + r.type.replaceAll("_", " ") + ": " + r.details + (r.type === "leave" ? (r.leavePaid ? " (paid)" : " (unpaid)") : " · " + r.startTime + "–" + r.endTime + (requestEndMinutes(r)>1440 ? " (+1 day)":"")) + (r.type === "mission" ? " · " + (friday || r.dayType === "holiday" ? "Holiday ×2" : "Normal ×1") : ""))].filter(Boolean).join("\n");
   const result = calculate(record,employee,policy);
   if (leave) return {...record,...result};
-  const weekend = new Array<number>(1440).fill(0);
-  const normal = new Array<number>(1440).fill(0), early = new Array<number>(1440).fill(0), holiday = new Array<number>(1440).fill(0);
-  const mark = (mask: number[], from: number,to: number,weight: number) => { for(let m = Math.max(0,from); m < Math.min(1440,to);m++) mask[m] = Math.max(mask[m],weight); };
-  const arrival = timeMinutes(record.firstIn), departure = timeMinutes(record.lastOut);
+  const weekend = new Array<number>(1801).fill(0);
+  const normal = new Array<number>(1801).fill(0), early = new Array<number>(1801).fill(0), holiday = new Array<number>(1801).fill(0);
+  const mark = (mask: number[], from: number,to: number,weight: number) => { for(let m = Math.max(0,from); m < Math.min(1801,to);m++) mask[m] = Math.max(mask[m],weight); };
+  const arrival = timeMinutes(record.firstIn), departure = timeMinutes(record.lastOut)+(record.lastOutNextDay?1440:0);
   if (!friday && arrival <= timeMinutes(policy.overtimeArrivalCutoff) && record.missionOvertimeMinutes <= 0) mark(normal,timeMinutes(policy.overtimeStartsAt), record.overtimeApproved && source.notes.trim() ? departure : Math.min(departure,timeMinutes(policy.overtimeApprovalAfter)),policy.overtimeMultiplier);
   if (!friday && record.earlyOvertimeApproved && source.notes.trim()) mark(early,arrival,timeMinutes(policy.workdayStartsAt),policy.earlyOvertimeMultiplier);
   for (const r of missions) {
@@ -72,12 +73,12 @@ export function manualAttendance(source: Source, requests: ManualRequest[], empl
     }
   }
   for (const r of requests) {
-    if (r.type === "overtime") mark(normal,timeMinutes(r.startTime),timeMinutes(r.endTime),2);
+    if (r.type === "overtime") mark(normal,timeMinutes(r.startTime),requestEndMinutes(r),2);
     if (r.type === "early_arrival") mark(early,timeMinutes(r.startTime),timeMinutes(r.endTime),2.5);
   }
-  for(let m=0;m<1440;m++) if(weekend[m]) {normal[m]=0;early[m]=0;holiday[m]=0;}
+  for(let m=0;m<1801;m++) if(weekend[m]) {normal[m]=0;early[m]=0;holiday[m]=0;}
   // A minute already paid as holiday work must not be paid again as overtime.
-  for(let m=0;m<1440;m++) if(holiday[m]) { holiday[m]=Math.max(holiday[m],normal[m],early[m]);normal[m]=0;early[m]=0; }
+  for(let m=0;m<1801;m++) if(holiday[m]) { holiday[m]=Math.max(holiday[m],normal[m],early[m]);normal[m]=0;early[m]=0; }
   const sum = (mask: number[]) => mask.reduce((a,b)=>a+b,0);
   const count = (mask: number[]) => mask.filter(Boolean).length;
   const rate = employee.baseSalary / Math.max(1,policy.salaryDivisor) / Math.max(1,policy.workdayMinutes);

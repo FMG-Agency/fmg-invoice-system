@@ -62,6 +62,7 @@ const policyPayload = z.object({
 const attendancePayload = z.object({
   firstIn: optionalTime,
   lastOut: optionalTime,
+  lastOutNextDay: z.boolean().default(false),
   status: z.enum(["present", "incomplete", "absent", "friday", "vacation", "occasional_leave", "resort_leave", "sick_leave", "urgent_leave", "normal_leave", "assignment"]),
   lateExcused: z.boolean(),
   earlyLeaveExcused: z.boolean(),
@@ -69,7 +70,7 @@ const attendancePayload = z.object({
   overtimeApproved: z.boolean(),
   earlyOvertimeApproved: z.boolean(),
   notes: optionalText,
-});
+}).refine(value=>!value.lastOutNextDay || Boolean(value.lastOut && value.lastOut<="06:00"), {message:"Next-day departure must be between 00:00 and 06:00.",path:["lastOut"]});
 
 const adjustmentPayload = z.object({
   employeeId: z.number().int().positive(),
@@ -224,10 +225,10 @@ export async function POST(request: Request) {
 
     if (payload.action === "updateAttendance") {
       const value = payload.data;
-      await database.prepare(`UPDATE attendance_records SET manual_seed=0, first_in = ?, last_out = ?, status = ?,
+      await database.prepare(`UPDATE attendance_records SET manual_seed=0, first_in = ?, last_out = ?, last_out_next_day = ?, status = ?,
         late_excused = ?, early_leave_excused = ?, leave_paid = ?, overtime_approved = ?, early_overtime_approved = ?,
         notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(
-        value.firstIn, value.lastOut, value.status, value.lateExcused ? 1 : 0,
+        value.firstIn, value.lastOut, value.lastOutNextDay?1:0, value.status, value.lateExcused ? 1 : 0,
         value.earlyLeaveExcused ? 1 : 0, value.leavePaid ? 1 : 0,
         value.overtimeApproved ? 1 : 0, value.earlyOvertimeApproved ? 1 : 0, value.notes, payload.id,
       ).run();
