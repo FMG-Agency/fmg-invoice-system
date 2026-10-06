@@ -19,6 +19,17 @@ test('Attendance boundaries and manual batches use isolated payroll data',async 
   const source={id:1,employeeId:1,employeeName:'Fixture',biometricCode:'',importId:null,workDate:'2026-10-01',firstIn:'11:30',lastOut:'23:00',punches:[],status:'present',lateExcused:false,earlyLeaveExcused:false,leavePaid:true,overtimeApproved:false,earlyOvertimeApproved:false,missionOvertimeMinutes:0,notes:'',createdAt:'',updatedAt:''};
   const entry=(patch={})=>app.manualRequestSchema.parse({type:'mission',dateFrom:'2026-10-01',dateTo:'2026-10-01',startTime:'11:00',endTime:'19:00',details:'Approved fixture assignment',...patch});
   const math=(r,requests)=>app.manualAttendance(r,requests,employee,policy,app.attendanceMath);
+  await t.test('Calendar breakdown counts real month lengths, paid leave subsets and Fridays without inferred absences',async()=>{
+    for(const [month,n] of [['2026-04',30],['2026-10',31],['2026-02',28],['2024-02',29]]) assert.equal(app.monthDayBreakdown(month,[]).days,n);
+    const records=[['01','present'],['02','absent'],['03','present'],['04','normal_leave'],['05','sick_leave'],['06','assignment'],['07','incomplete'],['10','absent'],['17','vacation']].map(([day,status])=>({...source,workDate:'2026-04-'+day,status,firstIn:status==='present'?'11:00':'',lastOut:status==='present'?'19:00':'',leavePaid:day!=='05'}));
+    const d=app.monthDayBreakdown('2026-04',records);
+    assert.deepEqual(d,{days:30,present:3,absent:1,leave:3,paidLeave:2,unpaidLeave:1,fridays:4,fridayRest:2,fridayWorked:1,incomplete:1,unrecorded:20});
+    assert.equal(d.present+d.absent+d.leave+d.fridayRest+d.incomplete+d.unrecorded,d.days);
+    assert.equal(app.monthDayBreakdown('2026-04',records,'2026-05-01').unrecorded,30);
+    assert.equal(app.monthDayBreakdown('2026-04',[...records,records[0]]).present,3);
+    const book=new ExcelJS.Workbook();await book.xlsx.load(await app.employeePayrollWorkbookBuffer(state,1));
+    const sheet=book.worksheets[0];assert.equal(sheet.getCell('P10').value,31);assert.equal(sheet.getCell('P16').value,5);assert.equal(sheet.getCell('P12').value,0);assert.equal(sheet.getCell('P25').result,31);assert.equal(sheet.getCell('P25').formula,'SUM(P11:P13,P17,P19:P20)');
+  });
   await t.test('11:30 inclusive, 11:31 excluded, automatic overtime capped at 22:00 on every date',()=>{
     for(const workDate of ['2026-10-01','2026-10-17']){
       assert.equal(app.attendanceMath({...source,workDate},employee,policy).normalOvertimeMinutes,165);

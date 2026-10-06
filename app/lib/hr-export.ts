@@ -29,6 +29,33 @@ const STATUS_LABELS: Record<AttendanceRecord["status"], string> = {
   assignment: "Assignment",
 };
 
+export function monthDayBreakdown(month: string, attendance: AttendanceRecord[], hireDate = "") {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const days = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  const result = {days, present:0, absent:0, leave:0, paidLeave:0, unpaidLeave:0, fridays:0, fridayRest:0, fridayWorked:0, incomplete:0, unrecorded:0};
+  const records = new Map(attendance.map(record => [record.workDate, record]));
+  const leaveStatuses = new Set(["vacation","occasional_leave","resort_leave","sick_leave","urgent_leave","normal_leave"]);
+  for(let day=1;day<=days;day++) {
+    const date = `${month}-${String(day).padStart(2,"0")}`;
+    const friday = new Date(`${date}T12:00:00Z`).getUTCDay()===5;
+    if(friday) result.fridays++;
+    if(hireDate && date<hireDate) {result.unrecorded++;continue;}
+    const record = records.get(date);
+    if(record && leaveStatuses.has(record.status)) {
+      result.leave++;
+      if(record.leavePaid) result.paidLeave++; else result.unpaidLeave++;
+    } else if(record?.status === "incomplete") {
+      result.incomplete++;
+    } else if(record && (record.status === "present" || record.status === "assignment" || (friday && Boolean(record.firstIn || record.lastOut || record.paidWeekendMinutes)))) {
+      result.present++;
+      if(friday) result.fridayWorked++;
+    } else if(friday) result.fridayRest++;
+    else if(record?.status === "absent") result.absent++;
+    else result.unrecorded++;
+  }
+  return result;
+}
+
 const thinBorder: Partial<ExcelJS.Borders> = {
   bottom: { style: "thin", color: { argb: COLORS.line } },
 };
@@ -185,6 +212,7 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
     .filter((adjustment) => adjustment.employeeId === payroll.employeeId)
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   const attendanceRows = Math.max(1, attendance.length);
+  const days = monthDayBreakdown(state.month,attendance,employee?.hireDate);
   const adjustmentStart = 10;
   const adjustmentEnd = adjustmentStart + Math.max(1, adjustments.length) - 1;
   const timeSectionRow = Math.max(27, adjustmentEnd + 3);
@@ -348,6 +376,27 @@ function addCompactEmployeeSheet(workbook: ExcelJS.Workbook, state: HrState, pay
   for(const n of [25,26]){styleDataRow(sheet.getRow(n),4,5);sheet.getRow(n).height=32;sheet.getCell(`D${n}`).alignment={wrapText:true,vertical:"middle"};}
   sheet.getCell("A13").value="Overtime + paid weekend pay";
   styleSection(sheet, "G8:J8", "MONTHLY ADJUSTMENTS");
+  styleSection(sheet,"K8:Q8","MONTH DAYS BREAKDOWN");
+  sheet.mergeCells("K9:O9");sheet.mergeCells("P9:Q9");
+  sheet.getCell("K9").value="Day category";sheet.getCell("P9").value="Days";
+  styleHeader(sheet.getRow(9),11,17);
+  const dayRows: Array<[string,number]> = [
+    ["Days in month",days.days], ["Present (including assignments)",days.present], ["Absent",days.absent],
+    ["Leave / holidays — total",days.leave], ["Of which: paid leave",days.paidLeave], ["Of which: unpaid leave",days.unpaidLeave],
+    ["Fridays in calendar",days.fridays], ["Fridays off",days.fridayRest], ["Of present days: Fridays worked",days.fridayWorked],
+    ["Incomplete attendance",days.incomplete], ["Unrecorded / before employment",days.unrecorded],
+  ];
+  dayRows.forEach(([label,value],index)=>{
+    const n=10+index;sheet.mergeCells(`K${n}:O${n}`);sheet.mergeCells(`P${n}:Q${n}`);
+    sheet.getCell(`K${n}`).value=label;sheet.getCell(`P${n}`).value=value;
+    styleDataRow(sheet.getRow(n),11,17);sheet.getRow(n).height=30;
+    sheet.getCell(`K${n}`).alignment={vertical:"middle",wrapText:true};sheet.getCell(`P${n}`).alignment={vertical:"middle",horizontal:"center"};
+    if(index===0) {sheet.getCell(`K${n}`).fill=sheet.getCell(`P${n}`).fill={type:"pattern",pattern:"solid",fgColor:{argb:COLORS.yellowSoft}};}
+  });
+  sheet.mergeCells("K21:Q24");sheet.getCell("K21").value="Paid and unpaid leave are parts of total leave. Fridays worked are included in Present; Fridays off are separate. Calendar Fridays are informational. Missing dates are not assumed absent. Incomplete punches are shown separately.";
+  sheet.getCell("K21").font={name:"Aptos",size:10,color:{argb:COLORS.muted}};sheet.getCell("K21").alignment={wrapText:true,vertical:"middle"};
+  sheet.mergeCells("K25:O25");sheet.mergeCells("P25:Q25");sheet.getCell("K25").value="Accounted calendar days";
+  sheet.getCell("P25").value=formula("SUM(P11:P13,P17,P19:P20)",days.days);styleTotalRow(sheet.getRow(25),11,17);sheet.getRow(25).height=30;
   ["Type", "Label", "Amount", "Notes"].forEach((label, index) => { sheet.getRow(9).getCell(7 + index).value = label; });
   styleHeader(sheet.getRow(9), 7, 10);
   if (adjustments.length) {
