@@ -3,6 +3,7 @@ import {database} from "../../lib/database";
 import {getSession,requirePermission} from "../../lib/auth-server";
 import {administratorUserIds,notifyUsers} from "../../lib/notifications";
 import {ELEVE_CLIENT_ID} from "../../lib/product-arrivals";
+import {trashDelete} from "../../lib/trash";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -29,6 +30,14 @@ async function access(request:Request){
 async function list(){const rows=await database.prepare("SELECT id,title,quantity,album_url,notes,status,created_at,updated_at FROM client_product_arrivals WHERE client_id=? ORDER BY id DESC LIMIT 200").bind(ELEVE_CLIENT_ID).all();return Response.json({arrivals:rows.results},{headers:{"Cache-Control":"private, no-store"}});}
 function failure(error:unknown){if(error instanceof z.ZodError)return Response.json({error:error.issues[0]?.message},{status:400});console.error("Product arrivals failed",error);return Response.json({error:"Could not save or load arrivals. Please retry."},{status:500});}
 export async function GET(request:Request){try{const session=await access(request);if(session instanceof Response)return session;await ensureDatabase();return await list();}catch(error){return failure(error);}}
+export async function DELETE(request:Request){try{
+  const session=await access(request);if(session instanceof Response)return session;
+  if(session.clientId!==ELEVE_CLIENT_ID)return Response.json({error:"Only Eleve can remove an arrival."},{status:403});
+  const {id}=z.object({id:z.number().int().positive()}).parse(await request.json());
+  await ensureDatabase();
+  await trashDelete("client_product_arrivals","id=? AND client_id=?",[id,ELEVE_CLIENT_ID],session);
+  return await list();
+}catch(error){return failure(error);}}
 export async function POST(request:Request){try{
   const session=await access(request);if(session instanceof Response)return session;
   if(session.clientId!==ELEVE_CLIENT_ID)return Response.json({error:"Only Eleve can submit an arrival."},{status:403});

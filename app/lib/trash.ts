@@ -2,7 +2,7 @@ import { database, type DatabaseStatement } from './database';
 import type { AuthSession } from './auth-server';
 import { del } from '@vercel/blob';
 
-const kinds: Record<string,string> = {documents:'Documents',production_work_orders:'Work Orders',agency_tasks:'Tasks',production_crew_members:'Talent & Crew',clients:'Clients',categories:'Categories',employee_requests:'Employee Requests',payroll_adjustments:'Payroll Adjustments',client_financial_transactions:'Transactions',client_monthly_retainers:'Retainers',client_portal_plans:'Client Plans',system_notifications:'Notifications'};
+const kinds: Record<string,string> = {client_product_arrivals:'Product Arrivals',documents:'Documents',production_work_orders:'Work Orders',agency_tasks:'Tasks',production_crew_members:'Talent & Crew',clients:'Clients',categories:'Categories',employee_requests:'Employee Requests',payroll_adjustments:'Payroll Adjustments',client_financial_transactions:'Transactions',client_monthly_retainers:'Retainers',client_portal_plans:'Client Plans',system_notifications:'Notifications'};
 type Row = Record<string, unknown>;
 type Link = {table:string;column:string;ids:number[];created:Record<string,string>};
 type Snapshot = {row:Row;children:Record<string,Row[]>;links:Link[]};
