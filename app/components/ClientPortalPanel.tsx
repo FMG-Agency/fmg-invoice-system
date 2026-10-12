@@ -23,6 +23,8 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Client, ClientPortalPlanPart, ClientPortalState } from "../types";
 import styles from "./ClientPortalPanel.module.css";
+import {ProductArrivals} from "./ProductArrivals";
+import {ELEVE_CLIENT_ID} from "../lib/product-arrivals";
 import { NotificationCenter } from "./NotificationCenter";
 
 const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -84,7 +86,7 @@ export function ClientPortalShell({ displayName, dark, onToggleTheme, onLogout, 
   const [state, setState] = useState<ClientPortalState | null>(null);
   const [year, setYear] = useState(currentYear());
   const [month, setMonth] = useState(currentMonth());
-  const [tab, setTab] = useState<"invoices" | "plans">("invoices");
+  const [tab, setTab] = useState<"invoices" | "plans" | "arrivals">("invoices");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -108,18 +110,18 @@ export function ClientPortalShell({ displayName, dark, onToggleTheme, onLogout, 
   return <div className={styles.portal} data-agency={state?.client?.agencyKey || "fmg"}>
     <header className={styles.portalHeader}>
       <div className={styles.portalBrand}><Image src="/fmg-logo-light.png" alt="FMG Agency" width={380} height={130} unoptimized /><span>CLIENT PORTAL</span></div>
-      <nav aria-label="Client portal navigation"><button className={tab === "invoices" ? styles.activeTab : ""} onClick={() => setTab("invoices")}><ReceiptText size={17} /> Invoices</button><button className={tab === "plans" ? styles.activeTab : ""} onClick={() => setTab("plans")}><CalendarDays size={17} /> Monthly plans</button></nav>
+      <nav aria-label="Client portal navigation"><button className={tab === "invoices" ? styles.activeTab : ""} onClick={() => setTab("invoices")}><ReceiptText size={17} /> Invoices</button><button className={tab === "plans" ? styles.activeTab : ""} onClick={() => setTab("plans")}><CalendarDays size={17} /> Monthly plans</button>{state?.client?.id===ELEVE_CLIENT_ID&&<button className={tab === "arrivals" ? styles.activeTab : ""} onClick={()=>setTab("arrivals")}>New products</button>}</nav>
       <div className={styles.portalUser}><NotificationCenter onNavigate={() => setTab("invoices")} showToast={showToast} /><button onClick={onToggleTheme} aria-label="Toggle theme">{dark ? <Sun size={17} /> : <Moon size={17} />}</button><span><ClientBrandMark key={`header-${state?.client?.id}-${state?.client?.portalLogoUpdatedAt}`} client={state?.client} title={title} className={styles.portalUserMark} /><span><strong>{title}</strong><small>{displayName}</small></span></span><button onClick={() => void onLogout()} aria-label="Sign out"><LogOut size={17} /></button></div>
     </header>
 
     <main className={styles.portalMain}>
       {loading && !state ? <div className={styles.portalLoading}><span /><strong>Preparing your private workspace…</strong></div> : error ? <div className={styles.portalError}><FileText size={24} /><h2>Portal unavailable</h2><p>{error}</p></div> : state?.client ? <>
         <section className={styles.clientWelcome}>
-          <div><span><Sparkles size={14} /> FMG × {title}</span><h1>{tab === "invoices" ? "Your account, made clear." : "Every plan. Every month. One place."}</h1><p>{tab === "invoices" ? "Review issued invoices, see what has been paid, and open the document whenever you need it." : "Choose a month, then open Part 1 or Part 2 for the exact content period you need."}</p></div>
+          <div><span><Sparkles size={14} /> FMG × {title}</span><h1>{tab === "arrivals" ? "New arrivals, ready to capture." : tab === "invoices" ? "Your account, made clear." : "Every plan. Every month. One place."}</h1><p>{tab === "arrivals" ? "Keep FMG informed about new jewellery and share your photo album." : tab === "invoices" ? "Review issued invoices, see what has been paid, and open the document whenever you need it." : "Choose a month, then open Part 1 or Part 2 for the exact content period you need."}</p></div>
           <ClientBrandMark key={`hero-${state.client.id}-${state.client.portalLogoUpdatedAt}`} client={state.client} title={title} className={styles.welcomeMark} />
         </section>
 
-        {tab === "invoices" ? <>
+        {tab === "arrivals" && state.client.id===ELEVE_CLIENT_ID ? <ProductArrivals client/> : tab === "invoices" ? <>
           <section className={styles.portalMetrics}>
             <article className={styles.dueMetric}><span><WalletCards size={16} /> CURRENT AMOUNT DUE</span><strong>{money(totalDue, currency)}</strong><small>{dueInvoices.length ? `${dueInvoices.length} invoice${dueInvoices.length === 1 ? "" : "s"} awaiting payment` : "Your account is currently settled"}</small></article>
             <article><span>TOTAL ISSUED</span><strong>{state.invoices.length}</strong><small>Visible invoices in your portal</small></article>
@@ -153,7 +155,7 @@ export function ClientPortalShell({ displayName, dark, onToggleTheme, onLogout, 
 
 export function ClientPortalAdmin({ showToast }: { showToast: (message: string) => void }) {
   const [state, setState] = useState<ClientPortalState | null>(null);
-  const [clientId, setClientId] = useState(0);
+  const [clientId, setClientId] = useState(ELEVE_CLIENT_ID);
   const [year, setYear] = useState(currentYear());
   const [month, setMonth] = useState(currentMonth());
   const [loading, setLoading] = useState(true);
@@ -198,6 +200,7 @@ export function ClientPortalAdmin({ showToast }: { showToast: (message: string) 
     </section>
 
     {loading && !state ? <div className={styles.adminLoading}>Loading portal workspace…</div> : state?.client ? <>
+      {state.client.id===ELEVE_CLIENT_ID&&<ProductArrivals key={state.client.id}/>}
       <ClientLogoManager key={`${state.client.id}-${state.client.portalLogoUpdatedAt || "no-logo"}`} client={state.client} year={year} onUpdate={updateState} showToast={showToast} />
       <MonthPicker year={year} selected={month} plans={state.plans} onSelect={setMonth} />
       <div className={styles.adminMonthHeading}><div><span>{monthNames[month - 1].toUpperCase()} {year}</span><h2>Publish monthly plan parts</h2><p>Each link is private to {state.client.companyName || state.client.name} after sign-in.</p></div><div><strong>{monthPlans.filter((plan) => plan.published).length}/2</strong><small>parts live</small></div></div>

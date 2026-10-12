@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import {mkdir} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import test from 'node:test';
+
+test('Eleve arrivals are scoped, idempotent, link-only and notify FMG administrators',async()=>{
+  process.env.TURSO_DATABASE_URL='file::memory:';delete process.env.TURSO_AUTH_TOKEN;delete process.env.VAPID_PRIVATE_KEY;delete process.env.VAPID_PUBLIC_KEY;
+  await mkdir(new URL('../work/',import.meta.url),{recursive:true});const bundle=new URL('../work/product-arrivals-test.mjs',import.meta.url);
+  await build({stdin:{contents:"export * from './app/api/product-arrivals/route'; export {database} from './app/lib/database'; export {getNotificationsState} from './app/lib/notifications';",resolveDir:process.cwd()},outfile:fileURLToPath(bundle),bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'auth',setup(b){b.onResolve({filter:/auth-server$/},()=>({path:'auth',namespace:'test'}));b.onLoad({filter:/.*/,namespace:'test'},()=>({contents:"export async function getSession(){return globalThis.arrivalSession;} export async function requirePermission(){const s=globalThis.arrivalSession;return !s?Response.json({}, {status:401}):(!s.isAdmin&&!s.permissions.includes('client_portal'))?Response.json({}, {status:403}):null;}"}));}}]});
+  const app=await import(bundle.href);const db=app.database;
+  await db.prepare('CREATE TABLE clients(id INTEGER PRIMARY KEY,name TEXT)').run();await db.prepare("INSERT INTO clients VALUES(1,'Eleve'),(2,'Other client')").run();
+  await db.prepare('CREATE TABLE auth_users(id INTEGER PRIMARY KEY,active INTEGER,is_admin INTEGER,client_id INTEGER)').run();await db.prepare('INSERT INTO auth_users VALUES(10,1,1,NULL),(11,1,0,1),(12,1,0,2),(13,1,0,NULL)').run();
+  const eleve={userId:11,clientId:1,isAdmin:false,permissions:['client_portal']};const admin={userId:10,clientId:null,isAdmin:true,permissions:[]};
+  const call=(method,body)=>app[method](new Request('https://fixture/api/product-arrivals',{method,...(body?{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})}));
+  assert.equal((await call('GET')).status,401);
+  globalThis.arrivalSession={...eleve,clientId:2,userId:12};assert.equal((await call('GET')).status,403);assert.equal((await call('POST',{})).status,403);
+  globalThis.arrivalSession=eleve;
+  const draft={submissionId:crypto.randomUUID(),title:'New rings',quantity:12,albumUrl:'',notes:'Ready for photography'};
+  assert.equal((await call('POST',{...draft,albumUrl:'javascript:alert(1)'})).status,400);
+  let r=await call('POST',draft);assert.equal(r.status,200);const first=(await r.json()).arrivals[0];assert.equal(first.status,'new');assert.equal(first.album_url,'');
+  await call('POST',draft);assert.equal((await db.prepare('SELECT count(*) AS n FROM client_product_arrivals').first()).n,1);
+  let notices=await app.getNotificationsState(10);assert.equal(notices.notifications.length,1);assert.equal(notices.notifications[0].targetView,'client-portal-admin');assert.equal(notices.notifications[0].entityId,first.id);
+  assert.equal((await app.getNotificationsState(12)).notifications.length,0);
+  assert.equal((await call('PATCH',{action:'status',id:first.id,status:'photographed'})).status,403);
+  const edited={title:'New rings',quantity:12,albumUrl:'https://drive.google.com/drive/folders/example',notes:'Album added'};
+  assert.equal((await call('PATCH',{action:'edit',id:first.id,data:edited})).status,200);
+  assert.equal((await app.getNotificationsState(10)).notifications.length,2);
+  globalThis.arrivalSession={...eleve,clientId:2};assert.equal((await call('PATCH',{action:'edit',id:first.id,data:edited})).status,403);
+  globalThis.arrivalSession={userId:13,clientId:null,isAdmin:false,permissions:[]};assert.equal((await call('GET')).status,403);
+  globalThis.arrivalSession=admin;assert.equal((await call('POST',draft)).status,403);
+  assert.equal((await call('PATCH',{action:'status',id:first.id,status:'scheduled'})).status,200);
+  assert.equal((await call('PATCH',{action:'status',id:999,status:'seen'})).status,404);
+  globalThis.arrivalSession=eleve;const rows=(await (await call('GET')).json()).arrivals;assert.equal(rows[0].status,'scheduled');assert.equal(rows[0].album_url,edited.albumUrl);
+});
