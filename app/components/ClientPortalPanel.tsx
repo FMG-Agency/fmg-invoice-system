@@ -1,5 +1,6 @@
 "use client";
 
+import {clientAccess} from '../lib/client-access';
 import {
   ArrowUpRight,
   CalendarDays,
@@ -82,11 +83,12 @@ function MonthPicker({ year, selected, plans, onSelect }: { year: number; select
   })}</div>;
 }
 
-export function ClientPortalShell({ displayName, dark, onToggleTheme, onLogout, showToast }: { displayName: string; dark: boolean; onToggleTheme: () => void; onLogout: () => Promise<void>; showToast: (message: string) => void }) {
+export function ClientPortalShell({ roleLabel="Client Portal", userId, displayName, dark, onToggleTheme, onLogout, showToast }: { roleLabel?:string; userId?:number; displayName: string; dark: boolean; onToggleTheme: () => void; onLogout: () => Promise<void>; showToast: (message: string) => void }) {
+  const rights=clientAccess(roleLabel);
   const [state, setState] = useState<ClientPortalState | null>(null);
   const [year, setYear] = useState(currentYear());
   const [month, setMonth] = useState(currentMonth());
-  const [tab, setTab] = useState<"invoices" | "plans" | "arrivals">("invoices");
+  const [tab, setTab] = useState<"invoices" | "plans" | "arrivals">(rights.invoices?"invoices":"plans");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -110,8 +112,8 @@ export function ClientPortalShell({ displayName, dark, onToggleTheme, onLogout, 
   return <div className={styles.portal} data-agency={state?.client?.agencyKey || "fmg"}>
     <header className={styles.portalHeader}>
       <div className={styles.portalBrand}><Image src="/fmg-logo-light.png" alt="FMG Agency" width={380} height={130} unoptimized /><span>CLIENT PORTAL</span></div>
-      <nav aria-label="Client portal navigation"><button className={tab === "invoices" ? styles.activeTab : ""} onClick={() => setTab("invoices")}><ReceiptText size={17} /> Invoices</button><button className={tab === "plans" ? styles.activeTab : ""} onClick={() => setTab("plans")}><CalendarDays size={17} /> Monthly plans</button>{state?.client?.id===ELEVE_CLIENT_ID&&<button className={tab === "arrivals" ? styles.activeTab : ""} onClick={()=>setTab("arrivals")}>New products</button>}</nav>
-      <div className={styles.portalUser}><NotificationCenter onNavigate={() => setTab("invoices")} showToast={showToast} /><button onClick={onToggleTheme} aria-label="Toggle theme">{dark ? <Sun size={17} /> : <Moon size={17} />}</button><span><ClientBrandMark key={`header-${state?.client?.id}-${state?.client?.portalLogoUpdatedAt}`} client={state?.client} title={title} className={styles.portalUserMark} /><span><strong>{title}</strong><small>{displayName}</small></span></span><button onClick={() => void onLogout()} aria-label="Sign out"><LogOut size={17} /></button></div>
+      <nav aria-label="Client portal navigation">{rights.invoices&&<button className={tab === "invoices" ? styles.activeTab : ""} onClick={() => setTab("invoices")}><ReceiptText size={17} /> Invoices</button>}{rights.plans&&<button className={tab === "plans" ? styles.activeTab : ""} onClick={() => setTab("plans")}><CalendarDays size={17} /> Monthly plans</button>}{rights.arrivals&&state?.client?.id===ELEVE_CLIENT_ID&&<button className={tab === "arrivals" ? styles.activeTab : ""} onClick={()=>setTab("arrivals")}>New products</button>}</nav>
+      <div className={styles.portalUser}><NotificationCenter onNavigate={() => setTab(rights.invoices?"invoices":"plans")} showToast={showToast} /><button onClick={onToggleTheme} aria-label="Toggle theme">{dark ? <Sun size={17} /> : <Moon size={17} />}</button><span><ClientBrandMark key={`header-${state?.client?.id}-${state?.client?.portalLogoUpdatedAt}`} client={state?.client} title={title} className={styles.portalUserMark} /><span><strong>{title}</strong><small>{displayName}</small></span></span><button onClick={() => void onLogout()} aria-label="Sign out"><LogOut size={17} /></button></div>
     </header>
 
     <main className={styles.portalMain}>
@@ -121,7 +123,7 @@ export function ClientPortalShell({ displayName, dark, onToggleTheme, onLogout, 
           <ClientBrandMark key={`hero-${state.client.id}-${state.client.portalLogoUpdatedAt}`} client={state.client} title={title} className={styles.welcomeMark} />
         </section>
 
-        {tab === "arrivals" && state.client.id===ELEVE_CLIENT_ID ? <ProductArrivals client/> : tab === "invoices" ? <>
+        {tab === "arrivals" && state.client.id===ELEVE_CLIENT_ID ? <ProductArrivals client userId={userId} owner={rights.owner}/> : tab === "invoices" ? <>
           <section className={styles.portalMetrics}>
             <article className={styles.dueMetric}><span><WalletCards size={16} /> CURRENT AMOUNT DUE</span><strong>{money(totalDue, currency)}</strong><small>{dueInvoices.length ? `${dueInvoices.length} invoice${dueInvoices.length === 1 ? "" : "s"} awaiting payment` : "Your account is currently settled"}</small></article>
             <article><span>TOTAL ISSUED</span><strong>{state.invoices.length}</strong><small>Visible invoices in your portal</small></article>

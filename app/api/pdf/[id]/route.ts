@@ -1,3 +1,4 @@
+import {clientAccess} from '../../../lib/client-access';
 import { renderSavedDocumentPdf } from "../../../lib/server-document-pdf";
 import { get } from "@vercel/blob";
 import { database } from "../../../lib/database";
@@ -20,7 +21,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       .bind(numericId).first<{ type: "invoice" | "quotation"; clientId: number; generatedCode: string; pdfKey: string }>();
     if (!row) return new Response("Document not found", { status: 404 });
     const documentPermission = row.type === "invoice" ? "invoices" : "quotations";
-    if (session.clientId !== null && (row.type !== "invoice" || Number(row.clientId) !== session.clientId)) {
+    if (session.clientId !== null && (!clientAccess(session.roleLabel).invoices || row.type !== "invoice" || Number(row.clientId) !== session.clientId)) {
       return new Response("Access denied", { status: 403 });
     }
     if (session.clientId === null && !canAccess(session.permissions, "client_portal", session.isAdmin)

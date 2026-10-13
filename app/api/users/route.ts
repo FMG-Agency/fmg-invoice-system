@@ -10,6 +10,7 @@ import {
 } from "../../lib/auth-server";
 import { ACCESS_PERMISSIONS, effectivePermissions, normalizePermissions, parsePermissions } from "../../lib/permissions";
 import { ensureHrDatabase } from "../../lib/hr";
+import {CLIENT_ROLES} from '../../lib/client-access';
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -115,6 +116,10 @@ export async function POST(request: Request) {
       return Response.json({ error: "Client users can only access their own Client Portal." }, { status: 400 });
     }
     const db = getDatabase();
+    if (payload.data.clientId) {
+      if (![...CLIENT_ROLES, 'Client Portal'].includes(payload.data.roleLabel as typeof CLIENT_ROLES[number])) return Response.json({error:'Choose a valid client role.'},{status:400});
+      if (!await db.prepare('SELECT id FROM clients WHERE id=?').bind(payload.data.clientId).first()) return Response.json({error:'Client account not found.'},{status:400});
+    }
     const permissions = JSON.stringify(normalizePermissions(payload.data.permissions));
     const duplicateUsername = await db.prepare("SELECT id FROM auth_users WHERE lower(username) = lower(?) AND id <> ?")
       .bind(payload.data.username, payload.action === "update" ? payload.id : 0).first<{ id: number }>();

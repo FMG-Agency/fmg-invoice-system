@@ -28,7 +28,7 @@ const credentialsSchema = z.object({
 
 const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("setup"), ...credentialsSchema.shape }),
-  z.object({ action: z.literal("login"), username: z.string().trim().min(1).max(80), password: z.string().min(1).max(200) }),
+  z.object({ action: z.literal("login"), username: z.string().trim().min(1).max(80), password: z.string().min(1).max(200), accountType: z.enum(["team","client"]).optional(), remember: z.boolean().default(true) }),
   z.object({ action: z.literal("logout") }),
   z.object({
     action: z.literal("change"),
@@ -103,16 +103,16 @@ export async function POST(request: Request) {
       const limit = await checkRateLimit(attemptKey);
       if (!limit.allowed) return Response.json({ error: "Too many attempts. Try again shortly." }, { status: 429, headers: { "retry-after": String(limit.retryAfter) } });
       const credential = await db.prepare(`SELECT id, username, password_hash AS passwordHash,
-          password_salt AS passwordSalt, password_iterations AS passwordIterations
+          password_salt AS passwordSalt, password_iterations AS passwordIterations, client_id AS clientId
         FROM auth_users WHERE username = ? COLLATE NOCASE AND active = 1`)
-        .bind(payload.username).first<{ id: number; username: string; passwordHash: string; passwordSalt: string; passwordIterations: number }>();
+        .bind(payload.username).first<{ id: number; username: string; passwordHash: string; passwordSalt: string; passwordIterations: number; clientId: number | null }>();
       const candidate = credential ? await passwordHash(payload.password, credential.passwordSalt, credential.passwordIterations) : await passwordHash(payload.password, newSalt());
-      if (!credential || !secureEqual(candidate, credential.passwordHash)) {
+      if (!credential || !secureEqual(candidate, credential.passwordHash) || (payload.accountType && (credential.clientId !== null ? "client" : "team") !== payload.accountType)) {
         await recordFailedLogin(attemptKey);
         return Response.json({ error: "Incorrect username or password." }, { status: 401 });
       }
       await clearLoginAttempts(attemptKey);
-      const cookie = await createSession(request, credential.id);
+      const cookie = await createSession(request, credential.id, payload.remember);
       const session = await db.prepare(`SELECT id AS userId, username, display_name AS displayName, role_label AS roleLabel,
           is_admin AS isAdmin, permissions_json AS permissionsJson, employee_id AS employeeId, client_id AS clientId FROM auth_users WHERE id = ?`)
         .bind(credential.id).first<{ userId: number; username: string; displayName: string; roleLabel: string; isAdmin: number; permissionsJson: string; employeeId: number | null; clientId: number | null }>();
@@ -121,8 +121,8 @@ export async function POST(request: Request) {
         username: credential.username,
         displayName: session?.displayName ?? credential.username,
         roleLabel: session?.roleLabel ?? "Team Member",
-        isAdmin: Number(session?.isAdmin) === 1,
-        permissions: effectivePermissions(
+        isAdmin: session?.clientId == null && Number(session?.isAdmin) === 1,
+        permissions: session?.clientId != null ? ["client_portal"] : effectivePermissions(
           parsePermissions(session?.permissionsJson ?? "[]"),
           session?.roleLabel ?? "Team Member",
           Number(session?.isAdmin) === 1,

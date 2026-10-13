@@ -3,6 +3,7 @@
 import { Building2, Check, KeyRound, Pencil, Plus, ShieldCheck, UserCog, UserRound, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ACCESS_PERMISSIONS, CONTENT_CREATOR_PERMISSIONS, ACCOUNT_MANAGER_PERMISSIONS, OPERATION_MANAGER_PERMISSIONS, PRODUCTION_MANAGER_PERMISSIONS, type AccessPermission } from "../lib/permissions";
+import {CLIENT_ROLES} from '../lib/client-access';
 import type { ManagedUser } from "../types";
 
 type UserDraft = {
@@ -69,6 +70,7 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ManagedUser | null>(null);
+  const [selectedAccount,setSelectedAccount]=useState<number|null>(null);
   const [activeGroup, setActiveGroup] = useState<AccountGroup>("employees");
   const [modalGroup, setModalGroup] = useState<AccountGroup>("employees");
   const [draft, setDraft] = useState<UserDraft>(accountManagerDraft);
@@ -92,14 +94,14 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
 
   const clientUsers = useMemo(() => users.filter(isClientAccount), [users]);
   const employeeUsers = useMemo(() => users.filter((user) => !isClientAccount(user)), [users]);
-  const visibleUsers = activeGroup === "clients" ? clientUsers : employeeUsers;
+  const visibleUsers = activeGroup === "clients" ? clientUsers.filter(u=>u.clientId===selectedAccount) : employeeUsers;
   const activeVisibleUsers = visibleUsers.filter((user) => user.active).length;
 
   function openCreate(group: AccountGroup = activeGroup) {
     setEditing(null);
     setModalGroup(group);
     setDraft(group === "clients"
-      ? { ...clientPortalDraft, permissions: ["client_portal"] }
+      ? { ...clientPortalDraft, clientId:selectedAccount, roleLabel:"Client Owner", permissions: ["client_portal"] }
       : { ...accountManagerDraft, permissions: [...ACCOUNT_MANAGER_PERMISSIONS] });
     setOpen(true);
   }
@@ -112,7 +114,7 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
     setDraft({
       username: user.username,
       displayName: user.displayName,
-      roleLabel: group === "clients" ? "Client Portal" : user.roleLabel,
+      roleLabel: user.roleLabel === "Client Portal" ? "Client Owner" : user.roleLabel,
       password: "",
       active: user.active,
       permissions: group === "clients" ? ["client_portal"] : [...user.permissions],
@@ -144,7 +146,7 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
     if (modalGroup === "employees" && !draft.permissions.length) return showToast("Choose at least one area for this employee user.");
     if (!editing && draft.password.length < 8) return showToast("Use at least 8 characters for the password.");
     const submittedDraft: UserDraft = modalGroup === "clients"
-      ? { ...draft, roleLabel: "Client Portal", permissions: ["client_portal"], employeeId: null }
+      ? { ...draft, permissions: ["client_portal"], employeeId: null }
       : { ...draft, clientId: null };
     setSaving(true);
     try {
@@ -183,7 +185,7 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
             <span className="access-group-icon"><UserRound size={18} /></span><span className="access-group-copy"><strong>Employee Users</strong><small>Internal team & administrators</small></span><span className="access-group-count">{employeeUsers.length}</span>
           </button>
           <button type="button" role="tab" aria-selected={activeGroup === "clients"} className={activeGroup === "clients" ? "access-group-tab active" : "access-group-tab"} onClick={() => setActiveGroup("clients")}>
-            <span className="access-group-icon"><Building2 size={18} /></span><span className="access-group-copy"><strong>Client Users</strong><small>Private client portal accounts</small></span><span className="access-group-count">{clientUsers.length}</span>
+            <span className="access-group-icon"><Building2 size={18} /></span><span className="access-group-copy"><strong>Client Accounts</strong><small>Brands & account users</small></span><span className="access-group-count">{clientUsers.length}</span>
           </button>
         </div>
         <div className="access-directory-actions">
@@ -192,7 +194,7 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
         </div>
       </div>
 
-      {loading ? <div className="empty-panel"><div className="empty-icon"><UserCog size={24} /></div><h3>Loading users…</h3></div> : activeGroup === "employees" ? <EmployeeUsersTable users={employeeUsers} openEdit={openEdit} openCreate={() => openCreate("employees")} /> : <ClientUsersTable users={clientUsers} openEdit={openEdit} openCreate={() => openCreate("clients")} />}
+      {loading ? <div className="empty-panel"><div className="empty-icon"><UserCog size={24} /></div><h3>Loading users…</h3></div> : activeGroup === "employees" ? <EmployeeUsersTable users={employeeUsers} openEdit={openEdit} openCreate={() => openCreate("employees")} /> : <><div className="brand-account-grid">{clients.map(client=><button key={client.id} className={selectedAccount===client.id?"brand-account selected":"brand-account"} onClick={()=>setSelectedAccount(client.id)}><Building2 size={22}/><strong>{client.companyName||client.name}</strong><span>{clientUsers.filter(u=>u.clientId===client.id).length} users</span></button>)}</div>{selectedAccount&&<><div className="access-directory-head"><h3>Account Users · {clients.find(c=>c.id===selectedAccount)?.companyName||clients.find(c=>c.id===selectedAccount)?.name}</h3><button className="primary-button" onClick={()=>openCreate("clients")}><Plus size={16}/> Add account user</button></div><ClientUsersTable users={visibleUsers} openEdit={openEdit} openCreate={() => openCreate("clients")} /></>}</>}
     </section>
 
     {open && <AccessModal
@@ -203,14 +205,15 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
         {modalGroup === "employees" && <div className="access-preset"><div><ShieldCheck size={17} /><span><strong>Ready-made employee presets</strong><small>Start with a workflow role, then adjust individual permissions if needed.</small></span></div><div className="access-preset-actions"><button type="button" className="secondary-button" onClick={() => applyWorkflowPreset("account")}>Account Manager</button><button type="button" className="secondary-button" onClick={() => applyWorkflowPreset("content")}>Content Creator</button><button type="button" className="secondary-button" onClick={() => applyWorkflowPreset("production")}>Production Manager</button><button type="button" className="secondary-button" onClick={() => applyWorkflowPreset("operation")}>Operation Manager</button></div></div>}
         <div className="form-grid">
           <label className="field"><span>Display name</span><input required value={draft.displayName} onChange={(event) => setDraft({ ...draft, displayName: event.target.value })} placeholder={modalGroup === "clients" ? "e.g. Lewis Jewellery" : "e.g. Ahmed Hassan"} /></label>
+          {modalGroup === "clients" && <label className="field"><span>Account role</span><select value={draft.roleLabel} onChange={e=>setDraft({...draft,roleLabel:e.target.value})}>{CLIENT_ROLES.map(role=><option key={role}>{role}</option>)}</select><small>Owner: all account areas. Marketing: plans & product reports. Finance: invoices only.</small></label>}
           {modalGroup === "employees" && <label className="field"><span>Role / title</span><input required value={draft.roleLabel} onChange={(event) => setDraft({ ...draft, roleLabel: event.target.value })} /></label>}
           <label className="field"><span>Username</span><input required minLength={3} pattern="[A-Za-z0-9._-]+" autoComplete="off" value={draft.username} onChange={(event) => setDraft({ ...draft, username: event.target.value })} placeholder={modalGroup === "clients" ? "lewis.portal" : "operation.manager"} /></label>
           <label className="field"><span>{editing ? "New password" : "Temporary password"}<small>{editing ? "Leave blank to keep it" : "At least 8 characters"}</small></span><input type="password" minLength={editing ? undefined : 8} required={!editing} autoComplete="new-password" value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} /></label>
           {modalGroup === "employees" ? <label className="field"><span>Linked employee <small>For requests and employee records</small></span><select value={draft.employeeId ?? ""} onChange={(event) => setDraft({ ...draft, employeeId: event.target.value ? Number(event.target.value) : null, clientId: null })}><option value="">No employee linked</option>{employees.filter((employee) => !users.some((user) => user.id !== editing?.id && user.employeeId === employee.id)).map((employee) => <option key={employee.id} value={employee.id}>{employee.name}{employee.title ? ` · ${employee.title}` : ""}{employee.department ? ` · ${employee.department}` : ""}</option>)}</select></label> : <label className="field"><span>Linked client <small>Required for the private portal</small></span><select required value={draft.clientId ?? ""} onChange={(event) => {
             const clientId = event.target.value ? Number(event.target.value) : null;
             const client = clients.find((item) => item.id === clientId);
-            setDraft({ ...draft, clientId, employeeId: null, roleLabel: "Client Portal", permissions: ["client_portal"], displayName: draft.displayName || client?.companyName || client?.name || "" });
-          }}><option value="">Choose client</option>{clients.filter((client) => !users.some((user) => user.id !== editing?.id && user.clientId === client.id)).map((client) => <option key={client.id} value={client.id}>{client.companyName || client.name}{client.ownerName ? ` · ${client.ownerName}` : ""}</option>)}</select></label>}
+            setDraft({ ...draft, clientId, employeeId: null, permissions: ["client_portal"], displayName: draft.displayName || client?.companyName || client?.name || "" });
+          }}><option value="">Choose client</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.companyName || client.name}{client.ownerName ? ` · ${client.ownerName}` : ""}</option>)}</select></label>}
         </div>
 
         {modalGroup === "employees" ? <>
@@ -248,7 +251,7 @@ function ClientUsersTable({ users, openEdit, openCreate }: { users: ManagedUser[
     <td><div className="client-cell"><span className="avatar-soft client-avatar"><Building2 size={15} /></span><span><strong>{user.displayName}</strong><small>Private portal account</small></span></div></td>
     <td>{user.clientName ? <span className="access-linked-profile client"><Building2 size={13} /> {user.clientName}</span> : <span className="access-link-warning">Client link required</span>}</td>
     <td><strong className="table-main">{user.username}</strong></td>
-    <td><div className="permission-summary"><span>Client Portal only</span></div></td>
+    <td><div className="permission-summary"><span>{user.roleLabel === "Client Portal" ? "Client Owner" : user.roleLabel}</span></div></td>
     <td><span className={user.active ? "hr-status active" : "hr-status inactive"}>{user.active ? "Active" : "Inactive"}</span></td>
     <td><button className="table-review" onClick={() => openEdit(user)}><Pencil size={15} /> Edit client user</button></td>
   </tr>)}</tbody></table></div>;

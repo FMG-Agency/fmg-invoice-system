@@ -161,7 +161,7 @@ export const authUsers = sqliteTable("auth_users", {
 }, (table) => [
   index("idx_auth_users_active").on(table.active),
   uniqueIndex("idx_auth_users_employee_id").on(table.employeeId).where(sql`${table.employeeId} IS NOT NULL`),
-  uniqueIndex("idx_auth_users_client_id").on(table.clientId).where(sql`${table.clientId} IS NOT NULL`),
+  index("idx_auth_users_client_members").on(table.clientId).where(sql`${table.clientId} IS NOT NULL`),
 ]);
 
 export const authUserSessions = sqliteTable("auth_user_sessions", {

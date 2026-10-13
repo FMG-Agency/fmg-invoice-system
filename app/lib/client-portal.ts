@@ -1,3 +1,4 @@
+import {clientAccess} from './client-access';
 import { database } from "./database";
 import { ensureClientAccountsDatabase, getClientAccount } from "./client-accounts";
 import type { AuthSession } from "./auth-server";
@@ -71,7 +72,7 @@ async function listClients(): Promise<Array<Client & { portalUsername: string }>
       CASE WHEN c.portal_logo_key <> '' THEN 1 ELSE 0 END AS portalLogoAvailable,
       c.portal_logo_updated_at AS portalLogoUpdatedAt,
       c.created_at AS createdAt, c.updated_at AS updatedAt, COALESCE(u.username, '') AS portalUsername
-    FROM clients c LEFT JOIN auth_users u ON u.client_id = c.id AND u.active = 1
+    FROM clients c LEFT JOIN auth_users u ON u.id = (SELECT MIN(id) FROM auth_users WHERE client_id=c.id AND active=1)
     ORDER BY c.company_name COLLATE NOCASE, c.name COLLATE NOCASE`).all<Record<string, unknown>>();
   return result.results.map((row) => ({
     id: numberValue(row.id),
@@ -128,14 +129,15 @@ export async function getClientPortalState(session: AuthSession, requestedClient
     viewerMode: session.clientId === null ? "staff" : "client",
     client: {
       ...account.client,
+      ...(session.clientId !== null ? {notes:'',monthlyFee:0,paymentSchedule:'',contractStatus:'not_set' as const} : {}),
       portalLogoAvailable: numberValue(logoResult?.portalLogoAvailable) === 1,
       portalLogoUpdatedAt: String(logoResult?.portalLogoUpdatedAt || ""),
     },
     clients,
     year,
     years,
-    invoices: account.invoices.filter((invoice) => !["Draft", "Rejected"].includes(invoice.status)),
-    summaries: account.summaries,
-    plans: plansResult.results.map(mapPlan),
+    invoices: session.clientId !== null && !clientAccess(session.roleLabel).invoices ? [] : account.invoices.filter((invoice) => !["Draft", "Rejected"].includes(invoice.status)),
+    summaries: session.clientId !== null && !clientAccess(session.roleLabel).invoices ? [] : account.summaries,
+    plans: session.clientId !== null && !clientAccess(session.roleLabel).plans ? [] : plansResult.results.map(mapPlan),
   };
 }

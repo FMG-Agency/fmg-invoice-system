@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS `idx_auth_users_client_id`;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS `idx_auth_users_client_members` ON `auth_users` (`client_id`) WHERE "auth_users"."client_id" IS NOT NULL;

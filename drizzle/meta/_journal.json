@@ -155,6 +155,13 @@
       "when": 1788712870638,
       "tag": "0021_modern_dazzler",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1791890822206,
+      "tag": "0022_last_darkstar",
+      "breakpoints": true
     }
   ]
 }

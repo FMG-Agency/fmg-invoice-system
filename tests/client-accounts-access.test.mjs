@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import {mkdir} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import test from 'node:test';
+test('brand users share a client account while roles, login type and account isolation are enforced',async()=>{
+process.env.TURSO_DATABASE_URL='file::memory:';delete process.env.TURSO_AUTH_TOKEN;delete process.env.VAPID_PRIVATE_KEY;delete process.env.VAPID_PUBLIC_KEY;
+await mkdir(new URL('../work/',import.meta.url),{recursive:true});const path=new URL('../work/accounts-test.mjs',import.meta.url);
+await build({stdin:{contents:"export * as auth from './app/api/auth/route';export * as users from './app/api/users/route';export * as arrivals from './app/api/product-arrivals/route';export * as pdf from './app/api/pdf/[id]/route';export {database} from './app/lib/database';export {getSession,ensureAuthDatabase,requirePermission} from './app/lib/auth-server';",resolveDir:process.cwd()},outfile:fileURLToPath(path),bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'isolated-dependencies',setup(b){b.onResolve({filter:/\/lib\/hr$/},()=>({path:'hr',namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},()=>({contents:'export async function ensureHrDatabase(){}'}));}}]});
+const app=await import(path.href),db=app.database;
+await app.ensureAuthDatabase();
+await db.prepare("CREATE TABLE clients(id INTEGER PRIMARY KEY,name TEXT,company_name TEXT,owner_name TEXT)").run();await db.prepare("INSERT INTO clients VALUES(1,'Eleve','Eleve','Owner'),(2,'Other','Other','Other')").run();
+await db.prepare('CREATE TABLE employees(id INTEGER PRIMARY KEY,name TEXT,title TEXT,department TEXT,active INTEGER)').run();
+await db.prepare('CREATE TABLE documents(id INTEGER PRIMARY KEY,type TEXT,client_id INTEGER,generated_code TEXT,pdf_key TEXT)').run();await db.prepare("INSERT INTO documents VALUES(1,'invoice',1,'TEST-1',''),(2,'invoice',2,'TEST-2','')").run();
+function req(body,cookie='',method='POST'){return new Request('https://fixture.test/api',{method,headers:{'Content-Type':'application/json',cookie},...(method==='GET'?{}:{body:JSON.stringify(body)})})}
+let result=await app.auth.POST(req({action:'setup',username:'admin',password:'FixturePassword123'}));assert.equal(result.status,201);const admin=result.headers.get('set-cookie').split(';')[0];
+async function create(username,roleLabel,clientId=1){return app.users.POST(req({action:'create',data:{username,displayName:username,roleLabel,password:'FixturePassword123',active:true,permissions:['client_portal'],employeeId:null,clientId}},admin))}
+assert.equal((await create('owner','Client Owner')).status,200);assert.equal((await create('marketing','Client Marketing')).status,200);assert.equal((await create('finance','Client Finance')).status,200);assert.equal((await create('other','Client Owner',2)).status,200);
+assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM auth_users WHERE client_id=1').first()).n,3);
+assert.equal((await create('invalid','Administrator')).status,400);assert.equal((await create('missing','Client Owner',999)).status,400);
+async function login(username,accountType='client',remember=false){return app.auth.POST(req({action:'login',username,password:'FixturePassword123',accountType,remember}))}
+assert.equal((await login('owner','team')).status,401);assert.equal((await login('admin','client')).status,401);
+result=await login('owner');assert.equal(result.status,200);assert.match(result.headers.get('set-cookie'),/Max-Age=43200/);const owner=result.headers.get('set-cookie').split(';')[0];
+result=await login('marketing','client',true);assert.match(result.headers.get('set-cookie'),/Max-Age=604800/);const marketing=result.headers.get('set-cookie').split(';')[0];
+result=await login('finance');const finance=result.headers.get('set-cookie').split(';')[0];
+result=await login('other');const other=result.headers.get('set-cookie').split(';')[0];
+assert.equal((await app.users.GET(req(null,owner,'GET'))).status,403);
+assert.equal((await app.arrivals.GET(req(null,finance,'GET'))).status,403);assert.equal((await app.arrivals.GET(req(null,other,'GET'))).status,403);
+const draft={submissionId:crypto.randomUUID(),title:'Rings',quantity:2,albumUrl:'',notes:'Fixture'};
+result=await app.arrivals.POST(req(draft,owner));assert.equal(result.status,200);const created=(await result.json()).arrivals[0];assert.equal(created.created_by_name,'owner');const id=created.id;
+assert.equal((await app.arrivals.PATCH(req({action:'edit',id,data:{...draft,title:'Changed'}},marketing))).status,403);
+assert.equal((await app.arrivals.DELETE(req({id},marketing,'DELETE'))).status,403);
+result=await app.arrivals.POST(req({...draft,submissionId:crypto.randomUUID(),title:'Necklaces'},marketing));assert.equal(result.status,200);const mid=(await result.json()).arrivals[0].id;
+assert.equal((await app.arrivals.DELETE(req({id:mid},marketing,'DELETE'))).status,200);
+assert.equal((await app.arrivals.DELETE(req({id},owner,'DELETE'))).status,200);
+assert.equal((await app.pdf.GET(req(null,marketing,'GET'),{params:Promise.resolve({id:'1'})})).status,403);
+assert.equal((await app.pdf.GET(req(null,finance,'GET'),{params:Promise.resolve({id:'2'})})).status,403);
+const user=await db.prepare("SELECT id FROM auth_users WHERE username='marketing'").first();
+await db.prepare("UPDATE auth_users SET permissions_json='[\"employees\"]',is_admin=1 WHERE id=?").bind(user.id).run();
+const session=await app.getSession(req(null,marketing,'GET'));assert.equal(session.isAdmin,false);assert.deepEqual(session.permissions,['client_portal']);assert.equal((await app.requirePermission(req(null,marketing,'GET'),'employees')).status,403);
+await db.prepare('UPDATE auth_users SET active=0 WHERE id=?').bind(user.id).run();assert.equal(await app.getSession(req(null,marketing,'GET')),null);
+});

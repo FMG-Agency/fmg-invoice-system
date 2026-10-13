@@ -1,3 +1,4 @@
+import {clientAccess} from '../../lib/client-access';
 import {z} from "zod";
 import {database} from "../../lib/database";
 import {getSession,requirePermission} from "../../lib/auth-server";
@@ -25,9 +26,10 @@ async function access(request:Request){
   const denied=await requirePermission(request,"client_portal");if(denied)return denied;
   const session=await getSession(request);if(!session)return Response.json({error:"Sign in first."},{status:401});
   if(session.clientId!==null&&session.clientId!==ELEVE_CLIENT_ID)return Response.json({error:"This feature is not enabled for this client."},{status:403});
+  if(session.clientId!==null&&!clientAccess(session.roleLabel).arrivals)return Response.json({error:"This role cannot access product arrivals."},{status:403});
   return session;
 }
-async function list(){const rows=await database.prepare("SELECT id,title,quantity,album_url,notes,status,created_at,updated_at FROM client_product_arrivals WHERE client_id=? ORDER BY id DESC LIMIT 200").bind(ELEVE_CLIENT_ID).all();return Response.json({arrivals:rows.results},{headers:{"Cache-Control":"private, no-store"}});}
+async function list(){const rows=await database.prepare("SELECT id,title,quantity,album_url,notes,status,created_at,updated_at,created_by,(SELECT display_name FROM auth_users WHERE id=client_product_arrivals.created_by) AS created_by_name FROM client_product_arrivals WHERE client_id=? ORDER BY id DESC LIMIT 200").bind(ELEVE_CLIENT_ID).all();return Response.json({arrivals:rows.results},{headers:{"Cache-Control":"private, no-store"}});}
 function failure(error:unknown){if(error instanceof z.ZodError)return Response.json({error:error.issues[0]?.message},{status:400});console.error("Product arrivals failed",error);return Response.json({error:"Could not save or load arrivals. Please retry."},{status:500});}
 export async function GET(request:Request){try{const session=await access(request);if(session instanceof Response)return session;await ensureDatabase();return await list();}catch(error){return failure(error);}}
 export async function DELETE(request:Request){try{
@@ -35,7 +37,9 @@ export async function DELETE(request:Request){try{
   if(session.clientId!==ELEVE_CLIENT_ID)return Response.json({error:"Only Eleve can remove an arrival."},{status:403});
   const {id}=z.object({id:z.number().int().positive()}).parse(await request.json());
   await ensureDatabase();
-  await trashDelete("client_product_arrivals","id=? AND client_id=?",[id,ELEVE_CLIENT_ID],session);
+  const row=await database.prepare("SELECT created_by FROM client_product_arrivals WHERE id=? AND client_id=?").bind(id,ELEVE_CLIENT_ID).first<{created_by:number}>();
+  if(row&&!clientAccess(session.roleLabel).owner&&Number(row.created_by)!==session.userId)return Response.json({error:"You can only remove your own reports."},{status:403});
+  await trashDelete("client_product_arrivals","id=? AND client_id=?"+(clientAccess(session.roleLabel).owner?"":" AND created_by=?"),[id,ELEVE_CLIENT_ID,...(clientAccess(session.roleLabel).owner?[]:[session.userId])],session);
   return await list();
 }catch(error){return failure(error);}}
 export async function POST(request:Request){try{
@@ -50,8 +54,9 @@ export async function PATCH(request:Request){try{
   const session=await access(request);if(session instanceof Response)return session;
   const data=change.parse(await request.json());
   if((data.action==="edit"&&session.clientId!==ELEVE_CLIENT_ID)||(data.action==="status"&&session.clientId!==null))return Response.json({error:"This action is not permitted."},{status:403});
-  await ensureDatabase();const existing=await database.prepare("SELECT id FROM client_product_arrivals WHERE id=? AND client_id=?").bind(data.id,ELEVE_CLIENT_ID).first();if(!existing)return Response.json({error:"Arrival not found."},{status:404});
+  await ensureDatabase();const existing=await database.prepare("SELECT id,created_by FROM client_product_arrivals WHERE id=? AND client_id=?").bind(data.id,ELEVE_CLIENT_ID).first();if(!existing)return Response.json({error:"Arrival not found."},{status:404});
   if(data.action==="edit"){
+    if(!clientAccess(session.roleLabel).owner&&Number(existing.created_by)!==session.userId)return Response.json({error:"You can only edit your own reports."},{status:403});
     await database.prepare("UPDATE client_product_arrivals SET title=?,quantity=?,album_url=?,notes=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND client_id=?").bind(data.data.title,data.data.quantity,data.data.albumUrl,data.data.notes,data.id,ELEVE_CLIENT_ID).run();
     await notifyUsers(await administratorUserIds(),{type:"product_arrival_updated",title:"Eleve · Product details updated",message:data.data.title,targetView:"client-portal-admin",entityId:data.id,actorUserId:session.userId});
   }else await database.prepare("UPDATE client_product_arrivals SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND client_id=?").bind(data.status,data.id,ELEVE_CLIENT_ID).run();

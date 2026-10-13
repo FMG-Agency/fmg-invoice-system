@@ -127,7 +127,10 @@ async function initializeAuthDatabase() {
     await database.prepare("ALTER TABLE auth_users ADD COLUMN client_id INTEGER").run();
   }
   await database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_users_employee_id ON auth_users(employee_id) WHERE employee_id IS NOT NULL").run();
-  await database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_users_client_id ON auth_users(client_id) WHERE client_id IS NOT NULL").run();
+  await database.batch([
+    database.prepare("DROP INDEX IF EXISTS idx_auth_users_client_id"),
+    database.prepare("CREATE INDEX IF NOT EXISTS idx_auth_users_client_members ON auth_users(client_id) WHERE client_id IS NOT NULL"),
+  ]);
   await database.batch([
     database.prepare(`INSERT OR IGNORE INTO auth_users
       (id, username, display_name, role_label, password_hash, password_salt, password_iterations,
@@ -178,12 +181,13 @@ export function expiredSessionCookie(request: Request) {
   return sessionCookie(request, "", 0);
 }
 
-export async function createSession(request: Request, userId: number) {
+export async function createSession(request: Request, userId: number, remember = true) {
   const token = randomBase64(32);
   const tokenHash = await sha256(token);
-  const expiresAt = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
+  const lifetime = remember ? SESSION_SECONDS : 60 * 60 * 12;
+  const expiresAt = Math.floor(Date.now() / 1000) + lifetime;
   await database.prepare("INSERT INTO auth_user_sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)").bind(tokenHash, userId, expiresAt).run();
-  return sessionCookie(request, token);
+  return sessionCookie(request, token, lifetime);
 }
 
 export async function removeCurrentSession(request: Request) {
@@ -204,8 +208,8 @@ export async function getSession(request: Request): Promise<AuthSession | null> 
     .bind(await sha256(token), Math.floor(Date.now() / 1000))
     .first<{ userId: number; username: string; displayName: string; roleLabel: string; isAdmin: number; permissionsJson: string; employeeId: number | null; clientId: number | null }>();
   if (!row) return null;
-  const isAdmin = Number(row.isAdmin) === 1;
-  const permissions = effectivePermissions(parsePermissions(row.permissionsJson), row.roleLabel, isAdmin);
+  const isAdmin = row.clientId === null && Number(row.isAdmin) === 1;
+  const permissions: AccessPermission[] = row.clientId !== null ? ['client_portal'] : effectivePermissions(parsePermissions(row.permissionsJson), row.roleLabel, isAdmin);
   if (row.clientId === null && !permissions.includes("tasks")) permissions.push("tasks");
   return {
     userId: Number(row.userId),

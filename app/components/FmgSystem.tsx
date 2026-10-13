@@ -1,4 +1,5 @@
 "use client";
+import {AuthScreen} from "./AuthScreen";
 import { ManualRequestsPanel } from "./ManualRequestsPanel";
 import { TrashPanel } from "./TrashPanel";
 
@@ -395,60 +396,6 @@ function EmptyPanel({ icon: Icon, title, body, action }: { icon: typeof FileText
   return <div className="empty-panel"><div className="empty-icon"><Icon size={24} /></div><h3>{title}</h3><p>{body}</p>{action}</div>;
 }
 
-function AuthScreen({ setupRequired, onAuthenticated }: { setupRequired: boolean; onAuthenticated: () => Promise<void> }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    if (setupRequired && password !== confirmPassword) return setError("Passwords do not match.");
-    if (setupRequired && password.length < 8) return setError("Use at least 8 characters for the password.");
-    setBusy(true);
-    try {
-      const response = await fetch("/api/auth", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: setupRequired ? "setup" : "login", username, password }),
-      });
-      const result = await response.json() as { authenticated?: boolean; error?: string };
-      if (!response.ok) throw new Error(result.error || "Could not sign in.");
-      await onAuthenticated();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not sign in.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return <main className="auth-page">
-    <div className="auth-slash" />
-    <section className="auth-brand">
-      <Image src="/fmg-logo-light.png" alt="FMG Agency" width={520} height={180} unoptimized />
-      <div><span>PRIVATE AGENCY WORKSPACE</span><h1>Documents protected.<br />Business moving.</h1><p>Clients, invoices, quotations, payroll, and PDFs stay behind secure FMG accounts with controlled access.</p></div>
-      <small>FMG AGENCY • SUPERHEROES WHO CREATE</small>
-    </section>
-    <section className="auth-card-wrap">
-      <form className="auth-card" onSubmit={submit}>
-        <div className="auth-icon"><ShieldCheck size={23} /></div>
-        <span className="eyebrow">{setupRequired ? "FIRST-TIME SETUP" : "SECURE ACCESS"}</span>
-        <h2>{setupRequired ? "Create the admin account" : "Welcome back"}</h2>
-        <p>{setupRequired ? "Choose the administrator username and password for the FMG system." : "Enter your FMG account credentials to continue."}</p>
-        <label className="auth-field"><span>Username</span><div><UserRound size={17} /><input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder={setupRequired ? "Choose a username" : "Your username"} required minLength={setupRequired ? 3 : 1} autoFocus /></div></label>
-        <label className="auth-field"><span>Password</span><div><LockKeyhole size={17} /><input type={showPassword ? "text" : "password"} autoComplete={setupRequired ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={setupRequired ? "At least 8 characters" : "Your password"} required minLength={setupRequired ? 8 : 1} /><button type="button" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>
-        {setupRequired && <label className="auth-field"><span>Confirm password</span><div><KeyRound size={17} /><input type={showPassword ? "text" : "password"} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Repeat the password" required minLength={8} /></div></label>}
-        {error && <div className="auth-error" role="alert">{error}</div>}
-        <button className="auth-submit" disabled={busy}>{busy ? "Please wait…" : setupRequired ? "Create account & enter" : "Sign in"}<ArrowLeft size={17} /></button>
-        <div className="auth-security"><LockKeyhole size={14} /><span>Your password is encrypted and never stored as readable text.</span></div>
-      </form>
-    </section>
-  </main>;
-}
-
 export function FmgSystem() {
   const [state, setState] = useState<AppState>(emptyState);
   const [hrState, setHrState] = useState<HrState>(emptyHrState);
@@ -706,7 +653,7 @@ export function FmgSystem() {
 
   if (auth.checking || (auth.authenticated && loading)) return <div className="app-loader"><Image src="/fmg-logo-light.png" alt="FMG Agency" width={380} height={130} unoptimized /><span /><p>Preparing your agency workspace…</p></div>;
   if (!auth.authenticated) return <AuthScreen setupRequired={auth.setupRequired} onAuthenticated={handleAuthenticated} />;
-  if (auth.clientId !== null) return <><ReadingSize key={auth.userId} userId={auth.userId} /><ClientPortalShell displayName={auth.displayName || auth.username} dark={dark} onToggleTheme={toggleTheme} onLogout={logout} showToast={showToast} />{toast && <div className="toast" role="status">{toast}</div>}</>;
+  if (auth.clientId !== null) return <><ReadingSize key={auth.userId} userId={auth.userId} /><ClientPortalShell roleLabel={auth.roleLabel} userId={auth.userId} displayName={auth.displayName || auth.username} dark={dark} onToggleTheme={toggleTheme} onLogout={logout} showToast={showToast} />{toast && <div className="toast" role="status">{toast}</div>}</>;
 
   return (
     <div className={cx("app-shell", desktopMenuClosed && "desktop-menu-closed")} dir="ltr">
