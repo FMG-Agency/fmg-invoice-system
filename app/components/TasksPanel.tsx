@@ -11,6 +11,7 @@ import {
   Link2,
   LoaderCircle,
   Plus,
+  Pencil,
   Send,
   Trash2,
   UserRound,
@@ -123,6 +124,7 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
   const [state, setState] = useState<TasksState>(emptyState);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editing,setEditing]=useState<AgencyTask|null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [draft, setDraft] = useState<TaskDraft>(blankDraft);
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
@@ -177,20 +179,26 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
   }
 
   function openCreate() {
+    setEditing(null);
     const next = blankDraft();
     next.assignedUserId = state.assignees[0]?.id ?? 0;
     setDraft(next);
     setCreateOpen(true);
   }
 
+  function openEdit(task:AgencyTask){
+    setEditing(task);setDraft({title:task.title,details:task.details,brief:task.brief,notes:task.notes,gridNotes:task.gridNotes,references:task.references.map(r=>({...r})),startAt:task.startAt.slice(0,16),deadlineAt:task.deadlineAt.slice(0,16),assignedUserId:task.assignedUserId,additionalUserIds:task.assignedUsers.filter(a=>a.id!==task.assignedUserId).map(a=>a.id),assignments:task.assignedUsers.map(a=>({userId:a.id,part:a.part||""})),gridCells:[...task.gridCells],gridPostNotes:[...task.gridPostNotes]});setCreateOpen(true);
+  }
+
   async function createTask(event: React.FormEvent) {
     event.preventDefault();
     const references = draft.references.filter((reference) => reference.url.trim()).map((reference) => ({ label: reference.label.trim(), url: reference.url.trim() }));
-    const done = await mutate({ action: "create", data: { ...draft, references } });
+    const done = await mutate({ action: editing?"update":"create", ...(editing?{id:editing.id}:{}), data: { ...draft, references } });
     if (!done) return;
     setCreateOpen(false);
-    setScope("created");
-    showToast("Task assigned and the selected team members have been notified.");
+    if(!editing)setScope("created");
+    showToast(editing?"Task updated and the assigned team notified.":"Task assigned and the selected team members have been notified.");
+    setEditing(null);
   }
 
   async function submitTask(event: React.FormEvent) {
@@ -310,7 +318,7 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
                 </article>;
               })}
             </section>
-            <footer>{state.role === "administrator" && <button type="button" className={styles.deleteTaskButton} disabled={saving} onClick={() => void deleteTask(task)}><Trash2 size={14} /> Delete task</button>}
+            <footer>{(state.role === "administrator" || task.createdByUserId===state.userId)&&<button type="button" disabled={saving} onClick={()=>openEdit(task)}><Pencil size={14}/> Edit task</button>}{state.role === "administrator" && <button type="button" className={styles.deleteTaskButton} disabled={saving} onClick={() => void deleteTask(task)}><Trash2 size={14} /> Delete task</button>}
               {task.status === "submitted" && !task.submissions.length && task.submissionUrl && <a href={task.submissionUrl} target="_blank" rel="noopener noreferrer">Open historical submitted link</a>}
               {task.status === "assigned" && mine && !task.submissions.some(item=>item.userId===state.userId) && <button type="button" onClick={() => { setSubmitting(task); setSubmissionUrl(""); setSubmissionMethod("link"); setSubmissionNotes(""); setSubmissionPart(task.assignedUsers.find(person=>person.id===state.userId)?.part || ""); }}><Send size={14} /> Submit my part</button>}
             </footer>
@@ -319,12 +327,14 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
       })}</div> : <div className={styles.emptyTasks}><CheckCircle2 size={30} /><strong>No tasks in this view.</strong><span>Assigned work and completed submissions will appear here.</span></div>}
     </section>
 
-    {createOpen && <TaskModal eyebrow="ASSIGN NEW WORK" title="Create a detailed task" description={state.role === "account_manager" ? "Account Managers can assign to the team, excluding administrators and Operation Managers." : "Choose any internal user, define the work, and set an exact start and deadline."} onClose={() => !saving && setCreateOpen(false)}>
+    {createOpen && <TaskModal eyebrow={editing?"EDIT TASK":"ASSIGN NEW WORK"} title={editing?"Edit task":"Create a detailed task"} description={editing ? "Update the task brief, notes, grid and schedule. Existing deliveries stay recorded." : state.role === "account_manager" ? "Account Managers can assign to the team, excluding administrators and Operation Managers." : "Choose any internal user, define the work, and set an exact start and deadline."} onClose={() => !saving && setCreateOpen(false)}>
       <form className={styles.taskForm} onSubmit={(event) => void createTask(event)}>
         <div className={styles.formGrid}>
+          {editing?<p className={styles.wide}>Assigned team: {editing.assignedUsers.map(a=>a.displayName).join(", ")}. Editing keeps the assigned team and recorded deliveries unchanged.</p>:<>
           <label><span>Assign to</span><select required value={draft.assignedUserId || ""} onChange={(event) => setDraft((current) => ({ ...current, assignedUserId: Number(event.target.value) }))}><option value="" disabled>Select a team member</option>{state.assignees.map((assignee) => <option key={assignee.id} value={assignee.id}>{assignee.displayName} · {assignee.employeeTitle || assignee.roleLabel}</option>)}</select></label>
           <div className={styles.teamEditor}>{draft.additionalUserIds.map((id,index) => <div key={index}><label><span>Additional employee {index + 1}</span><select required value={id || ""} onChange={event => setDraft(current => ({...current, additionalUserIds:current.additionalUserIds.map((value,i)=>i===index?Number(event.target.value):value)}))}><option value="" disabled>Select a team member</option>{state.assignees.filter(a => a.id !== draft.assignedUserId && (!draft.additionalUserIds.includes(a.id) || a.id===id)).map(a=><option key={a.id} value={a.id}>{a.displayName}</option>)}</select></label><button type="button" aria-label={`Remove employee ${index+1}`} onClick={()=>setDraft(current=>({...current,additionalUserIds:current.additionalUserIds.filter((_,i)=>i!==index)}))}><X size={15}/></button></div>)}<button type="button" disabled={draft.additionalUserIds.length >= state.assignees.length-1} onClick={()=>setDraft(current=>({...current,additionalUserIds:[...current.additionalUserIds,0]}))}><Plus size={15}/> Assign another employee</button></div>
           {[...new Set([draft.assignedUserId,...draft.additionalUserIds])].filter(Boolean).map(userId => <label key={userId}><span>{state.assignees.find(person=>person.id===userId)?.displayName} · Assigned part <small>Optional</small></span><input maxLength={300} placeholder="Design, video, copywriting…" value={draft.assignments.find(item=>item.userId===userId)?.part || ""} onChange={event=>setDraft(current=>({...current,assignments:[...current.assignments.filter(item=>item.userId!==userId),{userId,part:event.target.value}]}))} /></label>)}
+          </>}
           <label><span>Task title</span><input required minLength={2} maxLength={200} value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Example: September grid – Part 1" /></label>
           <label><span>Start date & time</span><input required type="datetime-local" value={draft.startAt} onChange={(event) => setDraft((current) => ({ ...current, startAt: event.target.value }))} /></label>
           <label><span>Deadline</span><input required type="datetime-local" min={draft.startAt} value={draft.deadlineAt} onChange={(event) => setDraft((current) => ({ ...current, deadlineAt: event.target.value }))} /></label>
@@ -337,7 +347,7 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
         <section className={styles.referencesEditor}><header><div><Link2 size={16} /><span><strong>References</strong><small>Add one link or several — all optional.</small></span></div><button type="button" onClick={() => setDraft((current) => ({ ...current, references: [...current.references, { label: "", url: "" }] }))}><Plus size={14} /> Add reference</button></header>
           {draft.references.length ? <div>{draft.references.map((reference, index) => <div className={styles.referenceRow} key={index}><span>{index + 1}</span><input value={reference.label} onChange={(event) => updateReference(index, "label", event.target.value)} placeholder="Reference name" /><input required type="url" value={reference.url} onChange={(event) => updateReference(index, "url", event.target.value)} placeholder="https://…" /><button type="button" onClick={() => setDraft((current) => ({ ...current, references: current.references.filter((_, refIndex) => refIndex !== index) }))} aria-label={`Remove reference ${index + 1}`}><X size={14} /></button></div>)}</div> : <p>No references added yet.</p>}
         </section>
-        <footer><button type="button" className={styles.cancelButton} onClick={() => setCreateOpen(false)} disabled={saving}>Cancel</button><button className={styles.saveButton} disabled={saving || !draft.assignedUserId}>{saving ? <><LoaderCircle size={16} /> Assigning…</> : <><Send size={16} /> Assign & notify</>}</button></footer>
+        <footer><button type="button" className={styles.cancelButton} onClick={() => setCreateOpen(false)} disabled={saving}>Cancel</button><button className={styles.saveButton} disabled={saving || !draft.assignedUserId}>{saving ? <><LoaderCircle size={16} /> Saving…</> : <><Send size={16} /> {editing?"Save changes":"Assign & notify"}</>}</button></footer>
       </form>
     </TaskModal>}
 

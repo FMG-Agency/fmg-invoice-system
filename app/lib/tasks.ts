@@ -219,7 +219,7 @@ export async function getTasksState(session: AuthSession): Promise<TasksState> {
     ? "1 = 1"
     : role === "account_manager"
       ? `(${assignedAccess} OR t.created_by_user_id = ?)`
-      : assignedAccess;
+      : `(${assignedAccess} OR t.created_by_user_id = ?)`;
   const query = database.prepare(`SELECT (SELECT json_group_array(json_object('userId',s.user_id,'userName',s.user_name,'part',s.part,'method',s.method,'url',s.url,'notes',s.notes,'submittedAt',s.submitted_at,'lateMinutes',s.late_minutes)) FROM task_submissions s WHERE s.task_id=t.id) AS submissionsJson, t.grid_post_notes_json AS gridPostNotesJson, t.task_notes AS taskNotes, t.grid_cells_json AS gridCellsJson, t.assigned_users_json AS assignedUsersJson, t.submission_method AS submissionMethod, t.submission_notes AS submissionNotes, t.submitted_by_name AS submittedByName, t.id, t.title, t.details, t.brief, t.grid_notes AS gridNotes,
       t.references_json AS referencesJson, t.start_at AS startAt, t.deadline_at AS deadlineAt,
       t.assigned_user_id AS assignedUserId, t.assigned_user_name AS assignedUserName,
@@ -234,7 +234,7 @@ export async function getTasksState(session: AuthSession): Promise<TasksState> {
     ? await query.all<Record<string, unknown>>()
     : role === "account_manager"
       ? await query.bind(session.userId, session.userId, session.userId).all<Record<string, unknown>>()
-      : await query.bind(session.userId, session.userId).all<Record<string, unknown>>();
+      : await query.bind(session.userId, session.userId, session.userId).all<Record<string, unknown>>();
   const now = cairoNow();
   return {
     tasks: rows.results.map((row) => taskFromRow(row, Date.now())),

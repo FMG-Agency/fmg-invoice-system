@@ -41,6 +41,7 @@ const taskData = z.object({
 const payloadSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("delete"), id: z.number().int().positive() }),
   z.object({ action: z.literal("create"), data: taskData }),
+  z.object({ action: z.literal("update"), id: z.number().int().positive(), data: taskData }),
   z.object({ action: z.literal("submit"), id: z.number().int().positive(), submissionPart: z.string().trim().max(300).default(""), submissionMethod: z.enum(["link", "flash_drive", "other"]).default("link"), submissionNotes: z.string().trim().max(2000).default(""), submissionUrl: z.union([httpUrl, z.literal("")]).default("") }),
 ]);
 
@@ -87,6 +88,21 @@ export async function POST(request: Request) {
       if (!session.isAdmin) return Response.json({ error: "Only administrators can delete tasks." }, { status: 403 });
       const deleted = await database.batch([await archiveStatement("agency_tasks", "id = ?", [payload.id], session), database.prepare("DELETE FROM task_submissions WHERE task_id = ?").bind(payload.id), database.prepare("DELETE FROM agency_tasks WHERE id = ?").bind(payload.id)]);
       if (!Number(deleted[2].rowsAffected)) return Response.json({ error: "Task not found." }, { status: 404 });
+      return Response.json(await getTasksState(session));
+    }
+
+    if (payload.action === "update") {
+      const task=await database.prepare("SELECT created_by_user_id,assigned_users_json,assigned_user_id FROM agency_tasks WHERE id=?").bind(payload.id).first<Record<string,unknown>>();
+      if(!task)return Response.json({error:"Task not found."},{status:404});
+      if(!session.isAdmin&&Number(task.created_by_user_id)!==session.userId)return Response.json({error:"Only the task creator or an administrator can edit this task."},{status:403});
+      const start=cairoLocalEpoch(payload.data.startAt),end=cairoLocalEpoch(payload.data.deadlineAt);
+      if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)return Response.json({error:"The deadline must be after the task start time."},{status:400});
+      // Editing the brief never rewrites recipients or recorded employee deliveries.
+      const result=await database.prepare(`UPDATE agency_tasks SET title=?,details=?,brief=?,task_notes=?,grid_notes=?,references_json=?,grid_cells_json=?,grid_post_notes_json=?,start_at=?,deadline_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND (?=1 OR created_by_user_id=?)`)
+        .bind(payload.data.title,payload.data.details,payload.data.brief,payload.data.notes,payload.data.gridNotes,JSON.stringify(payload.data.references),JSON.stringify(payload.data.gridCells),JSON.stringify(payload.data.gridCells.map((_,i)=>payload.data.gridPostNotes[i]||"")),payload.data.startAt,payload.data.deadlineAt,payload.id,session.isAdmin?1:0,session.userId).run();
+      if(!result.meta.changes)return Response.json({error:"Task no longer available."},{status:409});
+      const ids=[Number(task.assigned_user_id),...JSON.parse(String(task.assigned_users_json||"[]")).map((a:{id:number})=>a.id)];
+      await notifyUsers([...new Set(ids)],{type:"task_updated",title:"Task updated",message:sessionName(session)+" updated “"+payload.data.title+"”.",targetView:"tasks",entityId:payload.id,actorUserId:session.userId});
       return Response.json(await getTasksState(session));
     }
 
