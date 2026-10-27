@@ -67,6 +67,7 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showPassword,setShowPassword]=useState(false);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ManagedUser | null>(null);
@@ -208,7 +209,8 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
           {modalGroup === "clients" && <label className="field"><span>Account role</span><select value={draft.roleLabel} onChange={e=>setDraft({...draft,roleLabel:e.target.value})}>{CLIENT_ROLES.map(role=><option key={role}>{role}</option>)}</select><small>Owner: all account areas. Marketing: plans & product reports. Finance: invoices only.</small></label>}
           {modalGroup === "employees" && <label className="field"><span>Role / title</span><input required value={draft.roleLabel} onChange={(event) => setDraft({ ...draft, roleLabel: event.target.value })} /></label>}
           <label className="field"><span>Username</span><input required minLength={3} pattern="[A-Za-z0-9._-]+" autoComplete="off" value={draft.username} onChange={(event) => setDraft({ ...draft, username: event.target.value })} placeholder={modalGroup === "clients" ? "lewis.portal" : "operation.manager"} /></label>
-          <label className="field"><span>{editing ? "New password" : "Temporary password"}<small>{editing ? "Leave blank to keep it" : "At least 8 characters"}</small></span><input type="password" minLength={editing ? undefined : 8} required={!editing} autoComplete="new-password" value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} /></label>
+          <label className="field"><span>{editing ? "New password" : "Temporary password"}<small>{editing ? "Leave blank to keep it" : "At least 8 characters"}</small></span><input type={showPassword?"text":"password"} minLength={editing ? undefined : 8} required={!editing} autoComplete="new-password" value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} /></label>
+          <label className="check-field"><input type="checkbox" checked={showPassword} onChange={e=>setShowPassword(e.target.checked)}/> Show entered password</label><p>Existing passwords cannot be recovered. Enter a new password above to reset this user’s login.</p>
           {modalGroup === "employees" ? <label className="field"><span>Linked employee <small>For requests and employee records</small></span><select value={draft.employeeId ?? ""} onChange={(event) => setDraft({ ...draft, employeeId: event.target.value ? Number(event.target.value) : null, clientId: null })}><option value="">No employee linked</option>{employees.filter((employee) => !users.some((user) => user.id !== editing?.id && user.employeeId === employee.id)).map((employee) => <option key={employee.id} value={employee.id}>{employee.name}{employee.title ? ` · ${employee.title}` : ""}{employee.department ? ` · ${employee.department}` : ""}</option>)}</select></label> : <label className="field"><span>Linked client <small>Required for the private portal</small></span><select required value={draft.clientId ?? ""} onChange={(event) => {
             const clientId = event.target.value ? Number(event.target.value) : null;
             const client = clients.find((item) => item.id === clientId);
@@ -241,7 +243,7 @@ function EmployeeUsersTable({ users, openEdit, openCreate }: { users: ManagedUse
     <td>{user.employeeName ? <span className="access-linked-profile"><UserRound size={13} /> {user.employeeName}</span> : <span className="table-sub">Not linked</span>}</td>
     <td><div className="permission-summary">{user.isAdmin ? <span>Full access</span> : user.permissions.map((permission) => <span key={permission}>{ACCESS_PERMISSIONS.find((item) => item.key === permission)?.label ?? permission}</span>)}</div></td>
     <td><span className={user.active ? "hr-status active" : "hr-status inactive"}>{user.active ? "Active" : "Inactive"}</span></td>
-    <td>{user.isAdmin ? <small className="table-sub">Edit login in Settings</small> : <button className="table-review" onClick={() => openEdit(user)}><Pencil size={15} /> Edit access</button>}</td>
+    <td><AccountViewButton user={user}/>{user.isAdmin ? <small className="table-sub">Edit login in Settings</small> : <button className="table-review" onClick={() => openEdit(user)}><Pencil size={15} /> Edit access</button>}</td>
   </tr>)}</tbody></table></div>;
 }
 
@@ -253,6 +255,11 @@ function ClientUsersTable({ users, openEdit, openCreate }: { users: ManagedUser[
     <td><strong className="table-main">{user.username}</strong></td>
     <td><div className="permission-summary"><span>{user.roleLabel === "Client Portal" ? "Client Owner" : user.roleLabel}</span></div></td>
     <td><span className={user.active ? "hr-status active" : "hr-status inactive"}>{user.active ? "Active" : "Inactive"}</span></td>
-    <td><button className="table-review" onClick={() => openEdit(user)}><Pencil size={15} /> Edit client user</button></td>
+    <td><AccountViewButton user={user}/><button className="table-review" onClick={() => openEdit(user)}><Pencil size={15} /> Edit client user</button></td>
   </tr>)}</tbody></table></div>;
+}
+
+function AccountViewButton({user}:{user:ManagedUser}){
+ const [busy,setBusy]=useState(false),[error,setError]=useState('');
+ return <><button className="table-review" disabled={busy||!user.active} onClick={async()=>{setBusy(true);setError('');try{const r=await fetch('/api/account-view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:user.id})});if(!r.ok){const d=await r.json() as {error:string};throw new Error(d.error)}window.location.assign('/');}catch(e){setError(e instanceof Error?e.message:'Could not open account');setBusy(false)}}}>Account view</button>{error&&<small role="alert">{error}</small>}</>;
 }

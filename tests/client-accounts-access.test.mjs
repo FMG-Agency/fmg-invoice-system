@@ -6,7 +6,7 @@ import test from 'node:test';
 test('brand users share a client account while roles, login type and account isolation are enforced',async()=>{
 process.env.TURSO_DATABASE_URL='file::memory:';delete process.env.TURSO_AUTH_TOKEN;delete process.env.VAPID_PRIVATE_KEY;delete process.env.VAPID_PUBLIC_KEY;
 await mkdir(new URL('../work/',import.meta.url),{recursive:true});const path=new URL('../work/accounts-test.mjs',import.meta.url);
-await build({stdin:{contents:"export * as auth from './app/api/auth/route';export * as users from './app/api/users/route';export * as arrivals from './app/api/product-arrivals/route';export * as pdf from './app/api/pdf/[id]/route';export {database} from './app/lib/database';export {getSession,ensureAuthDatabase,requirePermission} from './app/lib/auth-server';",resolveDir:process.cwd()},outfile:fileURLToPath(path),bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'isolated-dependencies',setup(b){b.onResolve({filter:/\/lib\/hr$/},()=>({path:'hr',namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},()=>({contents:'export async function ensureHrDatabase(){}'}));}}]});
+await build({stdin:{contents:"export * as view from './app/api/account-view/route';export {filteredDocumentTotals} from './app/lib/document-totals';export * as auth from './app/api/auth/route';export * as users from './app/api/users/route';export * as arrivals from './app/api/product-arrivals/route';export * as pdf from './app/api/pdf/[id]/route';export {database} from './app/lib/database';export {getSession,ensureAuthDatabase,requirePermission} from './app/lib/auth-server';",resolveDir:process.cwd()},outfile:fileURLToPath(path),bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'isolated-dependencies',setup(b){b.onResolve({filter:/\/lib\/hr$/},()=>({path:'hr',namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},()=>({contents:'export async function ensureHrDatabase(){}'}));}}]});
 const app=await import(path.href),db=app.database;
 await app.ensureAuthDatabase();
 await db.prepare("CREATE TABLE clients(id INTEGER PRIMARY KEY,name TEXT,company_name TEXT,owner_name TEXT)").run();await db.prepare("INSERT INTO clients VALUES(1,'Eleve','Eleve','Owner'),(2,'Other','Other','Other')").run();
@@ -35,6 +35,17 @@ assert.equal((await app.arrivals.DELETE(req({id:mid},marketing,'DELETE'))).statu
 assert.equal((await app.arrivals.DELETE(req({id},owner,'DELETE'))).status,200);
 assert.equal((await app.pdf.GET(req(null,marketing,'GET'),{params:Promise.resolve({id:'1'})})).status,403);
 assert.equal((await app.pdf.GET(req(null,finance,'GET'),{params:Promise.resolve({id:'2'})})).status,403);
+const ownerId=(await db.prepare("SELECT id FROM auth_users WHERE username='owner'").first()).id;
+assert.equal((await app.view.POST(req({userId:ownerId},owner))).status,403);
+const viewResponse=await app.view.POST(req({userId:ownerId},admin));assert.equal(viewResponse.status,200);
+const previewCookie=admin+'; '+viewResponse.headers.get('set-cookie').split(';')[0];
+const previewSession=await app.getSession(req(null,previewCookie,'GET'));assert.equal(previewSession.userId,ownerId);assert.equal(previewSession.preview,true);assert.equal(previewSession.isAdmin,false);
+assert.equal((await app.arrivals.POST(req({...draft,submissionId:crypto.randomUUID()},previewCookie))).status,401);
+assert.equal((await app.auth.POST(req({action:'logout'},previewCookie))).status,403);
+assert.equal(await app.getSession(req(null,owner+'; fmg_account_view=1','GET')),null);
+assert.match((await app.view.DELETE(req(null,previewCookie,'DELETE'))).headers.get('set-cookie'),/Max-Age=0/);
+assert.equal((await app.getSession(req(null,admin,'GET'))).isAdmin,true);
+assert.deepEqual(app.filteredDocumentTotals([{total:10,currency:'EGP'},{total:5,currency:'USD'},{total:7,currency:'EGP'},{total:100,currency:'EGP',deletedAt:'2026-10-27'}]),{EGP:17,USD:5});assert.deepEqual(app.filteredDocumentTotals([]),{});
 const user=await db.prepare("SELECT id FROM auth_users WHERE username='marketing'").first();
 await db.prepare("UPDATE auth_users SET permissions_json='[\"employees\"]',is_admin=1 WHERE id=?").bind(user.id).run();
 const session=await app.getSession(req(null,marketing,'GET'));assert.equal(session.isAdmin,false);assert.deepEqual(session.permissions,['client_portal']);assert.equal((await app.requirePermission(req(null,marketing,'GET'),'employees')).status,403);

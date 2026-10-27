@@ -8,6 +8,7 @@ let authDatabaseReady: Promise<void> | null = null;
 export const PASSWORD_ITERATIONS = 100_000;
 
 export type AuthSession = {
+  preview?: boolean;
   userId: number;
   username: string;
   displayName: string;
@@ -195,7 +196,7 @@ export async function removeCurrentSession(request: Request) {
   if (token) await database.prepare("DELETE FROM auth_user_sessions WHERE token_hash = ?").bind(await sha256(token)).run();
 }
 
-export async function getSession(request: Request): Promise<AuthSession | null> {
+export async function getActorSession(request: Request): Promise<AuthSession | null> {
   await ensureAuthDatabase();
   const token = cookieValue(request);
   if (!token) return null;
@@ -277,4 +278,20 @@ export async function recordFailedLogin(key: string) {
 
 export async function clearLoginAttempts(key: string) {
   await database.prepare("DELETE FROM auth_attempts WHERE attempt_key = ?").bind(key).run();
+}
+
+export function previewUserId(request:Request){
+  const value=(request.headers.get('cookie')||'').split(';').map(p=>p.trim()).find(p=>p.startsWith('fmg_account_view='))?.split('=')[1];
+  return value&&/^\d+$/.test(value)?Number(value):0;
+}
+export async function getSession(request:Request):Promise<AuthSession|null>{
+  const actor=await getActorSession(request);const target=previewUserId(request);
+  if(!target)return actor;
+  if(!actor?.isAdmin || !['GET','HEAD'].includes(request.method))return null;
+  const row=await database.prepare('SELECT id,username,display_name,role_label,is_admin,permissions_json,employee_id,client_id FROM auth_users WHERE id=? AND active=1').bind(target).first<Record<string,unknown>>();
+  if(!row)return null;
+  const clientId=row.client_id==null?null:Number(row.client_id),isAdmin=clientId===null&&Number(row.is_admin)===1;
+  const permissions:AccessPermission[]=clientId!==null?['client_portal']:effectivePermissions(parsePermissions(String(row.permissions_json)),String(row.role_label),isAdmin);
+  if(clientId===null&&!permissions.includes('tasks'))permissions.push('tasks');
+  return {userId:Number(row.id),username:String(row.username),displayName:String(row.display_name),roleLabel:String(row.role_label),isAdmin,permissions,clientId,employeeId:row.employee_id==null?null:Number(row.employee_id),preview:true};
 }

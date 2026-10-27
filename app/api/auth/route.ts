@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  previewUserId,
   PASSWORD_ITERATIONS,
   checkRateLimit,
   clearLoginAttempts,
@@ -40,6 +41,7 @@ const actionSchema = z.discriminatedUnion("action", [
 
 function sessionPayload(session: AuthSession) {
   return {
+    preview: Boolean(session.preview),
     authenticated: true,
     userId: session.userId,
     username: session.username,
@@ -64,13 +66,14 @@ export async function GET(request: Request) {
     const db = getDatabase();
     const credential = await db.prepare("SELECT id FROM auth_users LIMIT 1").first<{ id: number }>();
     const session = credential ? await getSession(request) : null;
-    return Response.json({ setupRequired: !credential, authenticated: Boolean(session), ...(session ? sessionPayload(session) : {}) });
+    return Response.json({ preview:Boolean(previewUserId(request)), setupRequired: !credential, authenticated: Boolean(session), ...(session ? sessionPayload(session) : {}) });
   } catch (error) {
     return errorResponse(error);
   }
 }
 
 export async function POST(request: Request) {
+  if(previewUserId(request))return Response.json({error:"Account view is read-only. Return to admin first."},{status:403});
   try {
     await ensureAuthDatabase();
     const db = getDatabase();
