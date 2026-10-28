@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Check, KeyRound, Pencil, Plus, ShieldCheck, UserCog, UserRound, X } from "lucide-react";
+import { Eye, Building2, Check, KeyRound, Pencil, Plus, ShieldCheck, UserCog, UserRound, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ACCESS_PERMISSIONS, CONTENT_CREATOR_PERMISSIONS, ACCOUNT_MANAGER_PERMISSIONS, OPERATION_MANAGER_PERMISSIONS, PRODUCTION_MANAGER_PERMISSIONS, type AccessPermission } from "../lib/permissions";
 import {CLIENT_ROLES} from '../lib/client-access';
@@ -261,5 +261,5 @@ function ClientUsersTable({ users, openEdit, openCreate }: { users: ManagedUser[
 
 function AccountViewButton({user}:{user:ManagedUser}){
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
- return <><button className="table-review" disabled={busy||!user.active} onClick={async()=>{setBusy(true);setError('');try{const r=await fetch('/api/account-view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:user.id})});if(!r.ok){const d=await r.json() as {error:string};throw new Error(d.error)}window.location.assign('/');}catch(e){setError(e instanceof Error?e.message:'Could not open account');setBusy(false)}}}>Account view</button>{error&&<small role="alert">{error}</small>}</>;
+ return <><button className="table-review account-view-button" disabled={busy||!user.active} onClick={async()=>{setBusy(true);setError('');try{const r=await fetch('/api/account-view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:user.id})});if(!r.ok){const d=await r.json() as {error:string};throw new Error(d.error)}window.location.assign('/');}catch(e){setError(e instanceof Error?e.message:'Could not open account');setBusy(false)}}}><Eye size={14}/> Account view</button>{error&&<small role="alert">{error}</small>}</>;
 }
