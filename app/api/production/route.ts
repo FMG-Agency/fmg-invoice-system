@@ -65,6 +65,7 @@ const storedAddonSchema = addonSelectionSchema.extend({
 });
 
 const payloadSchema = z.discriminatedUnion("action", [
+  z.object({action: z.literal("convertInvoice"), id: z.number().int().positive()}),
   z.object({
     action: z.literal("create"),
     data: z.object({
@@ -74,6 +75,8 @@ const payloadSchema = z.discriminatedUnion("action", [
       addons: z.array(addonSelectionSchema).max(20, "Choose no more than 20 add-ons."),
       workDate: dateValue,
       accountNote: noteValue,
+      contentNote: noteValue,
+      contentReferences: z.array(z.string().trim().url().max(2000).refine(value => /^https?:\/\//i.test(value))).max(20).default([]),
     }),
   }),
   z.object({
@@ -240,8 +243,8 @@ function mapOrder(row: Record<string, unknown>): ProductionWorkOrder {
   const id = Number(row.id);
   const finalApprovedAt = String(row.finalApprovedAt ?? "");
   const status = row.status === "ready_for_operations"
-    ? finalApprovedAt ? "final_approved" : "pending_operations"
-    : Number(row.contentRequired) && !row.contentSubmittedAt ? "pending_content" : "pending_production";
+    ? "final_approved"
+    : "pending_production";
   const options = productionOptions(row);
   const bundles = workOrderBundles(row);
   const primaryBundle = bundles[0] ?? null;
@@ -500,7 +503,7 @@ function draftInvoiceContent(input: DraftInvoiceInput) {
   ];
   const subtotal = items.reduce((total, item) => total + item.unitPrice, 0);
   const notes = [
-    `Created automatically from ${codeFor(input.workOrderId)} after final Operations approval.`,
+    `Created from ${codeFor(input.workOrderId)} using Convert to invoice.`,
     input.accountNote ? `Account note: ${input.accountNote}` : "",
     input.productionNote ? `Production note: ${input.productionNote}` : "",
     input.operationNote ? `Operation note: ${input.operationNote}` : "",
@@ -623,7 +626,7 @@ export async function POST(request: Request) {
         ...(category ? [releaseDocumentSerial(category.id, payload.id)] : []),
       ]);
     } else if (payload.action === "create") {
-      if (role !== "account_manager" && role !== "operation_manager" && role !== "administrator") return accessDenied("Only an Account Manager, Operation Manager, or administrator can create and submit a work order.");
+      if (role !== "account_manager" && role !== "administrator") return accessDenied("Only an Account Manager or administrator can create and submit a work order.");
       const { client, bundles, addons } = await resolveScope(payload.data);
       const bundle = bundles[0];
       const primaryAddon = addons[0] ?? null;
@@ -633,57 +636,47 @@ export async function POST(request: Request) {
       const inserted = await database.prepare(`INSERT INTO production_work_orders
         (id, document_type, client_id, client_name, bundle_catalog_id, bundle_name, bundle_price, bundle_inputs_json, bundle_outputs_json, bundles_json,
           addon_catalog_id, addon_name, addon_price, addon_inputs_json, addon_outputs_json, addons_json,
-          work_date, account_note, content_required, status, created_by_user_id, created_by_name, created_by_role)
-        VALUES (?, 'media_guide', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending_production', ?, ?, ?)`)
+          work_date, account_note, content_note, content_references_json, content_creator_name, content_submitted_at, content_required, status, created_by_user_id, created_by_name, created_by_role)
+        VALUES (?, 'media_guide', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 0, 'pending_production', ?, ?, ?)`)
         .bind(reservedNumber, payload.data.clientId, client.name, bundle.catalogId, bundle.name, bundle.price, JSON.stringify(bundle.inputs), JSON.stringify(bundle.outputs), JSON.stringify(bundles),
           primaryAddon?.catalogId ?? null, primaryAddon?.name ?? "", primaryAddon?.price ?? 0, JSON.stringify(primaryAddon?.inputs ?? []), JSON.stringify(primaryAddon?.outputs ?? []), JSON.stringify(addons),
-          payload.data.workDate, payload.data.accountNote, session.userId, actorName, session.roleLabel).run();
+          payload.data.workDate, payload.data.accountNote, payload.data.contentNote, JSON.stringify(payload.data.contentReferences), actorName, session.userId, actorName, session.roleLabel).run();
       const workOrderId = Number(inserted.meta.last_row_id);
       await database.prepare(`INSERT INTO production_work_order_events
         (work_order_id, event_type, actor_user_id, actor_name, actor_role, note)
         VALUES (?, 'account_submitted', ?, ?, ?, ?)`)
         .bind(workOrderId, session.userId, actorName, session.roleLabel, payload.data.accountNote).run();
-      await notifyUsers(await workflowRecipientUserIds("content_creator", session.userId), {
-        type: "work_order_pending_content",
+      await notifyUsers(await workflowRecipientUserIds("production_manager", session.userId), {
+        type: "work_order_pending_production",
         title: `New work order ${codeFor(workOrderId)}`,
-        message: `${actorName} sent ${client.name}'s Media Guide order for Content Creator references and notes on ${payload.data.workDate}.`,
+        message: `${actorName} sent ${client.name}'s Media Guide order with references and notes for Production on ${payload.data.workDate}.`,
         targetView: "work-order",
         entityId: workOrderId,
         actorUserId: session.userId,
       });
     } else if (payload.action === "submitContent") {
-      if (role !== "content_creator" && role !== "administrator") return accessDenied("Only a Content Creator or administrator can submit references and notes.");
-      const updated = await database.prepare(`UPDATE production_work_orders SET content_note = ?, content_references_json = ?,
-        content_creator_user_id = ?, content_creator_name = ?, content_submitted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND status = 'pending_production' AND content_required = 1 AND content_submitted_at = ''`)
-        .bind(payload.data.contentNote, JSON.stringify(payload.data.contentReferences), session.userId, displayName(session), payload.id).run();
-      if (Number(updated.meta.changes) !== 1) return Response.json({ error: "This work order is no longer waiting for content." }, { status: 409 });
-      await notifyUsers(await workflowRecipientUserIds("production_manager", session.userId), {
-        type: "work_order_pending_production", title: `${codeFor(payload.id)} ready for Production`,
-        message: `${displayName(session)} submitted references and notes. Select the resources for the shoot.`,
-        targetView: "work-order", entityId: payload.id, actorUserId: session.userId,
-      });
+      return Response.json({error:"References and notes are now part of the Account Manager stage."},{status:409});
     } else if (payload.action === "complete") {
-      if (role !== "production_manager" && role !== "operation_manager" && role !== "administrator") return accessDenied("Only a Production Manager, Operation Manager, or administrator can complete and approve this work order.");
+      if (role !== "production_manager" && role !== "administrator") return accessDenied("Only a Production Manager or administrator can complete and approve this work order.");
       const actorName = displayName(session);
       const options = payload.data.options as ProductionCostOption[];
       const updated = await database.prepare(`UPDATE production_work_orders SET
           photographer_name = ?, model_name = ?, location = ?, call_time = ?, production_options_json = ?, production_note = ?,
           status = 'ready_for_operations', production_manager_user_id = ?, production_manager_name = ?,
-          production_submitted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND status = 'pending_production' AND (content_required = 0 OR content_submitted_at <> '')`)
+          production_submitted_at = CURRENT_TIMESTAMP, final_approved_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND status = 'pending_production' `)
         .bind(firstOption(options, "photographer"), firstOption(options, "model"), firstOption(options, "location") || firstOption(options, "studio"),
           payload.data.callTime, JSON.stringify(options), payload.data.productionNote, session.userId, actorName, payload.id).run();
-      if (Number(updated.meta.changes) !== 1) return Response.json({ error: "Content must be submitted first, and the order must still be waiting for Production." }, { status: 409 });
+      if (Number(updated.meta.changes) !== 1) return Response.json({ error: "The order must still be waiting for Production." }, { status: 409 });
       await database.prepare(`INSERT INTO production_work_order_events
         (work_order_id, event_type, actor_user_id, actor_name, actor_role, note)
         VALUES (?, 'production_submitted', ?, ?, ?, ?)`)
         .bind(payload.id, session.userId, actorName, session.roleLabel, payload.data.productionNote).run();
-      const completedOrder = await database.prepare("SELECT client_name AS clientName, work_date AS workDate FROM production_work_orders WHERE id = ?")
-        .bind(payload.id).first<{ clientName: string; workDate: string }>();
-      await notifyUsers(await workflowRecipientUserIds("operation_manager", session.userId), {
-        type: "work_order_pending_operations",
-        title: `${codeFor(payload.id)} needs final approval`,
+      const completedOrder = await database.prepare("SELECT client_name AS clientName, work_date AS workDate, created_by_user_id AS createdByUserId FROM production_work_orders WHERE id = ?")
+        .bind(payload.id).first<{ clientName: string; workDate: string; createdByUserId:number }>();
+      await notifyUsers(completedOrder ? [completedOrder.createdByUserId] : [], {
+        type: "work_order_final_approved",
+        title: `${codeFor(payload.id)} approved by Production`,
         message: `${actorName} completed Production details for ${completedOrder?.clientName || "the client"} on ${completedOrder?.workDate || "the scheduled date"}.`,
         targetView: "work-order",
         entityId: payload.id,
@@ -701,7 +694,8 @@ export async function POST(request: Request) {
       const bundle = bundles[0];
       const primaryAddon = addons[0] ?? null;
       const options = payload.data.options as ProductionCostOption[];
-      const syncedDraftInvoice = existing.finalApprovedAt ? await ensureDraftInvoice({
+      const linkedInvoice = await database.prepare("SELECT id FROM documents WHERE production_work_order_id = ?").bind(payload.id).first();
+      const syncedDraftInvoice = linkedInvoice ? await ensureDraftInvoice({
         workOrderId: payload.id,
         createdByUserId: session.userId,
         createdByName: displayName(session),
@@ -726,7 +720,7 @@ export async function POST(request: Request) {
       if (Number(updated.meta.changes) !== 1) return Response.json({ error: "Work order not found." }, { status: 404 });
       const workflowRecipients = existing.finalApprovedAt
         ? []
-        : await workflowRecipientUserIds(existing.status === "pending_production" ? existing.contentRequired && !existing.contentSubmittedAt ? "content_creator" : "production_manager" : "operation_manager", session.userId);
+        : await workflowRecipientUserIds("production_manager", session.userId);
       const recipients = [...new Set([existing.createdByUserId, ...(existing.productionManagerUserId ? [existing.productionManagerUserId] : []), ...workflowRecipients])]
         .filter((userId) => userId !== session.userId);
       await notifyUsers(recipients, {
@@ -737,53 +731,16 @@ export async function POST(request: Request) {
         entityId: payload.id,
         actorUserId: session.userId,
       });
+    } else if (payload.action === "convertInvoice") {
+      if (role !== "account_manager" && role !== "administrator") return accessDenied("Only an Account Manager or administrator can create an invoice.");
+      const order = (await getProductionState(session)).orders.find(order => order.id === payload.id);
+      if (!order) return Response.json({error:"Work order not found."},{status:404});
+      if (order.status !== "final_approved") return Response.json({error:"Production must approve the order first."},{status:409});
+      const existing = await database.prepare("SELECT id FROM documents WHERE production_work_order_id = ?").bind(order.id).first<{id:number}>();
+      const invoice = existing ?? await ensureDraftInvoice({workOrderId:order.id,createdByUserId:session.userId,createdByName:displayName(session),clientId:order.clientId,workDate:order.workDate,accountNote:order.accountNote,productionNote:order.productionNote,operationNote:order.operationNote,options:order.productionOptions,scope:{client: {name:order.clientName,agencyKey:(await database.prepare("SELECT agency_key AS agencyKey FROM clients WHERE id = ?").bind(order.clientId).first<{agencyKey:string}>())?.agencyKey || "fmg"},bundles:order.bundles,addons:order.addons}});
+      await database.prepare("UPDATE production_work_orders SET draft_invoice_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(invoice.id,order.id).run();
     } else {
-      if (role !== "operation_manager" && role !== "administrator") return accessDenied("Only an Operation Manager can edit and give final approval to this work order.");
-      const scope = await resolveScope(payload.data);
-      const { client, bundles, addons } = scope;
-      const bundle = bundles[0];
-      const primaryAddon = addons[0] ?? null;
-      const actorName = displayName(session);
-      const options = payload.data.options as ProductionCostOption[];
-      const pendingOrder = await database.prepare(`SELECT id, created_by_user_id AS createdByUserId,
-          production_manager_user_id AS productionManagerUserId, client_name AS clientName
-        FROM production_work_orders WHERE id = ? AND status = 'ready_for_operations' AND final_approved_at = ''`)
-        .bind(payload.id).first<{ id: number; createdByUserId: number; productionManagerUserId: number | null; clientName: string }>();
-      if (!pendingOrder) throw new Error("This work order has already received final approval or is no longer pending Operations.");
-      const draftInvoice = await ensureDraftInvoice({
-        workOrderId: payload.id,
-        createdByUserId: session.userId,
-        createdByName: displayName(session),
-        clientId: payload.data.clientId,
-        workDate: payload.data.workDate,
-        accountNote: payload.data.accountNote,
-        productionNote: payload.data.productionNote,
-        operationNote: payload.data.operationNote,
-        options,
-        scope,
-      });
-      const updated = await database.prepare(`UPDATE production_work_orders SET
-          client_id = ?, client_name = ?, bundle_catalog_id = ?, bundle_name = ?, bundle_price = ?, bundle_inputs_json = ?, bundle_outputs_json = ?, bundles_json = ?,
-          addon_catalog_id = ?, addon_name = ?, addon_price = ?, addon_inputs_json = ?, addon_outputs_json = ?, addons_json = ?,
-          work_date = ?, photographer_name = ?, model_name = ?, location = ?, call_time = ?, production_options_json = ?,
-          account_note = ?, production_note = ?, operation_note = ?, draft_invoice_id = ?,
-          operation_manager_user_id = ?, operation_manager_name = ?, final_approved_at = CURRENT_TIMESTAMP,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND status = 'ready_for_operations' AND final_approved_at = ''`)
-        .bind(payload.data.clientId, client.name, bundle.catalogId, bundle.name, bundle.price, JSON.stringify(bundle.inputs), JSON.stringify(bundle.outputs), JSON.stringify(bundles),
-          primaryAddon?.catalogId ?? null, primaryAddon?.name ?? "", primaryAddon?.price ?? 0, JSON.stringify(primaryAddon?.inputs ?? []), JSON.stringify(primaryAddon?.outputs ?? []), JSON.stringify(addons),
-          payload.data.workDate, firstOption(options, "photographer"), firstOption(options, "model"), firstOption(options, "location") || firstOption(options, "studio"),
-          payload.data.callTime, JSON.stringify(options), payload.data.accountNote, payload.data.productionNote, payload.data.operationNote, draftInvoice.id,
-          session.userId, actorName, payload.id).run();
-      if (Number(updated.meta.changes) !== 1) throw new Error("This work order has already received final approval or is no longer pending Operations.");
-      await notifyUsers([pendingOrder.createdByUserId, ...(pendingOrder.productionManagerUserId ? [pendingOrder.productionManagerUserId] : [])], {
-        type: "work_order_final_approved",
-        title: `${codeFor(payload.id)} received final approval`,
-        message: `${actorName} approved ${pendingOrder.clientName}'s order. Draft invoice ${draftInvoice.generatedCode} is ready.`,
-        targetView: "work-order",
-        entityId: payload.id,
-        actorUserId: session.userId,
-      });
+      return Response.json({error:"Operations approval is no longer required. Complete the Production stage instead."},{status:409});
     }
 
     return Response.json(await getProductionState(session));

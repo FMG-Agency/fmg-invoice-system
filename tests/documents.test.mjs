@@ -32,9 +32,14 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   const legacy=state.documents[0];
   assert.equal(legacy.createdByName,'Original Author');
   assert.equal(legacy.createdByUserId,101);
+  for(const type of ['quotation','invoice']) {
+    const multi=await call(app.save,{action:'saveDocument',data:{...data,type,items:[{id:'b1',description:'Bundle one',kind:'package',catalogId:3,qty:1,unitPrice:100},{id:'b2',description:'Bundle two',kind:'package',catalogId:4,qty:2,unitPrice:200}]}});
+    assert.equal(multi.documents[0].items.filter(item=>item.kind==='package').length,2);
+    assert.equal(multi.documents[0].total,500);
+  }
   // Simulate an old record with no author tracking, preserving its real code.
   await app.database.prepare("UPDATE documents SET created_by_name='', created_by_user_id=NULL WHERE id=?").bind(legacy.id).run();
-  const scope={clientId:client.id,bundles:[{id:'bundle',catalogId:3,name:'Fixture package',price:10,inputs:[],outputs:[]}],addons:[],workDate:'2026-09-10',accountNote:''};
+  const scope={clientId:client.id,bundles:[{id:'bundle',catalogId:3,name:'Fixture package',price:10,inputs:[],outputs:[]}],addons:[],workDate:'2026-09-10',accountNote:'',contentNote:'Creative direction',contentReferences:['https://example.com/reference']};
   const prod=await call(app.production,{action:'create',data:{...scope,documentType:'media_guide'}});
   const order=prod.orders[0];
   assert.ok(order.id>category.counter);
@@ -81,9 +86,19 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   const manual=state.documents[0];
   assert.notEqual(Number(manual.generatedCode.match(/(\d+)$/)[1]),order.id);
   globalThis.documentTestSession={...globalThis.documentTestSession,userId:102,displayName:'Approving Manager'};
-  await call(app.production,{action:'submitContent',id:order.id,data:{contentNote:'Creative direction',contentReferences:['https://example.com/reference']}});
+  assert.equal(order.status,'pending_production');
+  assert.equal(order.contentNote,'Creative direction');
+  assert.deepEqual(order.contentReferences,['https://example.com/reference']);
+  assert.equal((await app.production(request({action:'convertInvoice',id:order.id}))).status,409);
   await call(app.production,{action:'complete',id:order.id,data:{callTime:'13:00',options,productionNote:''}});
-  await call(app.production,{action:'finalApprove',id:order.id,data:{...scope,callTime:'13:00',options,productionNote:'',operationNote:''}});
+  assert.equal((await app.database.prepare('SELECT COUNT(*) AS n FROM documents WHERE production_work_order_id=?').bind(order.id).first()).n,0);
+  await call(app.production,{action:'managerEdit',id:order.id,data:{...scope,callTime:'13:00',options,productionNote:'',operationNote:''}});
+  assert.equal((await app.database.prepare('SELECT COUNT(*) AS n FROM documents WHERE production_work_order_id=?').bind(order.id).first()).n,0);
+  globalThis.documentTestSession={...globalThis.documentTestSession,isAdmin:false,roleLabel:'Production Manager'};
+  assert.equal((await app.production(request({action:'convertInvoice',id:order.id}))).status,403);
+  globalThis.documentTestSession={...globalThis.documentTestSession,isAdmin:true,roleLabel:'Administrator'};
+  await call(app.production,{action:'convertInvoice',id:order.id});
+  await call(app.production,{action:'convertInvoice',id:order.id});
   state=await app.state(new Request('https://fixture.test/api/state')).then(r=>r.json());
   const linked=state.documents.find(d=>d.productionWorkOrderId===order.id);
   const clientPart = (client.companyName || client.name).trim().replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, '-').replace(/^-|-$/g, '') || 'CLIENT';
