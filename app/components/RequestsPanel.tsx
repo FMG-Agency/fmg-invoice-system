@@ -79,7 +79,7 @@ function blankDraft(): RequestDraft {
 function requestLabel(type: EmployeeRequestType) {
   return {
     leave: "Leave request",
-    early_leave: "Early-leave excuse",
+    late_arrival: "Late arrival permission", early_leave: "Early-leave excuse",
     mission: "Work mission",
     overtime: "Overtime approval",
     early_arrival: "Urgent early arrival",
@@ -101,6 +101,7 @@ function requestDescription(type: EmployeeRequestType, state: RequestsState) {
   return {
     leave: "Reviewer chooses paid or unpaid",
     early_leave: "Approval prevents the half-day deduction",
+    late_arrival: "Permission excuses the late-arrival deduction",
     mission: `Eligible time after ${timeLabel(state.overtimeStartsAt)} counts as OT`,
     overtime: `Manager approval is required after ${timeLabel(state.overtimeApprovalAfter)}`,
     early_arrival: `Approved urgent work is paid ×${state.earlyOvertimeMultiplier}`,

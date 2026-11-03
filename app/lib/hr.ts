@@ -95,7 +95,7 @@ const hrSchemaStatements = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     employee_id INTEGER NOT NULL REFERENCES employees(id),
     requester_user_id INTEGER NOT NULL REFERENCES auth_users(id),
-    type TEXT NOT NULL CHECK(type IN ('leave','early_leave','mission','overtime','early_arrival')),
+    type TEXT NOT NULL CHECK(type IN ('leave','early_leave','mission','overtime','early_arrival','late_arrival')),
     leave_kind TEXT NOT NULL DEFAULT 'vacation' CHECK(leave_kind IN ('vacation','occasional_leave','resort_leave','sick_leave','urgent_leave','normal_leave')),
     date_from TEXT NOT NULL,
     date_to TEXT NOT NULL,
@@ -128,11 +128,12 @@ const hrSchemaStatements = [
   "CREATE INDEX IF NOT EXISTS idx_employee_requests_reviewer ON employee_requests(assigned_reviewer_id, status)",
 ];
 
-async function ensureEmployeeRequestPolicySchema() {
+export async function ensureEmployeeRequestPolicySchema() {
   const table = await database.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'employee_requests'").first<{ sql: string }>();
-  if (!table || (table.sql.includes("'overtime'") && table.sql.includes("'resort_leave'"))) return;
+  if (!table || (table.sql.includes("'overtime'") && table.sql.includes("'resort_leave'") && table.sql.includes("'late_arrival'"))) return;
   const columns = await database.prepare("PRAGMA table_info(employee_requests)").all<Record<string, unknown>>();
   const names = new Set(columns.results.map((column) => String(column.name)));
+  const manualData = names.has("manual_data") ? "manual_data" : "''";
   const attachmentKey = names.has("attachment_key") ? "attachment_key" : "''";
   const attachmentName = names.has("attachment_name") ? "attachment_name" : "''";
   const attachmentType = names.has("attachment_type") ? "attachment_type" : "''";
@@ -141,7 +142,7 @@ async function ensureEmployeeRequestPolicySchema() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       employee_id INTEGER NOT NULL REFERENCES employees(id),
       requester_user_id INTEGER NOT NULL REFERENCES auth_users(id),
-      type TEXT NOT NULL CHECK(type IN ('leave','early_leave','mission','overtime','early_arrival')),
+      type TEXT NOT NULL CHECK(type IN ('leave','early_leave','mission','overtime','early_arrival','late_arrival')),
       leave_kind TEXT NOT NULL DEFAULT 'vacation' CHECK(leave_kind IN ('vacation','occasional_leave','resort_leave','sick_leave','urgent_leave','normal_leave')),
       date_from TEXT NOT NULL, date_to TEXT NOT NULL, start_time TEXT NOT NULL DEFAULT '', end_time TEXT NOT NULL DEFAULT '',
       duration_minutes INTEGER NOT NULL DEFAULT 0, leave_paid INTEGER, details TEXT NOT NULL,
@@ -150,15 +151,16 @@ async function ensureEmployeeRequestPolicySchema() {
       assigned_reviewer_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL,
       reviewer_note TEXT NOT NULL DEFAULT '', reviewed_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL,
       reviewed_at TEXT NOT NULL DEFAULT '', decision_token TEXT NOT NULL DEFAULT '',
+      manual_data TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
     database.prepare(`INSERT INTO employee_requests_policy_v2
       (id, employee_id, requester_user_id, type, leave_kind, date_from, date_to, start_time, end_time, duration_minutes,
        leave_paid, details, attachment_key, attachment_name, attachment_type, status, assigned_reviewer_id,
-       reviewer_note, reviewed_by_user_id, reviewed_at, decision_token, created_at, updated_at)
+       reviewer_note, reviewed_by_user_id, reviewed_at, decision_token, created_at, updated_at, manual_data)
       SELECT id, employee_id, requester_user_id, type, leave_kind, date_from, date_to, start_time, end_time, duration_minutes,
        leave_paid, details, ${attachmentKey}, ${attachmentName}, ${attachmentType}, status, assigned_reviewer_id,
-       reviewer_note, reviewed_by_user_id, reviewed_at, decision_token, created_at, updated_at FROM employee_requests`),
+       reviewer_note, reviewed_by_user_id, reviewed_at, decision_token, created_at, updated_at, ${manualData} FROM employee_requests`),
     database.prepare("DROP TABLE employee_requests"),
     database.prepare("ALTER TABLE employee_requests_policy_v2 RENAME TO employee_requests"),
     database.prepare("CREATE INDEX IF NOT EXISTS idx_employee_requests_employee ON employee_requests(employee_id, created_at)"),

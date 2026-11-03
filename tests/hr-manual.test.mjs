@@ -178,4 +178,30 @@ test('Attendance boundaries and manual batches use isolated payroll data',async 
     const boundary=await db.prepare("SELECT first_in,last_out,last_out_next_day FROM attendance_records WHERE employee_id=1 AND work_date='2026-11-30'").first();assert.equal(boundary.first_in,'11:00');assert.equal(boundary.last_out,'03:00');assert.equal(boundary.last_out_next_day,1);
   });
 
+  await t.test('Late-arrival permissions preserve punches, excuse only lateness, and support edit/delete',async()=>{
+    const late=entry({type:'late_arrival',startTime:'12:00',endTime:''});
+    const punched={...source,firstIn:'12:00',lastOut:'17:00'};
+    const allowed=math(punched,[late]);assert.equal(allowed.lateDeduction,0);assert.ok(allowed.earlyLeaveDeduction>0);assert.equal(allowed.firstIn,'12:00');
+    assert.ok(math(punched,[]).lateDeduction>0);
+    const data={...late,dateFrom:'2026-12-07',dateTo:'2026-12-07'};
+    const payload={batchId:crypto.randomUUID(),employeeId:1,requests:[data]};
+    const added=await post(payload);assert.equal(added.status,200,await added.text());
+    assert.equal((await post({...payload,batchId:crypto.randomUUID()})).status,409);
+    const getEntries=async()=> (await (await app.GET(new Request('http://fixture/api/hr/manual-requests?employeeId=1'))).json()).entries;
+    let saved=(await getEntries()).find(e=>e.data.type==='late_arrival');assert.ok(saved);
+    const req=(method,body)=>new Request('http://fixture/api/hr/manual-requests',{method,headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    assert.equal((await app.PATCH(req('PATCH',{...saved,data:{...data,startTime:'12:30'}}))).status,200);
+    saved=(await getEntries()).find(e=>e.id===saved.id && e.kind==='request');assert.equal(saved.data.startTime,'12:30');
+    assert.equal((await app.DELETE(req('DELETE',saved))).status,200);
+  });
+  await t.test('Schema upgrade preserves existing manual requests and attachments',async()=>{
+    const before=(await db.prepare('SELECT * FROM employee_requests ORDER BY id').all()).results;
+    assert.ok(before.length);
+    const schema=(await db.prepare("SELECT sql FROM sqlite_master WHERE name='employee_requests'").first()).sql;
+    const old=schema.replace(/employee_requests/, 'old_requests_fixture').replace(",'late_arrival'",'');
+    await db.batch([db.prepare(old),db.prepare('INSERT INTO old_requests_fixture SELECT * FROM employee_requests'),db.prepare('DROP TABLE employee_requests'),db.prepare('ALTER TABLE old_requests_fixture RENAME TO employee_requests')]);
+    await app.ensureEmployeeRequestPolicySchema();
+    assert.deepEqual((await db.prepare('SELECT * FROM employee_requests ORDER BY id').all()).results,before);
+  });
+
 });

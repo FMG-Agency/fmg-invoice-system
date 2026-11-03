@@ -47,6 +47,7 @@ const defaultPolicy: RequestPolicy = {
 
 const requestTypeLabels: Record<EmployeeRequest["type"], string> = {
   leave: "leave request",
+  late_arrival: "late-arrival permission",
   early_leave: "early-leave excuse",
   mission: "work mission",
   overtime: "overtime request",

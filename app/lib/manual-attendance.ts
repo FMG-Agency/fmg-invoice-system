@@ -7,7 +7,7 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
 }, "Choose a valid date.");
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 export const manualRequestSchema = z.object({
-  type: z.enum(["mission", "paid_weekend", "overtime", "early_arrival", "early_leave", "leave", "penalty"]),
+  type: z.enum(["mission", "paid_weekend", "overtime", "early_arrival", "early_leave", "late_arrival", "leave", "penalty"]),
   dateFrom: date, dateTo: date,
   startTime: z.union([time, z.literal("")]).default(""),
   endTime: z.union([time, z.literal("24:00"), z.literal("")]).default(""),
@@ -55,6 +55,7 @@ export function manualAttendance(source: Source, requests: ManualRequest[], empl
     record.earlyLeaveExcused ||= !hasPunches || missions.some(r => r.startTime <= policy.workdayEndsAt && r.endTime >= policy.workdayEndsAt);
   }
   if (requests.some(r => r.type === "early_leave")) record.earlyLeaveExcused = true;
+  if (requests.some(r => r.type === "late_arrival")) record.lateExcused = true;
   record.notes = [source.notes,...requests.map(r => "Manual " + r.type.replaceAll("_", " ") + ": " + r.details + (r.type === "leave" ? (r.leavePaid ? " (paid)" : " (unpaid)") : " · " + r.startTime + "–" + r.endTime + (requestEndMinutes(r)>1440 ? " (+1 day)":"")) + (r.type === "mission" ? " · " + (friday || r.dayType === "holiday" ? "Holiday ×2" : "Normal ×1") : ""))].filter(Boolean).join("\n");
   const result = calculate(record,employee,policy);
   if (leave) return {...record,...result};

@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const seen = existing.results.map(r => manualRequestSchema.parse(JSON.parse(String(r.manual_data))));
     for (const r of payload.requests) {
       if (r.type === "penalty") continue;
-      const conflict = seen.some(other => r.dateFrom <= other.dateTo && r.dateTo >= other.dateFrom && (r.type === "leave" || other.type === "leave" || (r.type === other.type && (r.type === "early_leave" || (timeMinutes(r.startTime) < requestEndMinutes(other) && requestEndMinutes(r) > timeMinutes(other.startTime))))));
+      const conflict = seen.some(other => r.dateFrom <= other.dateTo && r.dateTo >= other.dateFrom && (r.type === "leave" || other.type === "leave" || (r.type === other.type && (["early_leave","late_arrival"].includes(r.type) || (timeMinutes(r.startTime) < requestEndMinutes(other) && requestEndMinutes(r) > timeMinutes(other.startTime))))));
       if (conflict) return Response.json({error:"A request overlaps an existing or queued request. Check the employee, dates and times."},{status:409});
       seen.push(r);
     }
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       }
       statements.push(database.prepare(`INSERT INTO hr_manual_request_guard(value) SELECT CASE WHEN EXISTS (
         SELECT 1 FROM employee_requests WHERE employee_id=? AND status='approved' AND date_from<=? AND date_to>=?
-        AND (type='leave' OR ?='leave' OR (manual_data<>'' AND json_extract(manual_data,'$.type')=? AND (?='early_leave' OR ((CAST(substr(start_time,1,2) AS INTEGER)*60+CAST(substr(start_time,4,2) AS INTEGER))<? AND (CAST(substr(start_time,1,2) AS INTEGER)*60+CAST(substr(start_time,4,2) AS INTEGER)+duration_minutes)>?))))
+        AND (type='leave' OR ?='leave' OR (manual_data<>'' AND json_extract(manual_data,'$.type')=? AND (? IN ('early_leave','late_arrival') OR ((CAST(substr(start_time,1,2) AS INTEGER)*60+CAST(substr(start_time,4,2) AS INTEGER))<? AND (CAST(substr(start_time,1,2) AS INTEGER)*60+CAST(substr(start_time,4,2) AS INTEGER)+duration_minutes)>?))))
       ) THEN 0 ELSE 1 END`).bind(payload.employeeId,r.dateTo,r.dateFrom,r.type,r.type,r.type,requestEndMinutes(r),r.startTime?timeMinutes(r.startTime):0));
       const details = r.details + (r.type === "leave" ? " · Reason: " + r.reason : r.type === "mission" ? " · Day: " + r.dayType : "");
       statements.push(database.prepare(`INSERT INTO employee_requests(employee_id,requester_user_id,type,leave_kind,date_from,date_to,start_time,end_time,duration_minutes,leave_paid,details,status,reviewer_note,reviewed_by_user_id,reviewed_at,manual_data)

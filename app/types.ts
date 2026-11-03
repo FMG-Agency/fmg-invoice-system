@@ -427,7 +427,7 @@ export type ManagedUser = {
   updatedAt: string;
 };
 
-export type EmployeeRequestType = "leave" | "early_leave" | "mission" | "overtime" | "early_arrival";
+export type EmployeeRequestType = "leave" | "early_leave" | "late_arrival" | "mission" | "overtime" | "early_arrival";
 export type EmployeeRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
 export type EmployeeLeaveKind = "vacation" | "occasional_leave" | "resort_leave" | "sick_leave" | "urgent_leave" | "normal_leave";
 
