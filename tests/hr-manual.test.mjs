@@ -204,4 +204,28 @@ test('Attendance boundaries and manual batches use isolated payroll data',async 
     assert.deepEqual((await db.prepare('SELECT * FROM employee_requests ORDER BY id').all()).results,before);
   });
 
+  await t.test('Every manual request reaches attendance, payroll and exported report, and removal reverses its effect',async()=>{
+    await db.prepare("INSERT INTO employees(id,name,base_salary) VALUES(3,'End to end audit',14400)").run();
+    const make=(day,patch)=>entry({dateFrom:'2027-01-'+day,dateTo:'2027-01-'+day,details:'Sheet audit '+day,...patch});
+    const requests=[make('04',{}),make('05',{dayType:'holiday'}),make('08',{type:'paid_weekend'}),make('06',{type:'early_arrival',startTime:'09:00',endTime:'11:00'}),make('06',{type:'overtime',startTime:'22:00',endTime:'23:00'}),make('07',{type:'late_arrival',startTime:'12:00',endTime:''}),make('09',{type:'early_leave',startTime:'17:00',endTime:''}),make('10',{type:'leave',leavePaid:true}),make('11',{type:'leave',leavePaid:false}),make('12',{type:'penalty',days:.25})];
+    for(const [day,first,last] of [['06','09:00','23:00'],['07','12:00','17:00'],['09','12:00','17:00']]) await db.prepare("INSERT INTO attendance_records(employee_id,work_date,first_in,last_out,status) VALUES(3,?,?,?,'present')").bind('2027-01-'+day,first,last).run();
+    const response=await post({batchId:crypto.randomUUID(),employeeId:3,requests});assert.equal(response.status,200,await response.text());
+    let state=await app.getHrState('2027-01');const records=state.attendance.filter(r=>r.employeeId===3),byDay=day=>records.find(r=>r.workDate==='2027-01-'+day);
+    assert.equal(byDay('04').status,'present');assert.equal(byDay('04').overtimePay,0);
+    assert.equal(byDay('05').fridayPay,960);assert.equal(byDay('08').paidWeekendMinutes,480);assert.equal(byDay('08').overtimePay,960);assert.equal(byDay('08').fridayPay,0);
+    assert.equal(byDay('06').earlyOvertimeMinutes,120);assert.equal(byDay('06').normalOvertimeMinutes,225);assert.equal(byDay('06').overtimePay,750);
+    assert.equal(byDay('07').lateDeduction,0);assert.equal(byDay('07').earlyLeaveDeduction,240);assert.equal(byDay('07').firstIn,'12:00');
+    assert.ok(byDay('09').lateDeduction>0);assert.equal(byDay('09').earlyLeaveDeduction,0);
+    assert.equal(byDay('10').leaveDeduction,0);assert.equal(byDay('11').leaveDeduction,480);
+    const payroll=state.payroll.find(p=>p.employeeId===3);assert.equal(payroll.manualDeductions,120);assert.equal(payroll.overtimePay,1710);
+    const book=new ExcelJS.Workbook();await book.xlsx.load(await app.employeePayrollWorkbookBuffer(state,3));const sheet=book.worksheets[0];
+    for(const record of records){let found=false;sheet.eachRow(row=>{if(row.getCell(1).value instanceof Date && row.getCell(1).value.toISOString().slice(0,10)===record.workDate && row.getCell(2).formula){found=true;for(const [col,key] of [[2,'lateDeduction'],[3,'earlyLeaveDeduction'],[4,'leaveDeduction'],[5,'overtimePay'],[6,'fridayPay']])assert.equal(row.getCell(col).result,record[key],record.workDate+' '+key);assert.equal(row.getCell(12).value,record.notes);}});assert.ok(found,record.workDate);}
+    const list=async()=> (await (await app.GET(new Request('http://fixture/api/hr/manual-requests?employeeId=3'))).json()).entries;
+    const mutate=(method,saved,data)=>app[method](new Request('http://fixture/api/hr/manual-requests',{method,headers:{'content-type':'application/json'},body:JSON.stringify({...saved,data})}));
+    let saved=(await list()).find(e=>e.data.type==='late_arrival');assert.equal((await mutate('PATCH',saved,{...saved.data,type:'early_leave',startTime:'17:00'})).status,200);
+    state=await app.getHrState('2027-01');let changed=state.attendance.find(r=>r.employeeId===3&&r.workDate==='2027-01-07');assert.ok(changed.lateDeduction>0);assert.equal(changed.earlyLeaveDeduction,0);
+    for(const saved of await list())assert.equal((await mutate('DELETE',saved)).status,200);
+    state=await app.getHrState('2027-01');const remaining=state.attendance.filter(r=>r.employeeId===3);assert.equal(remaining.length,3);assert.ok(remaining.find(r=>r.workDate==='2027-01-07').lateDeduction>0);assert.equal(state.payroll.find(p=>p.employeeId===3).manualDeductions,0);assert.equal(state.payroll.find(p=>p.employeeId===3).paidWeekendMinutes,0);
+  });
+
 });
