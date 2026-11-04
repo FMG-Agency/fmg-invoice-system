@@ -77,6 +77,7 @@ function numberValue(value: unknown) {
 
 function requestFromRow(row: Record<string, unknown>): EmployeeRequest {
   return {
+    isManual: Boolean(row.manualData) && JSON.parse(String(row.manualData)).origin !== "employee",
     id: numberValue(row.id),
     employeeId: numberValue(row.employeeId),
     employeeName: String(row.employeeName ?? ""),
@@ -238,7 +239,7 @@ async function getRequestsState(session: NonNullable<Awaited<ReturnType<typeof g
     : "(r.employee_id = ? OR r.assigned_reviewer_id = ?)";
   const statement = database.prepare(`SELECT r.id, r.employee_id AS employeeId, e.name AS employeeName,
       e.title AS employeeTitle, r.requester_user_id AS requesterUserId, requester.display_name AS requesterName,
-      r.type, r.leave_kind AS leaveKind, r.date_from AS dateFrom, r.date_to AS dateTo,
+      r.manual_data AS manualData, r.type, r.leave_kind AS leaveKind, r.date_from AS dateFrom, r.date_to AS dateTo,
       r.start_time AS startTime, r.end_time AS endTime, r.duration_minutes AS durationMinutes, r.leave_paid AS leavePaid,
       r.details, r.attachment_name AS attachmentName, r.attachment_type AS attachmentType,
       CASE WHEN r.attachment_key <> '' THEN 1 ELSE 0 END AS hasAttachment,
@@ -251,7 +252,7 @@ async function getRequestsState(session: NonNullable<Awaited<ReturnType<typeof g
     JOIN auth_users requester ON requester.id = r.requester_user_id
     LEFT JOIN auth_users assigned ON assigned.id = r.assigned_reviewer_id
     LEFT JOIN auth_users reviewer ON reviewer.id = r.reviewed_by_user_id
-    WHERE ${accessWhere} AND (r.manual_data='' OR json_extract(r.manual_data,'$.origin')='employee')
+    WHERE ${accessWhere}
     ORDER BY CASE r.status WHEN 'pending' THEN 0 ELSE 1 END, r.created_at DESC, r.id DESC`);
   const result = session.isAdmin
     ? await statement.all<Record<string, unknown>>()

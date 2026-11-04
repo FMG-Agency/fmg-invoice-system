@@ -77,7 +77,7 @@ test('Employee request reviews and Friday exchanges reach payroll safely',async 
     const result=await call({action:'edit',id:r.id,version:r.updatedAt,data:draft({type:'early_leave',dateFrom:'2027-05-03',dateTo:'2027-05-03',startTime:'17:00'}),leavePaid:false});assert.equal(result.status,200,JSON.stringify(result));
     state=await app.getHrState('2027-05');assert.equal(state.attendance[0].earlyLeaveDeduction,240);
     const oldVersion=await call({action:'edit',id:r.id,version:r.updatedAt,data:draft(),leavePaid:true});assert.equal(oldVersion.status,409);
-    assert.ok(!result.requests.some(r=>r.dateFrom==='2027-03-05'));
+    assert.ok(result.requests.some(r=>r.dateFrom==='2027-03-05' && r.isManual));
   });
 
 });

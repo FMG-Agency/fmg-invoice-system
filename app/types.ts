@@ -433,6 +433,7 @@ export type EmployeeRequestStatus = "pending" | "approved" | "rejected" | "cance
 export type EmployeeLeaveKind = "vacation" | "occasional_leave" | "resort_leave" | "sick_leave" | "urgent_leave" | "normal_leave";
 
 export type EmployeeRequest = {
+  isManual?: boolean;
   id: number;
   employeeId: number;
   employeeName: string;
