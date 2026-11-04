@@ -100,4 +100,22 @@ test('Employee request reviews and Friday exchanges reach payroll safely',async 
     state=await app.getHrState('2027-06');assert.equal(state.attendance.find(r=>r.workDate==='2027-06-09').leaveDeduction,480);
   });
 
+  await t.test('Employees submit historical requests in every category without affecting payroll before approval',async()=>{
+    const cases=[
+      {type:'late_arrival',dateFrom:'2025-08-04',startTime:'12:00'},
+      {type:'early_leave',dateFrom:'2025-08-05',startTime:'17:00'},
+      {type:'leave',dateFrom:'2025-08-06',leaveKind:'normal_leave'},
+      {type:'leave',dateFrom:'2025-08-07',leaveKind:'resort_leave'},
+      {type:'friday_exchange',dateFrom:'2025-08-08',dateTo:'2025-08-10'},
+      {type:'mission',dateFrom:'2025-08-11',startTime:'11:00',endTime:'19:00'},
+      {type:'overtime',dateFrom:'2025-08-12',startTime:'22:00',endTime:'23:00',bothOvertime:true,earlyStartTime:'09:00',earlyEndTime:'11:00'}
+    ];
+    for(const data of cases){const result=await call({action:'create',data:draft({...data,dateTo:data.dateTo||data.dateFrom})},employee);assert.equal(result.status,200,JSON.stringify(result));}
+    const saved=(await db.prepare("SELECT id,status FROM employee_requests WHERE date_from LIKE '2025-08-%'").all()).results;
+    assert.equal(saved.length,8);assert.ok(saved.every(r=>r.status==='pending'));
+    assert.equal((await app.getHrState('2025-08')).attendance.length,0);
+    await decide(saved[0].id);assert.equal((await app.getHrState('2025-08')).attendance.length,1);
+    const sick=await call({action:'create',data:draft({leaveKind:'sick_leave',dateFrom:'2025-09-01',dateTo:'2025-09-05'})},employee);assert.equal(sick.status,400);
+  });
+
 });

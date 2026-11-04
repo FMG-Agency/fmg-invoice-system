@@ -211,12 +211,13 @@ async function validatePolicyRequest(employeeId: number, data: z.infer<typeof re
   const days = data.type === "friday_exchange" ? [data.dateFrom,data.dateTo] : datesBetween(data.dateFrom, data.dateTo);
   const now = cairoNow();
   const noticeDays = daysFromToday(data.dateFrom, now.date);
-  if (noticeDays < 0) throw new Error("Requests cannot be submitted for a past date.");
+  // Historical requests still require admin review; advance-notice rules apply only to upcoming dates.
+  const historical = noticeDays < 0;
   if (data.type === "leave" && data.leaveKind === "resort_leave") {
     if (days.length > policy.resortLeaveDays) throw new Error(`Resort leave can cover a maximum of ${policy.resortLeaveDays} days.`);
-    if (noticeDays < policy.resortNoticeDays) throw new Error(`Resort leave must be submitted at least ${policy.resortNoticeDays} days in advance.`);
+    if (!historical && noticeDays < policy.resortNoticeDays) throw new Error(`Resort leave must be submitted at least ${policy.resortNoticeDays} days in advance.`);
   }
-  if (data.type === "leave" && data.leaveKind === "normal_leave" && noticeDays < policy.normalLeaveNoticeDays) {
+  if (data.type === "leave" && data.leaveKind === "normal_leave" && !historical && noticeDays < policy.normalLeaveNoticeDays) {
     throw new Error(`Normal leave must be submitted at least ${policy.normalLeaveNoticeDays} days in advance.`);
   }
   if (data.type === "leave" && data.leaveKind === "urgent_leave") {
@@ -230,7 +231,7 @@ async function validatePolicyRequest(employeeId: number, data: z.infer<typeof re
   if (data.type === "leave" && data.leaveKind === "sick_leave" && days.length > policy.sickReportAfterDays && !data.attachmentBase64) {
     throw new Error(`Sick leave longer than ${policy.sickReportAfterDays} days requires a medical report attachment.`);
   }
-  if (data.type === "early_arrival" && noticeDays < 1) throw new Error("Urgent early-arrival work must be arranged and approved at least one day in advance.");
+  if (data.type === "early_arrival" && !historical && noticeDays < 1) throw new Error("Urgent early-arrival work must be arranged and approved at least one day in advance.");
 }
 
 async function reviewers(): Promise<RequestReviewer[]> {
