@@ -416,7 +416,7 @@ export const employeeRequests = sqliteTable("employee_requests", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   employeeId: integer("employee_id").notNull().references(() => employees.id),
   requesterUserId: integer("requester_user_id").notNull().references(() => authUsers.id),
-  type: text("type", { enum: ["leave", "early_leave", "mission", "overtime", "early_arrival", "late_arrival"] }).notNull(),
+  type: text("type", { enum: ["leave", "early_leave", "mission", "overtime", "early_arrival", "late_arrival", "friday_exchange"] }).notNull(),
   leaveKind: text("leave_kind", { enum: ["vacation", "occasional_leave", "resort_leave", "sick_leave", "urgent_leave", "normal_leave"] }).notNull().default("vacation"),
   dateFrom: text("date_from").notNull(),
   dateTo: text("date_to").notNull(),

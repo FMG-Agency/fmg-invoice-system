@@ -81,7 +81,7 @@ const blankEmployee: EmployeeDraft = {
   notes: "",
 };
 
-export function EmployeesPanel({ state, mutate, busy, showToast }: { state: HrState; mutate: HrMutation; busy: boolean; showToast: (message: string) => void }) {
+export function EmployeesPanel({ state, mutate, busy, showToast }: { isAdmin?:boolean; state: HrState; mutate: HrMutation; busy: boolean; showToast: (message: string) => void }) {
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Employee | null>(null);
   const [draft, setDraft] = useState<EmployeeDraft>(blankEmployee);
@@ -183,7 +183,7 @@ type AdjustmentDraft = Pick<PayrollAdjustment, "employeeId" | "type" | "label" |
 
 const blankAdjustment: AdjustmentDraft = { employeeId: 0, type: "bonus", label: "", amount: 0, days: 0, notes: "" };
 
-export function AttendancePanel({ state, mutate, busy, onMonthChange, onStateChange, showToast }: { state: HrState; mutate: HrMutation; busy: boolean; onMonthChange: (month: string) => Promise<void>; onStateChange: (state: HrState) => void; showToast: (message: string) => void }) {
+export function AttendancePanel({ isAdmin, state, mutate, busy, onMonthChange, onStateChange, showToast }: { isAdmin?:boolean; state: HrState; mutate: HrMutation; busy: boolean; onMonthChange: (month: string) => Promise<void>; onStateChange: (state: HrState) => void; showToast: (message: string) => void }) {
   const [tab, setTab] = useState<"attendance" | "payroll" | "adjustments">("attendance");
   const [employeeFilter, setEmployeeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -210,6 +210,14 @@ export function AttendancePanel({ state, mutate, busy, onMonthChange, onStateCha
     incomplete: state.attendance.filter((record) => record.status === "incomplete").length,
   }), [state]);
 
+  async function applyRequests() {
+    setUploading(true);
+    try {
+      const response=await fetch('/api/requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'apply',month:state.month})});
+      const result=await response.json() as {error?:string};if(!response.ok)throw new Error(result.error||'Could not apply requests.');
+      await onMonthChange(state.month);showToast('Approved requests applied to this month. Download the updated Excel report.');
+    }catch(error){showToast(error instanceof Error?error.message:'Could not apply requests.');}finally{setUploading(false);}
+  }
   async function importWorkbook(file: File) {
     setUploading(true);
     try {
@@ -282,7 +290,7 @@ export function AttendancePanel({ state, mutate, busy, onMonthChange, onStateCha
   return <>
     <section className="hr-commandbar panel">
       <div className="month-control"><span>Payroll month</span><input type="month" value={state.month} onChange={(event) => void onMonthChange(event.target.value)} /></div>
-      <div className="hr-command-actions"><button className="secondary-button" onClick={openPolicy}><Settings2 size={16} /> Policy settings</button><button className="secondary-button" onClick={downloadPayrollWorkbook} disabled={!state.payroll.length}><Download size={16} /> Download full Excel</button><input ref={fileInput} className="sr-only" type="file" accept=".xlsx" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importWorkbook(file); }} /><button className="primary-button" onClick={() => fileInput.current?.click()} disabled={uploading}>{uploading ? <Clock3 size={16} /> : <FileSpreadsheet size={16} />}{uploading ? "Importing…" : "Import biometric Excel"}</button></div>
+      <div className="hr-command-actions">{isAdmin&&<button className="secondary-button" disabled={uploading||busy} onClick={()=>void applyRequests()}>Apply approved requests</button>}<button className="secondary-button" onClick={openPolicy}><Settings2 size={16} /> Policy settings</button><button className="secondary-button" onClick={downloadPayrollWorkbook} disabled={!state.payroll.length}><Download size={16} /> Download full Excel</button><input ref={fileInput} className="sr-only" type="file" accept=".xlsx" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importWorkbook(file); }} /><button className="primary-button" onClick={() => fileInput.current?.click()} disabled={uploading}>{uploading ? <Clock3 size={16} /> : <FileSpreadsheet size={16} />}{uploading ? "Importing…" : "Import biometric Excel"}</button></div>
     </section>
 
     <section className="policy-strip"><CheckCircle2 size={18} /><div><strong>FMG Office Policy v{state.policy.policyVersion} is active</strong><span>Automatic overtime through 22:00 · arrival by 11:30 · normal overtime ×{state.policy.overtimeMultiplier} after {state.policy.overtimeStartsAt} · early overtime ×{state.policy.earlyOvertimeMultiplier} before {state.policy.workdayStartsAt} · Friday ×{state.policy.fridayMultiplier}</span></div><small>Extra / early overtime requires approval</small></section>
@@ -302,7 +310,7 @@ export function AttendancePanel({ state, mutate, busy, onMonthChange, onStateCha
           <td><strong className="table-main">{record.workDate}</strong><small className="table-sub">{new Date(`${record.workDate}T12:00:00`).toLocaleDateString("en", { weekday: "short" })}</small></td>
           <td><strong className="table-main">{record.employeeName}</strong><small className="table-sub">ID {record.biometricCode || "—"}</small></td>
           <td>{record.firstIn || "—"}</td><td>{record.lastOut || "—"}{record.lastOutNextDay&&<small className="table-sub">Next day</small>}</td>
-          <td><span className={cx("attendance-status", `attendance-${record.status}`)}>{readableStatus(record.status)}</span>{leaveStatusOptions.includes(record.status) && <small className="table-sub">{record.leavePaid ? "Paid" : "Unpaid"}</small>}</td>
+          <td><span className={cx("attendance-status", `attendance-${record.status}`)}>{record.isRestDay && !record.firstIn && !record.lastOut ? "Exchanged day off" : readableStatus(record.status)}</span>{leaveStatusOptions.includes(record.status) && <small className="table-sub">{record.leavePaid ? "Paid" : "Unpaid"}</small>}</td>
           <td><strong className={record.lateMinutes || record.earlyLeaveMinutes ? "negative-value" : ""}>{minutesLabel(record.lateMinutes)} late</strong>{record.lateExcused && <small className="table-sub">Late excused by manager</small>}{record.earlyLeaveMinutes > 0 && <small className="table-sub">{minutesLabel(record.earlyLeaveMinutes)} early{record.earlyLeaveExcused ? " · excused" : ""}</small>}</td>
           <td><strong className={record.overtimeMinutes ? "positive-value" : ""}>{minutesLabel(record.overtimeMinutes)} total OT</strong>{record.normalOvertimeMinutes > 0 && <small className="table-sub">{minutesLabel(record.normalOvertimeMinutes)} normal → {record.normalMissionMinutes} mission min</small>}{record.earlyOvertimeMinutes > 0 && <small className="table-sub">{minutesLabel(record.earlyOvertimeMinutes)} early → {record.earlyMissionMinutes} mission min</small>}{record.totalMissionMinutes > 0 && <small className="table-sub"><strong>{record.totalMissionMinutes} total mission min</strong></small>}{(record.lastOutNextDay || record.lastOut > state.policy.overtimeApprovalAfter) && !record.overtimeApproved && <small className="table-sub">Time after 22:00 excluded · approval required</small>}{record.firstIn && record.firstIn < state.policy.workdayStartsAt && !record.earlyOvertimeApproved && <small className="table-sub">Early OT excluded · day not allowed</small>}</td>
           <td><span className="impact-add">+{hrMoney(record.overtimePay + record.fridayPay, state.policy.currency)}</span><span className="impact-minus">−{hrMoney(record.lateDeduction + record.earlyLeaveDeduction + record.leaveDeduction, state.policy.currency)}</span></td>

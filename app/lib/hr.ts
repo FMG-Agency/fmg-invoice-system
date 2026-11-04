@@ -95,7 +95,7 @@ const hrSchemaStatements = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     employee_id INTEGER NOT NULL REFERENCES employees(id),
     requester_user_id INTEGER NOT NULL REFERENCES auth_users(id),
-    type TEXT NOT NULL CHECK(type IN ('leave','early_leave','mission','overtime','early_arrival','late_arrival')),
+    type TEXT NOT NULL CHECK(type IN ('leave','early_leave','mission','overtime','early_arrival','late_arrival','friday_exchange')),
     leave_kind TEXT NOT NULL DEFAULT 'vacation' CHECK(leave_kind IN ('vacation','occasional_leave','resort_leave','sick_leave','urgent_leave','normal_leave')),
     date_from TEXT NOT NULL,
     date_to TEXT NOT NULL,
@@ -130,7 +130,7 @@ const hrSchemaStatements = [
 
 export async function ensureEmployeeRequestPolicySchema() {
   const table = await database.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'employee_requests'").first<{ sql: string }>();
-  if (!table || (table.sql.includes("'overtime'") && table.sql.includes("'resort_leave'") && table.sql.includes("'late_arrival'"))) return;
+  if (!table || (table.sql.includes("'overtime'") && table.sql.includes("'resort_leave'") && table.sql.includes("'friday_exchange'") && table.sql.includes("'late_arrival'"))) return;
   const columns = await database.prepare("PRAGMA table_info(employee_requests)").all<Record<string, unknown>>();
   const names = new Set(columns.results.map((column) => String(column.name)));
   const manualData = names.has("manual_data") ? "manual_data" : "''";
@@ -142,7 +142,7 @@ export async function ensureEmployeeRequestPolicySchema() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       employee_id INTEGER NOT NULL REFERENCES employees(id),
       requester_user_id INTEGER NOT NULL REFERENCES auth_users(id),
-      type TEXT NOT NULL CHECK(type IN ('leave','early_leave','mission','overtime','early_arrival','late_arrival')),
+      type TEXT NOT NULL CHECK(type IN ('leave','early_leave','mission','overtime','early_arrival','late_arrival','friday_exchange')),
       leave_kind TEXT NOT NULL DEFAULT 'vacation' CHECK(leave_kind IN ('vacation','occasional_leave','resort_leave','sick_leave','urgent_leave','normal_leave')),
       date_from TEXT NOT NULL, date_to TEXT NOT NULL, start_time TEXT NOT NULL DEFAULT '', end_time TEXT NOT NULL DEFAULT '',
       duration_minutes INTEGER NOT NULL DEFAULT 0, leave_paid INTEGER, details TEXT NOT NULL,
@@ -302,7 +302,7 @@ export function attendanceMath(record: AttendanceSource, employee: Employee, pol
   const overtimeStart = minutesFromTime(policy.overtimeStartsAt) ?? 1155;
   const overtimeApprovalAfter = minutesFromTime(policy.overtimeApprovalAfter) ?? 1320;
   const overtimeCutoff = minutesFromTime(policy.overtimeArrivalCutoff) ?? 690;
-  const friday = isFriday(record.workDate);
+  const friday = record.isRestDay ?? isFriday(record.workDate);
   const overtimeArrivalEligible = arrival !== null && arrival <= overtimeCutoff;
 
   let lateMinutes = 0;
@@ -544,13 +544,13 @@ export async function getHrState(month: string): Promise<HrState> {
       a.overtime_approved AS overtimeApproved, a.early_overtime_approved AS earlyOvertimeApproved,
       COALESCE((SELECT SUM(r.duration_minutes) FROM employee_requests r
         WHERE r.employee_id = a.employee_id AND r.type = 'mission' AND r.status = 'approved' AND r.manual_data = ''
-          AND a.work_date BETWEEN r.date_from AND r.date_to), 0) AS missionOvertimeMinutes,
+          AND ((r.type='friday_exchange' AND a.work_date IN (r.date_from,r.date_to)) OR (r.type<>'friday_exchange' AND a.work_date BETWEEN r.date_from AND r.date_to))), 0) AS missionOvertimeMinutes,
       COALESCE((SELECT json_group_array(json(r.manual_data)) FROM employee_requests r
         WHERE r.employee_id = a.employee_id AND r.status = 'approved' AND r.manual_data <> ''
-          AND a.work_date BETWEEN r.date_from AND r.date_to), '[]') AS manualRequests,
+          AND ((r.type='friday_exchange' AND a.work_date IN (r.date_from,r.date_to)) OR (r.type<>'friday_exchange' AND a.work_date BETWEEN r.date_from AND r.date_to))), '[]') AS manualRequests,
       a.notes, a.created_at AS createdAt, a.updated_at AS updatedAt
       FROM attendance_records a JOIN employees e ON e.id = a.employee_id
-      WHERE (a.manual_seed=0 OR EXISTS (SELECT 1 FROM employee_requests r WHERE r.employee_id=a.employee_id AND r.status='approved' AND r.manual_data<>'' AND a.work_date BETWEEN r.date_from AND r.date_to)) AND substr(a.work_date, 1, 7) = ? AND (e.hire_date = '' OR a.work_date >= e.hire_date)
+      WHERE (a.manual_seed=0 OR EXISTS (SELECT 1 FROM employee_requests r WHERE r.employee_id=a.employee_id AND r.status='approved' AND r.manual_data<>'' AND ((r.type='friday_exchange' AND a.work_date IN (r.date_from,r.date_to)) OR (r.type<>'friday_exchange' AND a.work_date BETWEEN r.date_from AND r.date_to)))) AND substr(a.work_date, 1, 7) = ? AND (e.hire_date = '' OR a.work_date >= e.hire_date)
       ORDER BY a.work_date DESC, e.name COLLATE NOCASE`).bind(month).all(),
     database.prepare(`SELECT id, file_name AS fileName, period_start AS periodStart, period_end AS periodEnd,
       employee_count AS employeeCount, record_count AS recordCount, created_employees AS createdEmployees,

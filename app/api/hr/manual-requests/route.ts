@@ -1,3 +1,4 @@
+import { assertExchangeAvailable, exchangeGuard } from "../../../lib/request-attendance";
 import { z } from "zod";
 import { getSession, requirePermission } from "../../../lib/auth-server";
 import { database } from "../../../lib/database";
@@ -12,6 +13,7 @@ export async function POST(request: Request) {
   const session = await getSession(request);
   if (!session) return Response.json({error:"Authentication required."},{status:401});
   try {
+    if(!session.isAdmin) return Response.json({error:"Only an administrator can approve manual requests."},{status:403});
     const payload = payloadSchema.parse(await request.json());
     await ensureHrDatabase();
     const body = JSON.stringify({employeeId:payload.employeeId,requests:payload.requests});
@@ -24,11 +26,13 @@ export async function POST(request: Request) {
     if (!employee) return Response.json({error:"Choose an active employee."},{status:400});
     if (payload.requests.some(r => employee.hire_date && r.dateFrom < String(employee.hire_date))) return Response.json({error:"Requests cannot precede the employee hire date."},{status:400});
     const existing = await database.prepare("SELECT manual_data FROM employee_requests WHERE employee_id=? AND status='approved' AND manual_data<>''").bind(payload.employeeId).all();
-    const seen = existing.results.map(r => manualRequestSchema.parse(JSON.parse(String(r.manual_data))));
+    const seen = existing.results.map(r => JSON.parse(String(r.manual_data)) as z.infer<typeof manualRequestSchema>);
     for (const r of payload.requests) {
       if (r.type === "penalty") continue;
-      const conflict = seen.some(other => r.dateFrom <= other.dateTo && r.dateTo >= other.dateFrom && (r.type === "leave" || other.type === "leave" || (r.type === other.type && (["early_leave","late_arrival"].includes(r.type) || (timeMinutes(r.startTime) < requestEndMinutes(other) && requestEndMinutes(r) > timeMinutes(other.startTime))))));
+      const conflict = seen.some(other => r.type!=="friday_exchange" && other.type!=="friday_exchange" && r.dateFrom <= other.dateTo && r.dateTo >= other.dateFrom && (r.type === "leave" || other.type === "leave" || (r.type === other.type && (["early_leave","late_arrival"].includes(r.type) || (timeMinutes(r.startTime) < requestEndMinutes(other) && requestEndMinutes(r) > timeMinutes(other.startTime))))));
       if (conflict) return Response.json({error:"A request overlaps an existing or queued request. Check the employee, dates and times."},{status:409});
+      await assertExchangeAvailable(payload.employeeId,r);
+      if(r.type === "friday_exchange" && seen.some(other=>other.type === "friday_exchange" && [r.dateFrom,r.dateTo].some(d=>d===other.dateFrom||d===other.dateTo))) return Response.json({error:"An exchange already uses one of these dates."},{status:409});
       seen.push(r);
     }
     const statements = [database.prepare("INSERT INTO hr_manual_batches(id,actor_id,payload_json) VALUES(?,?,?)").bind(payload.batchId,session.userId,body)];
@@ -37,10 +41,11 @@ export async function POST(request: Request) {
         statements.push(database.prepare("INSERT INTO payroll_adjustments(employee_id,period_month,type,label,amount,days,notes) VALUES(?,?,'deduction',?,0,?,?)").bind(payload.employeeId,r.dateFrom.slice(0,7),"Penalty · " + r.dateFrom,r.days,r.details));
         continue;
       }
-      statements.push(database.prepare(`INSERT INTO hr_manual_request_guard(value) SELECT CASE WHEN EXISTS (
-        SELECT 1 FROM employee_requests WHERE employee_id=? AND status='approved' AND date_from<=? AND date_to>=?
+      if(r.type!=="friday_exchange") statements.push(database.prepare(`INSERT INTO hr_manual_request_guard(value) SELECT CASE WHEN EXISTS (
+        SELECT 1 FROM employee_requests WHERE employee_id=? AND status='approved' AND type<>'friday_exchange' AND date_from<=? AND date_to>=?
         AND (type='leave' OR ?='leave' OR (manual_data<>'' AND json_extract(manual_data,'$.type')=? AND (? IN ('early_leave','late_arrival') OR ((CAST(substr(start_time,1,2) AS INTEGER)*60+CAST(substr(start_time,4,2) AS INTEGER))<? AND (CAST(substr(start_time,1,2) AS INTEGER)*60+CAST(substr(start_time,4,2) AS INTEGER)+duration_minutes)>?))))
       ) THEN 0 ELSE 1 END`).bind(payload.employeeId,r.dateTo,r.dateFrom,r.type,r.type,r.type,requestEndMinutes(r),r.startTime?timeMinutes(r.startTime):0));
+      statements.push(exchangeGuard(payload.employeeId,r));
       const details = r.details + (r.type === "leave" ? " · Reason: " + r.reason : r.type === "mission" ? " · Day: " + r.dayType : "");
       statements.push(database.prepare(`INSERT INTO employee_requests(employee_id,requester_user_id,type,leave_kind,date_from,date_to,start_time,end_time,duration_minutes,leave_paid,details,status,reviewer_note,reviewed_by_user_id,reviewed_at,manual_data)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,'approved','Manually entered and approved',?,CURRENT_TIMESTAMP,?)`).bind(payload.employeeId,session.userId,r.type === "paid_weekend" ? "mission" : r.type,r.reason === "sick" ? "sick_leave":"normal_leave",r.dateFrom,r.dateTo,r.startTime,r.endTime,r.endTime ? requestEndMinutes(r)-timeMinutes(r.startTime):0,r.leavePaid?1:0,details,session.userId,JSON.stringify(r)));

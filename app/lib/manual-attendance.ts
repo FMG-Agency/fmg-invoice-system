@@ -7,17 +7,25 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
 }, "Choose a valid date.");
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 export const manualRequestSchema = z.object({
-  type: z.enum(["mission", "paid_weekend", "overtime", "early_arrival", "early_leave", "late_arrival", "leave", "penalty"]),
+  type: z.enum(["friday_exchange", "mission", "paid_weekend", "overtime", "early_arrival", "early_leave", "late_arrival", "leave", "penalty"]),
   dateFrom: date, dateTo: date,
   startTime: z.union([time, z.literal("")]).default(""),
   endTime: z.union([time, z.literal("24:00"), z.literal("")]).default(""),
   days: z.number().finite().min(0).max(366).default(0),
   dayType: z.enum(["normal", "holiday"]).default("normal"),
   leavePaid: z.boolean().default(true),
+  origin: z.literal("employee").optional(),
+  leaveKind: z.enum(["vacation","occasional_leave","resort_leave","sick_leave","urgent_leave","normal_leave"]).optional(),
   reason: z.enum(["sick", "normal", "other"]).default("normal"),
   details: z.string().trim().min(3, "Enter a reason or assignment description.").max(2000),
 }).superRefine((r, ctx) => {
   const issue = (message: string) => ctx.addIssue({code: "custom", message});
+  if (r.type === "friday_exchange") {
+    if (new Date(r.dateFrom+"T12:00:00Z").getUTCDay() !== 5) issue("Choose the Friday that will become a working day.");
+    if (new Date(r.dateTo+"T12:00:00Z").getUTCDay() === 5 || r.dateTo === r.dateFrom) issue("Choose a different, non-Friday replacement day off.");
+    if (Math.abs(Date.parse(r.dateTo)-Date.parse(r.dateFrom)) > 31*86400000) issue("The replacement day must be within 31 days.");
+    return;
+  }
   if (r.dateTo < r.dateFrom || (Date.parse(r.dateTo) - Date.parse(r.dateFrom)) / 86400000 > 61) issue("Choose a date range of up to 62 days.");
   if (r.type !== "leave" && r.dateFrom !== r.dateTo) issue("Use one day per timed request.");
   if (!["leave", "penalty"].includes(r.type) && !r.startTime) issue("Choose the start time.");
@@ -27,7 +35,8 @@ export const manualRequestSchema = z.object({
   if (r.type === "early_arrival" && r.endTime > "11:00") issue("Early overtime must end by 11:00.");
 });
 export type ManualRequest = z.infer<typeof manualRequestSchema>;
-export function requestDates(r: Pick<ManualRequest, "dateFrom" | "dateTo">) {
+export function requestDates(r: Pick<ManualRequest, "dateFrom" | "dateTo"> & {type?: ManualRequest["type"]}) {
+  if(r.type === "friday_exchange") return [r.dateFrom,r.dateTo];
   const dates: string[] = [];
   for (let value = Date.parse(r.dateFrom); value <= Date.parse(r.dateTo); value += 86400000) dates.push(new Date(value).toISOString().slice(0,10));
   return dates;
@@ -42,11 +51,15 @@ type MathResult = Omit<AttendanceRecord, keyof Source>;
 export function manualAttendance(source: Source, requests: ManualRequest[], employee: Employee, policy: HrPolicy, calculate: (r: Source,e: Employee,p: HrPolicy) => MathResult): AttendanceRecord {
   if (!requests.length) return {...source,...calculate(source,employee,policy)};
   const record = {...source};
+  const exchange = requests.find(r => r.type === "friday_exchange" && (source.workDate === r.dateFrom || source.workDate === r.dateTo));
+  if(exchange) record.isRestDay = source.workDate === exchange.dateTo;
   const missions = requests.filter(r => r.type === "mission" || r.type === "paid_weekend");
   const leave = requests.find(r => r.type === "leave");
-  const friday = new Date(source.workDate + "T12:00:00Z").getUTCDay() === 5;
+  const friday = record.isRestDay ?? (new Date(source.workDate + "T12:00:00Z").getUTCDay() === 5);
   const hasPunches = Boolean(source.firstIn || source.lastOut);
-  if (leave) { record.status = leave.reason === "sick" ? "sick_leave" : "normal_leave"; record.leavePaid = leave.leavePaid; record.firstIn = ""; record.lastOut = ""; }
+  if(exchange && !record.isRestDay && record.status === "friday") record.status = record.firstIn && record.lastOut ? "present" : hasPunches ? "incomplete" : "absent";
+  if(exchange && record.isRestDay && !hasPunches) { record.status = "friday"; record.leavePaid = true; }
+  if (leave) { record.status = leave.leaveKind ?? (leave.reason === "sick" ? "sick_leave" : "normal_leave"); record.leavePaid = leave.leavePaid; record.firstIn = ""; record.lastOut = ""; }
   if (missions.length) {
     record.status = "present";
     record.firstIn = [source.firstIn,...missions.map(r => r.startTime)].filter(Boolean).sort()[0];
@@ -54,9 +67,9 @@ export function manualAttendance(source: Source, requests: ManualRequest[], empl
     record.lateExcused ||= !hasPunches || missions.some(r => r.startTime <= policy.workdayStartsAt && r.endTime >= policy.workdayStartsAt);
     record.earlyLeaveExcused ||= !hasPunches || missions.some(r => r.startTime <= policy.workdayEndsAt && r.endTime >= policy.workdayEndsAt);
   }
-  if (requests.some(r => r.type === "early_leave")) record.earlyLeaveExcused = true;
-  if (requests.some(r => r.type === "late_arrival")) record.lateExcused = true;
-  record.notes = [source.notes,...requests.map(r => "Manual " + r.type.replaceAll("_", " ") + ": " + r.details + (r.type === "leave" ? (r.leavePaid ? " (paid)" : " (unpaid)") : " · " + r.startTime + "–" + r.endTime + (requestEndMinutes(r)>1440 ? " (+1 day)":"")) + (r.type === "mission" ? " · " + (friday || r.dayType === "holiday" ? "Holiday ×2" : "Normal ×1") : ""))].filter(Boolean).join("\n");
+  if (requests.some(r => r.type === "early_leave" && r.leavePaid !== false)) record.earlyLeaveExcused = true;
+  if (requests.some(r => r.type === "late_arrival" && r.leavePaid !== false)) record.lateExcused = true;
+  record.notes = [source.notes,...requests.map(r => (r.type === "friday_exchange" ? "Friday exchange " + r.dateFrom + " → " + r.dateTo + ": " : "Approved ") + r.type.replaceAll("_", " ") + ": " + r.details + (r.type === "leave" ? (r.leavePaid ? " (paid)" : " (unpaid)") : " · " + r.startTime + "–" + r.endTime + (requestEndMinutes(r)>1440 ? " (+1 day)":"")) + (r.type === "mission" ? " · " + (friday || r.dayType === "holiday" ? "Holiday ×2" : "Normal ×1") : ""))].filter(Boolean).join("\n");
   const result = calculate(record,employee,policy);
   if (leave) return {...record,...result};
   const weekend = new Array<number>(1801).fill(0);
@@ -68,14 +81,15 @@ export function manualAttendance(source: Source, requests: ManualRequest[], empl
   for (const r of missions) {
     for (let m = timeMinutes(r.startTime);m < timeMinutes(r.endTime);m++) {
       normal[m] = 0; early[m] = 0;
+      if(r.leavePaid === false) continue;
       if (r.type === "paid_weekend") weekend[m] = 2;
       else if (friday || r.dayType === "holiday") holiday[m] = 2;
       else if (m < timeMinutes(policy.workdayStartsAt) || m >= timeMinutes(policy.workdayEndsAt)) normal[m] = 1;
     }
   }
   for (const r of requests) {
-    if (r.type === "overtime") mark(normal,timeMinutes(r.startTime),requestEndMinutes(r),2);
-    if (r.type === "early_arrival") mark(early,timeMinutes(r.startTime),timeMinutes(r.endTime),2.5);
+    if (r.type === "overtime" && r.leavePaid !== false) mark(normal,timeMinutes(r.startTime),requestEndMinutes(r),2);
+    if (r.type === "early_arrival" && r.leavePaid !== false) mark(early,timeMinutes(r.startTime),timeMinutes(r.endTime),2.5);
   }
   for(let m=0;m<1801;m++) if(weekend[m]) {normal[m]=0;early[m]=0;holiday[m]=0;}
   // A minute already paid as holiday work must not be paid again as overtime.
@@ -95,7 +109,7 @@ export function manualAttendance(source: Source, requests: ManualRequest[], empl
   result.totalMissionMinutes = result.normalMissionMinutes + result.earlyMissionMinutes + result.paidWeekendMissionMinutes;
   result.overtimePay = round(result.totalMissionMinutes * rate);
   result.fridayPay = round(Math.max(friday && hasPunches && !result.paidWeekendMinutes ? result.fridayPay : 0, sum(holiday)*rate));
-  return {...record,...result, overtimeApproved: record.overtimeApproved || requests.some(r => r.type === "overtime"), earlyOvertimeApproved: record.earlyOvertimeApproved || requests.some(r => r.type === "early_arrival")};
+  return {...record,...result, overtimeApproved: record.overtimeApproved || requests.some(r => r.type === "overtime" && r.leavePaid !== false), earlyOvertimeApproved: record.earlyOvertimeApproved || requests.some(r => r.type === "early_arrival" && r.leavePaid !== false)};
 }
 
 export type SavedManualEntry = {id:number;kind:"request"|"penalty";employeeId:number;version:string;createdAt:string;data:ManualRequest};

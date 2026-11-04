@@ -736,7 +736,7 @@ export function FmgSystem() {
           {view === "client-portal-admin" && <ClientPortalAdmin showToast={showToast} />}
           {view === "manual-requests" && <ManualRequestsPanel employees={hrState.employees} onSaved={async () => { await loadHr(hrState.month); }} />}
           {view === "employees" && <EmployeesPanel state={hrState} mutate={mutateHr} busy={busy} showToast={showToast} />}
-          {view === "attendance" && <AttendancePanel state={hrState} mutate={mutateHr} busy={busy} onMonthChange={loadHr} onStateChange={setHrState} showToast={showToast} />}
+          {view === "attendance" && <AttendancePanel isAdmin={auth.isAdmin} state={hrState} mutate={mutateHr} busy={busy} onMonthChange={loadHr} onStateChange={setHrState} showToast={showToast} />}
           {view === "requests" && <RequestsPanel showToast={showToast} />}
           {view === "categories" && <CategoriesPanel categories={state.categories} mutate={mutate} busy={busy} showToast={showToast} />}
           {view === "media-guide" && <section className="panel catalog-page-panel"><QuotationCatalog catalog={state.quotationCatalog} mutate={mutate} busy={busy} showToast={showToast} /></section>}

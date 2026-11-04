@@ -131,7 +131,7 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(requestsComponent, /Urgent early arrival/);
   assert.match(requestsComponent, /medical report/i);
   assert.match(requestsComponent, /Religious \/ occasional holiday/);
-  assert.match(requestsApi, /approvalStatements/);
+  assert.match(requestsApi, /seedRequest/);
   assert.match(requestsApi, /assigned_reviewer_id/);
   assert.match(requestsApi, /duration_minutes/);
   assert.match(requestsApi, /urgentLeaveYearLimit/);
@@ -139,7 +139,7 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(requestsApi, /attachment_key/);
   assert.match(requestsApi, /action: z\.literal\("delete"\)/);
   assert.match(requestsApi, /Only an administrator can delete employee requests/);
-  assert.match(requestsApi, /trashDelete\("employee_requests"/);
+  assert.match(requestsApi, /archiveStatement\("employee_requests"/);
   assert.match(requestsComponent, /Delete employee request/);
   assert.match(requestAttachmentApi, /get\(row\.attachmentKey, \{ access: "private" \}\)/);
   assert.match(requestAttachmentApi, /row\.employeeId !== session\.employeeId/);

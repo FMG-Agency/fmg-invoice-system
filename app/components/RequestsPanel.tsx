@@ -17,7 +17,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { EmployeeLeaveKind, EmployeeRequest, EmployeeRequestType, RequestsState } from "../types";
 
 const emptyState: RequestsState = {
@@ -53,7 +53,7 @@ type RequestDraft = {
   attachmentBase64: string;
 };
 
-const requestTypes: EmployeeRequestType[] = ["leave", "early_leave", "mission", "overtime", "early_arrival"];
+const requestTypes: EmployeeRequestType[] = ["leave", "early_leave", "late_arrival", "friday_exchange", "mission", "overtime", "early_arrival"];
 const leaveKinds: EmployeeLeaveKind[] = ["vacation", "occasional_leave", "resort_leave", "sick_leave", "urgent_leave", "normal_leave"];
 
 function today() {
@@ -78,6 +78,7 @@ function blankDraft(): RequestDraft {
 
 function requestLabel(type: EmployeeRequestType) {
   return {
+    friday_exchange: "Friday exchange",
     leave: "Leave request",
     late_arrival: "Late arrival permission", early_leave: "Early-leave excuse",
     mission: "Work mission",
@@ -99,10 +100,11 @@ function leaveLabel(kind: EmployeeLeaveKind) {
 
 function requestDescription(type: EmployeeRequestType, state: RequestsState) {
   return {
-    leave: "Reviewer chooses paid or unpaid",
+    friday_exchange: "Work Friday and take another day off",
+    leave: "Administrator chooses paid or unpaid",
     early_leave: "Approval prevents the half-day deduction",
     late_arrival: "Permission excuses the late-arrival deduction",
-    mission: `Eligible time after ${timeLabel(state.overtimeStartsAt)} counts as OT`,
+    mission: "Attendance covered; holiday hours ×2",
     overtime: `Manager approval is required after ${timeLabel(state.overtimeApprovalAfter)}`,
     early_arrival: `Approved urgent work is paid ×${state.earlyOvertimeMultiplier}`,
   }[type];
@@ -138,7 +140,9 @@ function typeIcon(type: EmployeeRequestType, size: number) {
 }
 
 function policyNote(draft: RequestDraft, state: RequestsState) {
-  if (draft.type === "mission") return `Only mission time after ${timeLabel(state.overtimeStartsAt)} is added to overtime after approval.`;
+  if (draft.type === "friday_exchange") return "Friday becomes a normal working day. The replacement date becomes your weekly paid day off, after administrator approval.";
+  if (draft.type === "late_arrival") return "Administrator approval excuses the late-arrival deduction when marked paid.";
+  if (draft.type === "mission") return "Approved assignments count as attendance. Additional working-day hours are ×1; work on the weekly holiday is ×2.";
   if (draft.type === "overtime") return `Automatic overtime starts at ${timeLabel(state.overtimeStartsAt)}. Arrival must be no later than 11:30 AM on every day. Time after ${timeLabel(state.overtimeApprovalAfter)} still requires written manager approval.`;
   if (draft.type === "early_arrival") return `Submit at least one day before the task. Only approved time before ${timeLabel(state.workdayStartsAt)} is paid at ×${state.earlyOvertimeMultiplier} and shown separately as Early Mission Time.`;
   if (draft.type !== "leave") return "Approved early leave is recorded as excused and does not trigger the half-day deduction.";
@@ -167,6 +171,10 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
   const [reviewing, setReviewing] = useState<EmployeeRequest | null>(null);
   const [decisionNote, setDecisionNote] = useState("");
   const [reviewLeavePaid, setReviewLeavePaid] = useState(true);
+  const [employeeFilter,setEmployeeFilter]=useState("");
+  const [monthFilter,setMonthFilter]=useState("");
+  const [applyMonth,setApplyMonth]=useState(today().slice(0,7));
+  const [editingRequest,setEditingRequest]=useState<EmployeeRequest|null>(null);
   const [draft, setDraft] = useState<RequestDraft>(blankDraft);
 
   useEffect(() => {
@@ -232,12 +240,13 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
   async function createRequest(event: React.FormEvent) {
     event.preventDefault();
     const sickDays = draft.type === "leave" && draft.leaveKind === "sick_leave" ? dateSpanDays(draft.dateFrom, draft.dateTo) : 0;
-    if (sickDays > state.sickReportAfterDays && !draft.attachmentBase64) {
+    if (!editingRequest && sickDays > state.sickReportAfterDays && !draft.attachmentBase64) {
       showToast(`Attach a medical report for sick leave longer than ${state.sickReportAfterDays} days.`);
       return;
     }
-    const saved = await mutate({ action: "create", data: draft }, "Your request was sent to the administrator.");
+    const saved = await mutate(editingRequest?{action:"edit",id:editingRequest.id,version:editingRequest.updatedAt,data:draft,leavePaid:reviewLeavePaid}:{ action: "create", data: draft }, editingRequest?"Request updated; attendance recalculated.":"Your request was sent to the administrator.");
     if (saved) {
+      setEditingRequest(null);
       setCreateOpen(false);
       setDraft(blankDraft());
     }
@@ -250,18 +259,20 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
   }
 
   async function deleteRequest(request: EmployeeRequest) {
-    const appliedNote = request.status === "approved" ? " Attendance and payroll changes already applied by this approval will remain." : "";
-    if (!window.confirm(`Delete employee request #${request.id}? This cannot be undone.${appliedNote}`)) return;
+    const appliedNote = request.status === "approved" ? " Its approved payroll effect will be removed." : "";
+    if (!window.confirm(`Delete employee request #${request.id}? It can be restored from Trash for 7 days.${appliedNote}`)) return;
     await mutate({ action: "delete", id: request.id }, `Request #${request.id} deleted.`);
   }
 
   const visibleRequests = useMemo(() => state.requests.filter((request) => {
+    if(employeeFilter && request.employeeId!==Number(employeeFilter)) return false;
+    if(monthFilter && !(request.type==="friday_exchange"?[request.dateFrom,request.dateTo].some(d=>d.startsWith(monthFilter)):request.dateFrom.slice(0,7)<=monthFilter && request.dateTo.slice(0,7)>=monthFilter)) return false;
     if (filter === "mine") return state.employeeId !== null && request.employeeId === state.employeeId;
     if (filter === "review") return request.status === "pending" && (state.isAdmin || request.assignedReviewerId === state.userId);
     if (filter === "pending") return request.status === "pending";
     if (filter === "decided") return request.status !== "pending";
     return true;
-  }), [filter, state]);
+  }).sort((a,b)=>a.employeeName.localeCompare(b.employeeName)||a.employeeId-b.employeeId||b.dateFrom.slice(0,7).localeCompare(a.dateFrom.slice(0,7))||b.dateFrom.localeCompare(a.dateFrom)), [filter, state,employeeFilter,monthFilter]);
 
   const approved = state.requests.filter((request) => request.status === "approved").length;
   const approvedOvertime = state.requests
@@ -273,13 +284,14 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
     <section className="request-summary-grid">
       <article className="panel request-summary"><span className="request-summary-icon yellow"><Clock3 size={21} /></span><div><small>PENDING</small><strong>{state.pendingCount}</strong><p>Waiting for a decision</p></div></article>
       <article className="panel request-summary"><span className="request-summary-icon"><FileCheck2 size={21} /></span><div><small>APPROVED</small><strong>{approved}</strong><p>Reflected in attendance</p></div></article>
-      <article className="panel request-summary"><span className="request-summary-icon dark"><AlarmClock size={21} /></span><div><small>APPROVED OVERTIME</small><strong>{minutesLabel(approvedOvertime)}</strong><p>Mission, evening & early work</p></div></article>
-      <button className="primary-button request-create" onClick={() => setCreateOpen(true)} disabled={!canCreate}><Plus size={17} /> New request</button>
+      <article className="panel request-summary"><span className="request-summary-icon dark"><AlarmClock size={21} /></span><div><small>APPROVED WORK TIME</small><strong>{minutesLabel(approvedOvertime)}</strong><p>Requested mission & overtime hours</p></div></article>
+      <button className="primary-button request-create" onClick={() => {setEditingRequest(null);setDraft(blankDraft());setCreateOpen(true);}} disabled={!canCreate}><Plus size={17} /> New request</button>
     </section>
 
-    {!loading && !canCreate && <section className="request-link-warning"><ShieldAlert size={20} /><div><strong>Your account is not linked to an employee profile.</strong><p>An administrator can link it from Users & Access. Reviewers can still process requests assigned to them.</p></div></section>}
+    {!loading && !canCreate && <section className="request-link-warning"><ShieldAlert size={20} /><div><strong>Your account is not linked to an employee profile.</strong><p>An administrator can link it from Users & Access. Only administrators approve, reject, or edit requests.</p></div></section>}
 
     <section className="panel data-panel requests-panel">
+      <div className="request-organizer"><label className="field"><span>Employee</span><select value={employeeFilter} onChange={e=>setEmployeeFilter(e.target.value)}><option value="">All employees</option>{Array.from(new Map(state.requests.map(r=>[r.employeeId,r.employeeName]))).sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label><label className="field"><span>Month</span><input type="month" value={monthFilter} onChange={e=>setMonthFilter(e.target.value)}/></label><span>{visibleRequests.length} requests</span>{state.isAdmin&&<div className="request-apply"><label className="field"><span>Uploaded sheet month</span><input type="month" value={applyMonth} onChange={e=>setApplyMonth(e.target.value)}/></label><button className="primary-button" disabled={saving||!applyMonth} onClick={()=>void mutate({action:"apply",month:applyMonth},"Approved requests applied. Reopen Attendance or export the updated sheet.")}>Apply approved requests to sheet</button></div>}</div>
       <div className="data-tabs request-tabs">
         <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <span>{state.requests.length}</span></button>
         {state.employeeId && <button className={filter === "mine" ? "active" : ""} onClick={() => setFilter("mine")}>My requests <span>{state.requests.filter((request) => request.employeeId === state.employeeId).length}</span></button>}
@@ -288,51 +300,53 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
         <button className={filter === "decided" ? "active" : ""} onClick={() => setFilter("decided")}>Decided</button>
       </div>
 
-      {loading ? <div className="empty-panel"><div className="empty-icon"><Clock3 size={24} /></div><h3>Loading employee requests…</h3></div> : visibleRequests.length ? <div className="request-list">{visibleRequests.map((request) => {
-        const canReview = request.status === "pending" && (state.isAdmin || request.assignedReviewerId === state.userId);
+      {loading ? <div className="empty-panel"><div className="empty-icon"><Clock3 size={24} /></div><h3>Loading employee requests…</h3></div> : visibleRequests.length ? <div className="request-list">{visibleRequests.map((request,index) => {
+        const canReview = request.status === "pending" && state.isAdmin;
         const ownRequest = state.employeeId !== null && request.employeeId === state.employeeId && request.requesterUserId === state.userId;
-        return <article className="request-card" key={request.id}>
+        return <Fragment key={request.id}>{(index===0||visibleRequests[index-1].employeeId!==request.employeeId||visibleRequests[index-1].dateFrom.slice(0,7)!==request.dateFrom.slice(0,7))&&<h3 className="request-group-heading">{request.employeeName}<span>{request.dateFrom.slice(0,7)}</span></h3>}<article className="request-card">
           <div className={`request-type-icon ${request.type}`}>{typeIcon(request.type, 21)}</div>
           <div className="request-card-main">
             <div className="request-card-title"><div><span>{requestLabel(request.type)}</span><h3>{request.employeeName}</h3><small>{request.employeeTitle || "Employee"} · Request #{request.id}</small></div><span className={`request-status ${request.status}`}>{request.status}</span></div>
-            <div className="request-meta"><span><CalendarDays size={14} /> {dateLabel(request.dateFrom)}{request.dateTo !== request.dateFrom ? ` → ${dateLabel(request.dateTo)}` : ""}</span>{request.type === "leave" && <span>{leaveLabel(request.leaveKind)}{request.status === "approved" ? ` · ${request.leavePaid === false ? "Unpaid" : "Paid"}` : ""}</span>}{request.startTime && <span><Clock3 size={14} /> {request.startTime}{request.endTime ? ` – ${request.endTime}` : ""}{request.durationMinutes ? ` · ${minutesLabel(request.durationMinutes)} eligible` : request.type === "mission" ? ` · No eligible OT after ${timeLabel(state.overtimeStartsAt)}` : ""}</span>}</div>
+            <div className="request-meta"><span><CalendarDays size={14} /> {dateLabel(request.dateFrom)}{request.dateTo !== request.dateFrom ? ` → ${dateLabel(request.dateTo)}` : ""}</span>{request.type === "leave" && <span>{leaveLabel(request.leaveKind)}{request.status === "approved" ? ` · ${request.leavePaid === false ? "Unpaid" : "Paid"}` : ""}</span>}{request.status==="approved" && !["leave","friday_exchange"].includes(request.type) && <span>{request.leavePaid===false?"Unpaid":"Paid / excused"}</span>}{request.startTime && <span><Clock3 size={14} /> {request.startTime}{request.endTime ? ` – ${request.endTime}` : ""}{request.durationMinutes ? ` · ${minutesLabel(request.durationMinutes)} requested` : request.type === "mission" ? ` · No eligible OT after ${timeLabel(state.overtimeStartsAt)}` : ""}</span>}</div>
             <p className="request-details">{request.details}</p>
             {request.hasAttachment && <a className="request-attachment" href={`/api/requests/attachment/${request.id}`} target="_blank" rel="noreferrer"><Paperclip size={14} /> {request.attachmentName || "View attachment"}</a>}
             <div className="request-route"><Route size={15} /><span>Sent by <strong>{request.requesterName}</strong></span><ArrowRight size={14} /><span>{request.assignedReviewerName ? <>Forwarded to <strong>{request.assignedReviewerName}</strong></> : <strong>Administrator</strong>}</span></div>
             {request.status !== "pending" && <div className={`request-decision-note ${request.status}`}><span>{request.status === "approved" ? <Check size={15} /> : <XCircle size={15} />}</span><p><strong>{request.status === "approved" ? "Approved" : request.status === "rejected" ? "Rejected" : "Cancelled"}{request.reviewedByName ? ` by ${request.reviewedByName}` : ""}</strong>{request.reviewerNote && <small>{request.reviewerNote}</small>}</p></div>}
           </div>
           <div className="request-card-actions">
-            {state.isAdmin && request.status === "pending" && <label><span>Forward to</span><select value={request.assignedReviewerId ?? ""} disabled={saving} onChange={(event) => void mutate({ action: "assign", id: request.id, reviewerId: event.target.value ? Number(event.target.value) : null }, event.target.value ? "Request forwarded to the selected reviewer." : "Request returned to administrator review.")}><option value="">Administrator only</option>{state.reviewers.filter((reviewer) => reviewer.id !== request.requesterUserId).map((reviewer) => <option key={reviewer.id} value={reviewer.id}>{reviewer.displayName} · {reviewer.roleLabel}</option>)}</select></label>}
+            {state.isAdmin && request.status === "pending" && <label><span>Share for viewing</span><select value={request.assignedReviewerId ?? ""} disabled={saving} onChange={(event) => void mutate({ action: "assign", id: request.id, reviewerId: event.target.value ? Number(event.target.value) : null }, event.target.value ? "Request shared for viewing; the administrator still makes the decision." : "Request returned to administrator review.")}><option value="">Administrator only</option>{state.reviewers.filter((reviewer) => reviewer.id !== request.requesterUserId).map((reviewer) => <option key={reviewer.id} value={reviewer.id}>{reviewer.displayName} · {reviewer.roleLabel}</option>)}</select></label>}
             {canReview && <button className="table-review" onClick={() => { setReviewing(request); setDecisionNote(""); setReviewLeavePaid(request.leavePaid ?? true); }}><FileCheck2 size={15} /> Review request</button>}
             {ownRequest && request.status === "pending" && <button className="request-cancel" disabled={saving} onClick={() => window.confirm("Cancel this pending request?") && void mutate({ action: "cancel", id: request.id }, "Request cancelled.")}><X size={15} /> Cancel</button>}
+            {state.isAdmin && <button className="table-review" disabled={saving} onClick={()=>{setEditingRequest(request);setDraft({...blankDraft(),...request,attachmentBase64:""});setReviewLeavePaid(request.leavePaid??true);setCreateOpen(true);}}>Edit request</button>}
             {state.isAdmin && <button className="request-cancel" disabled={saving} onClick={() => void deleteRequest(request)}><Trash2 size={15} /> Delete</button>}
           </div>
-        </article>;
+        </article></Fragment>;
       })}</div> : <div className="empty-panel"><div className="empty-icon"><CalendarDays size={24} /></div><h3>No requests in this view</h3><p>{canCreate ? "Create a leave, excuse, mission, or overtime approval request." : "Requests assigned to you will appear here."}</p>{canCreate && <button className="small-primary" onClick={() => setCreateOpen(true)}><Plus size={15} /> New request</button>}</div>}
     </section>
 
-    {createOpen && <RequestModal title="Send a new request" description={`This written request will be recorded for ${state.employeeName} and delivered to the administrator.`} onClose={() => setCreateOpen(false)}>
+    {createOpen && <RequestModal title={editingRequest?`Edit request #${editingRequest.id}`:"Send a new request"} description={`This written request will be recorded for ${state.employeeName} and delivered to the administrator.`} onClose={() => {setCreateOpen(false);setEditingRequest(null);setDraft(blankDraft());}}>
       <form className="modal-form" onSubmit={createRequest}>
         <div className="request-type-picker">{requestTypes.map((type) => <button type="button" key={type} className={draft.type === type ? "active" : ""} onClick={() => setDraft((current) => ({ ...current, type, dateTo: type === "leave" ? current.dateTo : current.dateFrom, startTime: "", endTime: "" }))}>{typeIcon(type, 18)}<span><strong>{requestLabel(type)}</strong><small>{requestDescription(type, state)}</small></span></button>)}</div>
         <div className="form-grid">
           {draft.type === "leave" && <label className="field"><span>Leave type</span><select value={draft.leaveKind} onChange={(event) => setDraft({ ...draft, leaveKind: event.target.value as EmployeeLeaveKind })}>{leaveKinds.map((kind) => <option value={kind} key={kind}>{leaveLabel(kind)}</option>)}</select></label>}
-          <label className="field"><span>{draft.type === "leave" ? "From date" : "Request date"}</span><input required type="date" min={today()} value={draft.dateFrom} onChange={(event) => setDraft({ ...draft, dateFrom: event.target.value, dateTo: draft.type === "leave" && draft.dateTo >= event.target.value ? draft.dateTo : event.target.value })} /></label>
-          {draft.type === "leave" && <label className="field"><span>To date</span><input required type="date" min={draft.dateFrom} value={draft.dateTo} onChange={(event) => setDraft({ ...draft, dateTo: event.target.value })} /></label>}
-          {draft.type === "early_leave" && <label className="field"><span>Leaving time</span><input required type="time" value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label>}
+          <label className="field"><span>{draft.type === "friday_exchange" ? "Friday to work" : draft.type === "leave" ? "From date" : "Request date"}</span><input required type="date" min={editingRequest?undefined:today()} value={draft.dateFrom} onChange={(event) => setDraft({ ...draft, dateFrom: event.target.value, dateTo: draft.type === "leave" && draft.dateTo >= event.target.value ? draft.dateTo : event.target.value })} /></label>
+          {["leave","friday_exchange"].includes(draft.type) && <label className="field"><span>{draft.type==="friday_exchange"?"Replacement day off":"To date"}</span><input required type="date" min={draft.type==="leave"?draft.dateFrom:undefined} value={draft.dateTo} onChange={(event) => setDraft({ ...draft, dateTo: event.target.value })} /></label>}
+          {["early_leave","late_arrival"].includes(draft.type) && <label className="field"><span>{draft.type==="late_arrival"?"Arrival time":"Leaving time"}</span><input required type="time" value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label>}
           {draft.type === "early_arrival" && <label className="field"><span>Early arrival time</span><input required type="time" max={state.workdayStartsAt} value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label>}
           {(draft.type === "mission" || draft.type === "overtime") && <><label className="field"><span>{draft.type === "mission" ? "Mission" : "Overtime"} starts</span><input required type="time" value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label><label className="field"><span>{draft.type === "mission" ? "Mission" : "Overtime"} ends</span><input required type="time" value={draft.endTime} onChange={(event) => setDraft({ ...draft, endTime: event.target.value })} /></label></>}
           <label className="field wide"><span>Reason & task details</span><textarea required minLength={5} rows={5} value={draft.details} onChange={(event) => setDraft({ ...draft, details: event.target.value })} placeholder={draft.type === "mission" ? "Where is the mission, for which client/project, and what work will be completed?" : draft.type === "early_arrival" ? "Describe the urgent task agreed with your manager." : "Explain the reason and all information the reviewer needs."} /></label>
           <label className="field wide"><span>Attachment <small>PDF, JPG or PNG · maximum 3 MB</small></span><input type="file" accept="application/pdf,image/jpeg,image/png" onChange={(event) => void chooseAttachment(event.target.files?.[0])} />{draft.attachmentName && <small className="field-hint"><Paperclip size={13} /> {draft.attachmentName}</small>}</label>
         </div>
+        {editingRequest && draft.type!=="friday_exchange"&&<label className="field"><span>Payroll treatment</span><select value={String(reviewLeavePaid)} onChange={e=>setReviewLeavePaid(e.target.value==="true")}><option value="true">Paid / excused</option><option value="false">Unpaid / normal deduction</option></select></label>}
         <div className="request-payroll-note">{typeIcon(draft.type, 17)}<span>{policyNote(draft, state)}</span></div>
-        <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Sending…" : "Send request"}</button></div>
+        <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Saving…" : editingRequest?"Save changes":"Send request"}</button></div>
       </form>
     </RequestModal>}
 
     {reviewing && <RequestModal title={`Review request #${reviewing.id}`} description={`${reviewing.employeeName} · ${requestLabel(reviewing.type)} · ${dateLabel(reviewing.dateFrom)}`} onClose={() => setReviewing(null)}>
-      <div className="request-review-summary"><span className={`request-type-icon ${reviewing.type}`}>{typeIcon(reviewing.type, 20)}</span><div><strong>{reviewing.details}</strong><p>{reviewing.type === "leave" ? leaveLabel(reviewing.leaveKind) : reviewing.startTime ? `${reviewing.startTime}${reviewing.endTime ? ` – ${reviewing.endTime}` : ""}` : ""}{reviewing.durationMinutes ? ` · ${minutesLabel(reviewing.durationMinutes)} eligible` : ""}</p></div></div>
+      <div className="request-review-summary"><span className={`request-type-icon ${reviewing.type}`}>{typeIcon(reviewing.type, 20)}</span><div><strong>{reviewing.details}</strong><p>{reviewing.type === "friday_exchange" ? `Work: ${dateLabel(reviewing.dateFrom)} · Day off: ${dateLabel(reviewing.dateTo)}` : reviewing.type === "leave" ? `${leaveLabel(reviewing.leaveKind)} · ${dateLabel(reviewing.dateFrom)} → ${dateLabel(reviewing.dateTo)}` : reviewing.startTime ? `${reviewing.startTime}${reviewing.endTime ? ` – ${reviewing.endTime}` : ""}` : ""}{reviewing.durationMinutes ? ` · ${minutesLabel(reviewing.durationMinutes)} eligible` : ""}</p></div></div>
       {reviewing.hasAttachment && <a className="request-attachment review" href={`/api/requests/attachment/${reviewing.id}`} target="_blank" rel="noreferrer"><Paperclip size={15} /> Open {reviewing.attachmentName || "attachment"}</a>}
-      {reviewing.type === "leave" && <label className="field"><span>Payroll treatment <small>Chosen by the reviewer</small></span><select value={reviewLeavePaid ? "paid" : "unpaid"} onChange={(event) => setReviewLeavePaid(event.target.value === "paid")}><option value="paid">Paid leave · no salary deduction</option><option value="unpaid">Unpaid leave · deduct the configured daily amount</option></select></label>}
+      {reviewing.type !== "friday_exchange" && <label className="field"><span>Payroll treatment <small>Chosen by the reviewer</small></span><select value={reviewLeavePaid ? "paid" : "unpaid"} onChange={(event) => setReviewLeavePaid(event.target.value === "paid")}><option value="paid">Paid / excused · include eligible pay</option><option value="unpaid">Unpaid · no additional pay / normal deduction</option></select></label>}
       <label className="field"><span>Decision note <small>Visible to the employee</small></span><textarea rows={4} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} placeholder="Add the manager's approval note, or explain the rejection." /></label>
       <div className="request-decision-actions"><button className="reject-button" disabled={saving} onClick={() => void decide("rejected")}><XCircle size={17} /> Reject</button><button className="approve-button" disabled={saving} onClick={() => void decide("approved")}><Check size={17} /> Approve & apply</button></div>
     </RequestModal>}

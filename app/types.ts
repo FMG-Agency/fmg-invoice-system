@@ -304,6 +304,7 @@ export type HrPolicy = {
 export type AttendanceStatus = "present" | "incomplete" | "absent" | "friday" | "vacation" | "occasional_leave" | "resort_leave" | "sick_leave" | "urgent_leave" | "normal_leave" | "assignment";
 
 export type AttendanceRecord = {
+  isRestDay?: boolean;
   salaryFactors?: Partial<Record<"lateDeduction" | "earlyLeaveDeduction" | "leaveDeduction" | "overtimePay" | "fridayPay", number>>;
   id: number;
   importId: number | null;
@@ -427,7 +428,7 @@ export type ManagedUser = {
   updatedAt: string;
 };
 
-export type EmployeeRequestType = "leave" | "early_leave" | "late_arrival" | "mission" | "overtime" | "early_arrival";
+export type EmployeeRequestType = "friday_exchange" | "leave" | "early_leave" | "late_arrival" | "mission" | "overtime" | "early_arrival";
 export type EmployeeRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
 export type EmployeeLeaveKind = "vacation" | "occasional_leave" | "resort_leave" | "sick_leave" | "urgent_leave" | "normal_leave";
 

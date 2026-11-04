@@ -1,4 +1,6 @@
-import { trashDelete } from '../../lib/trash';
+import { requestOverlay, seedRequest, assertExchangeAvailable, legacyRequestCleanup, overlayFromRow, exchangeGuard, approvalConflictGuard } from "../../lib/request-attendance";
+import { manualRequestSchema, requestDates } from "../../lib/manual-attendance";
+import { archiveStatement } from '../../lib/trash';
 import { del, put } from "@vercel/blob";
 import { z } from "zod";
 import { ensureAuthDatabase, getDatabase, getSession } from "../../lib/auth-server";
@@ -11,11 +13,11 @@ import type { EmployeeRequest, RequestReviewer, RequestsState } from "../../type
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const dateValue = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const dateValue = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value=>{const d=new Date(value+"T12:00:00Z");return !Number.isNaN(d.getTime()) && d.toISOString().slice(0,10)===value;},"Choose a valid date.");
 const timeValue = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const optionalTime = z.union([timeValue, z.literal("")]);
 const requestData = z.object({
-  type: z.enum(["leave", "early_leave", "mission", "overtime", "early_arrival"]),
+  type: z.enum(["leave", "early_leave", "late_arrival", "friday_exchange", "mission", "overtime", "early_arrival"]),
   leaveKind: z.enum(["vacation", "occasional_leave", "resort_leave", "sick_leave", "urgent_leave", "normal_leave"]),
   dateFrom: dateValue,
   dateTo: dateValue,
@@ -46,6 +48,7 @@ const defaultPolicy: RequestPolicy = {
 };
 
 const requestTypeLabels: Record<EmployeeRequest["type"], string> = {
+  friday_exchange: "Friday exchange",
   leave: "leave request",
   late_arrival: "late-arrival permission",
   early_leave: "early-leave excuse",
@@ -60,6 +63,8 @@ function sessionName(session: { displayName: string; username: string }) {
 
 const actionPayload = z.discriminatedUnion("action", [
   z.object({ action: z.literal("create"), data: requestData }),
+  z.object({ action: z.literal("edit"), id:z.number().int().positive(), data:requestData, leavePaid:z.boolean(), version:z.string() }),
+  z.object({ action: z.literal("apply"), month:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }),
   z.object({ action: z.literal("assign"), id: z.number().int().positive(), reviewerId: z.number().int().positive().nullable() }),
   z.object({ action: z.literal("decide"), id: z.number().int().positive(), decision: z.enum(["approved", "rejected"]), note: z.string().trim().max(2000).default(""), leavePaid: z.boolean().default(true) }),
   z.object({ action: z.literal("cancel"), id: z.number().int().positive() }),
@@ -120,22 +125,23 @@ function minutesFromTime(value: string) {
 }
 
 function durationForRequest(data: z.infer<typeof requestData>, policy: RequestPolicy) {
+  if(data.type === "friday_exchange") { manualRequestSchema.parse(requestOverlay(data,true)); return 0; }
   const dates = datesBetween(data.dateFrom, data.dateTo);
   if (data.type !== "leave" && dates.length !== 1) throw new Error("Attendance requests must be for one day.");
-  if (data.type === "early_leave" && !data.startTime) throw new Error("Enter the time you left or plan to leave.");
+  if (["early_leave","late_arrival"].includes(data.type) && !data.startTime) throw new Error("Enter the time you left or plan to leave.");
   if (data.type === "early_arrival") {
     if (!data.startTime) throw new Error("Enter the approved early-arrival time.");
     const duration = minutesFromTime(policy.workdayStartsAt) - minutesFromTime(data.startTime);
     if (duration <= 0) throw new Error(`Early-arrival time must be before ${policy.workdayStartsAt}.`);
     return duration;
   }
-  if (data.type === "early_leave" || data.type === "leave") return 0;
+  if (data.type === "early_leave" || data.type === "late_arrival" || data.type === "leave") return 0;
   if (!data.startTime || !data.endTime) throw new Error(`Enter the ${data.type === "mission" ? "mission" : "overtime"} start and end time.`);
   const start = minutesFromTime(data.startTime);
   const end = minutesFromTime(data.endTime);
-  const duration = end - start;
+  const duration = end - start + (data.type === "overtime" && end <= start && end <= 360 ? 1440 : 0);
   if (duration <= 0 || duration > 16 * 60) throw new Error("End time must be after the start time.");
-  return Math.max(0, end - Math.max(start, minutesFromTime(policy.overtimeStartsAt)));
+  return data.type === "mission" ? duration : Math.max(0, start + duration - Math.max(start, minutesFromTime(policy.overtimeStartsAt)));
 }
 
 function cairoNow() {
@@ -192,7 +198,7 @@ async function requestPolicy(): Promise<RequestPolicy> {
 }
 
 async function validatePolicyRequest(employeeId: number, data: z.infer<typeof requestData>, policy: RequestPolicy) {
-  const days = datesBetween(data.dateFrom, data.dateTo);
+  const days = data.type === "friday_exchange" ? [data.dateFrom,data.dateTo] : datesBetween(data.dateFrom, data.dateTo);
   const now = cairoNow();
   const noticeDays = daysFromToday(data.dateFrom, now.date);
   if (noticeDays < 0) throw new Error("Requests cannot be submitted for a past date.");
@@ -245,7 +251,7 @@ async function getRequestsState(session: NonNullable<Awaited<ReturnType<typeof g
     JOIN auth_users requester ON requester.id = r.requester_user_id
     LEFT JOIN auth_users assigned ON assigned.id = r.assigned_reviewer_id
     LEFT JOIN auth_users reviewer ON reviewer.id = r.reviewed_by_user_id
-    WHERE ${accessWhere}
+    WHERE ${accessWhere} AND (r.manual_data='' OR json_extract(r.manual_data,'$.origin')='employee')
     ORDER BY CASE r.status WHEN 'pending' THEN 0 ELSE 1 END, r.created_at DESC, r.id DESC`);
   const result = session.isAdmin
     ? await statement.all<Record<string, unknown>>()
@@ -274,6 +280,7 @@ function accessError(status = 403, message = "You do not have access to employee
 }
 
 function responseError(error: unknown) {
+  if(/manual_request_no_overlap/.test(String(error))) return Response.json({error:"The request changed or overlaps another request. Reload and check the dates."},{status:409});
   const message = error instanceof z.ZodError ? error.issues[0]?.message ?? "Invalid request data." : error instanceof Error ? error.message : "Could not process this request.";
   return Response.json({ error: message }, { status: error instanceof z.ZodError || error instanceof Error ? 400 : 500 });
 }
@@ -283,59 +290,6 @@ async function sessionForRequests(request: Request) {
   if (!session) return { session: null, error: accessError(401, "Authentication required.") };
   if (!canAccess(session.permissions, "requests", session.isAdmin)) return { session: null, error: accessError() };
   return { session, error: null };
-}
-
-function approvalStatements(request: EmployeeRequest, decisionToken: string, leavePaid: boolean) {
-  const note = `Approved ${request.type.replaceAll("_", " ")} request #${request.id}: ${request.details}`;
-  if (request.type === "leave") {
-    return datesBetween(request.dateFrom, request.dateTo).map((date) => database.prepare(`INSERT INTO attendance_records
-      (employee_id, work_date, status, late_excused, early_leave_excused, leave_paid, overtime_approved, notes)
-      SELECT ?, ?, ?, 0, 0, ?, 0, ?
-      WHERE EXISTS (SELECT 1 FROM employee_requests WHERE id = ? AND status = 'approved' AND decision_token = ?)
-      ON CONFLICT(employee_id, work_date) DO UPDATE SET status = excluded.status, leave_paid = excluded.leave_paid,
-        notes = CASE WHEN attendance_records.notes = '' THEN excluded.notes ELSE attendance_records.notes || char(10) || excluded.notes END,
-        updated_at = CURRENT_TIMESTAMP`).bind(request.employeeId, date, request.leaveKind, leavePaid ? 1 : 0, note, request.id, decisionToken));
-  }
-  if (request.type === "early_leave") {
-    return [database.prepare(`INSERT INTO attendance_records
-      (employee_id, work_date, last_out, status, late_excused, early_leave_excused, leave_paid, overtime_approved, notes)
-      SELECT ?, ?, ?, 'present', 0, 1, 1, 0, ?
-      WHERE EXISTS (SELECT 1 FROM employee_requests WHERE id = ? AND status = 'approved' AND decision_token = ?)
-      ON CONFLICT(employee_id, work_date) DO UPDATE SET
-        last_out = CASE WHEN attendance_records.last_out = '' THEN excluded.last_out ELSE attendance_records.last_out END,
-        early_leave_excused = 1,
-        notes = CASE WHEN attendance_records.notes = '' THEN excluded.notes ELSE attendance_records.notes || char(10) || excluded.notes END,
-        updated_at = CURRENT_TIMESTAMP`).bind(request.employeeId, request.dateFrom, request.startTime, note, request.id, decisionToken)];
-  }
-  if (request.type === "early_arrival") {
-    return [database.prepare(`INSERT INTO attendance_records
-      (employee_id, work_date, first_in, status, late_excused, early_leave_excused, leave_paid, overtime_approved, early_overtime_approved, notes)
-      SELECT ?, ?, ?, 'present', 0, 0, 1, 0, 1, ?
-      WHERE EXISTS (SELECT 1 FROM employee_requests WHERE id = ? AND status = 'approved' AND decision_token = ?)
-      ON CONFLICT(employee_id, work_date) DO UPDATE SET
-        first_in = CASE WHEN attendance_records.first_in = '' OR excluded.first_in < attendance_records.first_in THEN excluded.first_in ELSE attendance_records.first_in END,
-        status = 'present', early_overtime_approved = 1,
-        notes = CASE WHEN attendance_records.notes = '' THEN excluded.notes ELSE attendance_records.notes || char(10) || excluded.notes END,
-        updated_at = CURRENT_TIMESTAMP`).bind(request.employeeId, request.dateFrom, request.startTime, note, request.id, decisionToken)];
-  }
-  if (request.type === "overtime") {
-    return [database.prepare(`INSERT INTO attendance_records
-      (employee_id, work_date, last_out, status, late_excused, early_leave_excused, leave_paid, overtime_approved, early_overtime_approved, notes)
-      SELECT ?, ?, ?, 'present', 0, 0, 1, 1, 0, ?
-      WHERE EXISTS (SELECT 1 FROM employee_requests WHERE id = ? AND status = 'approved' AND decision_token = ?)
-      ON CONFLICT(employee_id, work_date) DO UPDATE SET
-        last_out = CASE WHEN attendance_records.last_out = '' OR excluded.last_out > attendance_records.last_out THEN excluded.last_out ELSE attendance_records.last_out END,
-        status = 'present', overtime_approved = 1,
-        notes = CASE WHEN attendance_records.notes = '' THEN excluded.notes ELSE attendance_records.notes || char(10) || excluded.notes END,
-        updated_at = CURRENT_TIMESTAMP`).bind(request.employeeId, request.dateFrom, request.endTime, note, request.id, decisionToken)];
-  }
-  return [database.prepare(`INSERT INTO attendance_records
-    (employee_id, work_date, status, late_excused, early_leave_excused, leave_paid, overtime_approved, notes)
-    SELECT ?, ?, 'assignment', 0, 0, 1, 1, ?
-    WHERE EXISTS (SELECT 1 FROM employee_requests WHERE id = ? AND status = 'approved' AND decision_token = ?)
-    ON CONFLICT(employee_id, work_date) DO UPDATE SET overtime_approved = 1,
-      notes = CASE WHEN attendance_records.notes = '' THEN excluded.notes ELSE attendance_records.notes || char(10) || excluded.notes END,
-      updated_at = CURRENT_TIMESTAMP`).bind(request.employeeId, request.dateFrom, note, request.id, decisionToken)];
 }
 
 export async function GET(request: Request) {
@@ -359,13 +313,36 @@ export async function POST(request: Request) {
     const session = access.session;
     const payload = actionPayload.parse(await request.json());
 
+    if(payload.action === "apply") {
+      if(!session.isAdmin) return accessError(403,"Only an administrator can apply requests.");
+      const rows=await database.prepare("SELECT * FROM employee_requests WHERE status='approved' AND ((type='friday_exchange' AND (substr(date_from,1,7)=? OR substr(date_to,1,7)=?)) OR (type<>'friday_exchange' AND substr(date_from,1,7)<=? AND substr(date_to,1,7)>=?))").bind(payload.month,payload.month,payload.month,payload.month).all();
+      const statements=rows.results.flatMap(row=>{
+        const data=row.manual_data?JSON.parse(String(row.manual_data)):overlayFromRow(row);
+        const seeds=seedRequest(Number(row.employee_id),data).filter((_,i)=>requestDates(data)[i].startsWith(payload.month));
+        return row.manual_data?seeds:[legacyRequestCleanup(row),database.prepare("UPDATE employee_requests SET manual_data=? WHERE id=? AND manual_data='' AND status='approved'").bind(JSON.stringify(data),row.id),...seeds];
+      });
+      if(statements.length) await database.batch(statements);
+    }
+    if(payload.action === "edit") {
+      if(!session.isAdmin) return accessError(403,"Only an administrator can edit requests.");
+      const row=await database.prepare("SELECT * FROM employee_requests WHERE id=?").bind(payload.id).first();
+      if(!row) return accessError(404,"Request not found.");
+      if(row.manual_data && JSON.parse(String(row.manual_data)).origin!=="employee") return accessError(400,"Edit this entry in Manual Requests to preserve its category.");
+      if(String(row.updated_at)!==payload.version) return accessError(409,"Request changed. Reload before editing.");
+
+      const duration=durationForRequest(payload.data,await requestPolicy());
+      const overlay=requestOverlay(payload.data,payload.leavePaid);
+      await assertExchangeAvailable(Number(row.employee_id),overlay,payload.id);
+      const update=database.prepare("UPDATE employee_requests SET type=?,leave_kind=?,date_from=?,date_to=?,start_time=?,end_time=?,duration_minutes=?,details=?,leave_paid=?,manual_data=?,reviewed_by_user_id=?,updated_at=strftime('%Y-%m-%d %H:%M:%f','now') WHERE id=? AND updated_at=?")
+        .bind(payload.data.type,payload.data.leaveKind,payload.data.dateFrom,payload.data.dateTo,payload.data.startTime,payload.data.endTime,duration,payload.data.details,payload.leavePaid?1:0,row.status==='approved'?JSON.stringify(overlay):'',session.userId,payload.id,payload.version);
+      await database.batch([database.prepare("INSERT INTO hr_manual_request_guard SELECT CASE WHEN EXISTS(SELECT 1 FROM employee_requests WHERE id=? AND updated_at=?) THEN 1 ELSE 0 END").bind(payload.id,payload.version),exchangeGuard(Number(row.employee_id),overlay,payload.id),...(row.status==='approved'?[approvalConflictGuard(Number(row.employee_id),overlay,payload.id)]:[]),...(row.status==='approved' && !row.manual_data?[legacyRequestCleanup(row)]:[]),update,...(row.status==='approved'?seedRequest(Number(row.employee_id),overlay):[]),database.prepare("DELETE FROM hr_manual_request_guard")]);
+    }
     if (payload.action === "delete") {
       if (!session.isAdmin) return accessError(403, "Only an administrator can delete employee requests.");
-      const existing = await database.prepare("SELECT attachment_key AS attachmentKey FROM employee_requests WHERE id = ?")
-        .bind(payload.id).first<{ attachmentKey: string }>();
+      const existing = await database.prepare("SELECT * FROM employee_requests WHERE id = ?")
+        .bind(payload.id).first<Record<string,unknown>>();
       if (!existing) return accessError(404, "Request not found.");
-      const deleted = await trashDelete("employee_requests", "id = ?", [payload.id], session);
-      if (!deleted[1].rowsAffected) return accessError(404, "Request not found.");
+      await database.batch([...(existing.status==='approved' && !existing.manual_data?[database.prepare("UPDATE employee_requests SET manual_data=? WHERE id=?").bind(JSON.stringify(overlayFromRow(existing)),payload.id)]:[]),await archiveStatement("employee_requests","id = ?",[payload.id],session),...(existing.status==='approved' && !existing.manual_data?[legacyRequestCleanup(existing)]:[]),database.prepare("DELETE FROM employee_requests WHERE id=?").bind(payload.id)]);
 
     }
 
@@ -376,6 +353,7 @@ export async function POST(request: Request) {
       const policy = await requestPolicy();
       await validatePolicyRequest(session.employeeId, payload.data, policy);
       const duration = durationForRequest(payload.data, policy);
+      await assertExchangeAvailable(session.employeeId,requestOverlay(payload.data,true));
       if (payload.data.type === "overtime" && duration <= 0) {
         throw new Error(`Overtime must extend beyond ${policy.overtimeStartsAt}.`);
       }
@@ -401,14 +379,16 @@ export async function POST(request: Request) {
             contentType: attachment.contentType,
           });
         }
-        const inserted = await database.prepare(`INSERT INTO employee_requests
+        const creationGuard=exchangeGuard(session.employeeId,requestOverlay(payload.data,true));
+        const insertion = database.prepare(`INSERT INTO employee_requests
           (employee_id, requester_user_id, type, leave_kind, date_from, date_to, start_time, end_time,
            duration_minutes, details, attachment_key, attachment_name, attachment_type)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .bind(session.employeeId, session.userId, payload.data.type, payload.data.leaveKind, payload.data.dateFrom,
             payload.data.dateTo, payload.data.startTime, payload.data.endTime, duration, payload.data.details,
-            attachmentKey, attachmentName, attachment?.contentType ?? "").run();
-        createdRequestId = Number(inserted.meta.last_row_id);
+            attachmentKey, attachmentName, attachment?.contentType ?? "");
+        const results=await database.batch([creationGuard,insertion,database.prepare("DELETE FROM hr_manual_request_guard")]);
+        createdRequestId = Number(results[1].lastInsertRowid);
       } catch (error) {
         if (attachmentKey) await del(attachmentKey).catch(() => undefined);
         throw error;
@@ -483,13 +463,16 @@ export async function POST(request: Request) {
       if (!row) return accessError(404, "Request not found.");
       const employeeRequest = requestFromRow(row);
       if (employeeRequest.status !== "pending") return accessError(409, "This request has already been decided.");
-      if (!session.isAdmin && employeeRequest.assignedReviewerId !== session.userId) return accessError(403, "This request is not assigned to you.");
+      if (!session.isAdmin) return accessError(403, "Only an administrator can approve or reject employee requests.");
       const decisionToken = crypto.randomUUID();
-      const leavePaid = employeeRequest.type === "leave" ? payload.leavePaid : true;
+      const leavePaid = payload.leavePaid;
+      const overlay = requestOverlay(employeeRequest,leavePaid);
+      if(payload.decision === "approved") await assertExchangeAvailable(employeeRequest.employeeId,overlay,employeeRequest.id);
       const decision = database.prepare(`UPDATE employee_requests SET status = ?, leave_paid = ?, reviewer_note = ?, reviewed_by_user_id = ?,
-        reviewed_at = CURRENT_TIMESTAMP, decision_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'`)
-        .bind(payload.decision, payload.decision === "approved" && employeeRequest.type === "leave" ? (leavePaid ? 1 : 0) : null, payload.note, session.userId, decisionToken, payload.id);
-      await database.batch(payload.decision === "approved" ? [decision, ...approvalStatements(employeeRequest, decisionToken, leavePaid)] : [decision]);
+        reviewed_at = CURRENT_TIMESTAMP, decision_token = ?, manual_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'`)
+        .bind(payload.decision, payload.decision === "approved" ? (leavePaid ? 1 : 0) : null, payload.note, session.userId, decisionToken, payload.decision === "approved" ? JSON.stringify(overlay) : "", payload.id);
+      const versionGuard=database.prepare("INSERT INTO hr_manual_request_guard SELECT CASE WHEN EXISTS(SELECT 1 FROM employee_requests WHERE id=? AND status='pending' AND updated_at=?) THEN 1 ELSE 0 END").bind(employeeRequest.id,employeeRequest.updatedAt);
+      await database.batch(payload.decision === "approved" ? [versionGuard,exchangeGuard(employeeRequest.employeeId,overlay,employeeRequest.id),approvalConflictGuard(employeeRequest.employeeId,overlay,employeeRequest.id),decision, ...seedRequest(employeeRequest.employeeId,overlay),database.prepare("DELETE FROM hr_manual_request_guard")] : [versionGuard,decision,database.prepare("DELETE FROM hr_manual_request_guard")]);
       const applied = await database.prepare("SELECT id FROM employee_requests WHERE id = ? AND decision_token = ?").bind(payload.id, decisionToken).first<{ id: number }>();
       if (!applied) return accessError(409, "This request has already been decided.");
       await notifyUsers([employeeRequest.requesterUserId], {
