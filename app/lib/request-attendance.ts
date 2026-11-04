@@ -2,8 +2,8 @@ import { database } from "./database";
 import { requestDates, type ManualRequest } from "./manual-attendance";
 import type { EmployeeRequest } from "../types";
 
-export function requestOverlay(r: Pick<EmployeeRequest,"type"|"dateFrom"|"dateTo"|"startTime"|"endTime"|"details"|"leaveKind">, paid: boolean, workdayStart = "11:00"): ManualRequest {
-  return {origin:"employee",leaveKind:r.leaveKind,type:r.type,dateFrom:r.dateFrom,dateTo:r.dateTo,startTime:r.startTime,endTime:r.type==="early_arrival"?workdayStart:r.endTime,details:r.details,days:0,dayType:"normal",leavePaid:paid,reason:r.leaveKind==="sick_leave"?"sick":"normal"};
+export function requestOverlay(r: Pick<EmployeeRequest,"type"|"dateFrom"|"dateTo"|"startTime"|"endTime"|"details"|"leaveKind"|"dayType"|"reason">, paid: boolean, workdayStart = "11:00"): ManualRequest {
+  return {origin:"employee",leaveKind:r.leaveKind,type:r.type,dateFrom:r.dateFrom,dateTo:r.dateTo,startTime:r.startTime,endTime:r.type==="early_arrival"?(r.endTime||workdayStart):r.endTime,details:r.details,days:0,dayType:r.dayType||"normal",leavePaid:paid,reason:r.reason||(r.leaveKind==="sick_leave"?"sick":"normal")};
 }
 export function seedRequest(employeeId:number,data:ManualRequest) {
   return requestDates(data).map(date=>database.prepare("INSERT INTO attendance_records(employee_id,work_date,status,manual_seed) VALUES(?,?,'absent',1) ON CONFLICT(employee_id,work_date) DO NOTHING").bind(employeeId,date));

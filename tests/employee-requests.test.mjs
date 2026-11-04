@@ -80,4 +80,24 @@ test('Employee request reviews and Friday exchanges reach payroll safely',async 
     assert.ok(result.requests.some(r=>r.dateFrom==='2027-03-05' && r.isManual));
   });
 
+  await t.test('Both overtime creates two pending requests atomically and pays only approved ranges',async()=>{
+    const data=draft({type:'overtime',dateFrom:'2027-06-07',dateTo:'2027-06-07',startTime:'22:00',endTime:'23:00',bothOvertime:true,earlyStartTime:'09:00',earlyEndTime:'10:00'});
+    const invalid=await call({action:'create',data:{...data,earlyEndTime:'12:00'}},employee);assert.equal(invalid.status,400);
+    assert.equal((await db.prepare("SELECT COUNT(*) n FROM employee_requests WHERE date_from='2027-06-07'").first()).n,0);
+    const result=await call({action:'create',data},employee);assert.equal(result.status,200,JSON.stringify(result));
+    const pair=result.requests.filter(r=>r.dateFrom==='2027-06-07');assert.equal(pair.length,2);assert.ok(pair.every(r=>r.status==='pending'&&!r.isManual));
+    assert.equal((await app.getHrState('2027-06')).attendance.length,0);
+    const early=pair.find(r=>r.type==='early_arrival');assert.equal(early.durationMinutes,60);
+    await decide(early.id);let state=await app.getHrState('2027-06');assert.equal(state.attendance[0].earlyOvertimeMinutes,60);assert.equal(state.attendance[0].overtimePay,150);
+    await decide(pair.find(r=>r.type==='overtime').id);state=await app.getHrState('2027-06');assert.equal(state.attendance[0].overtimePay,270);
+    assert.equal((await call({action:'create',data},employee)).status,409);
+    assert.equal((await db.prepare("SELECT COUNT(*) n FROM employee_requests WHERE date_from='2027-06-07'").first()).n,2);
+  });
+  await t.test('Holiday mission and absence reason survive pending review and edits',async()=>{
+    let r=await create({type:'mission',dateFrom:'2027-06-08',dateTo:'2027-06-08',startTime:'11:00',endTime:'15:00',dayType:'holiday'});assert.equal(r.dayType,'holiday');await decide(r.id);
+    let state=await app.getHrState('2027-06');assert.equal(state.attendance.find(r=>r.workDate==='2027-06-08').fridayPay,480);
+    r=await create({dateFrom:'2027-06-09',dateTo:'2027-06-09',reason:'other'});assert.equal(r.reason,'other');await decide(r.id,'approved',false);
+    state=await app.getHrState('2027-06');assert.equal(state.attendance.find(r=>r.workDate==='2027-06-09').leaveDeduction,480);
+  });
+
 });

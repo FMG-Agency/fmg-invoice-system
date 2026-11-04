@@ -1247,3 +1247,6 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; -
 .request-group-heading { display:flex; justify-content:space-between; gap:16px; padding:16px 8px 6px; margin:0; font-size:1rem; }
 .request-group-heading span { color:var(--muted,#888); font-size:.85em; }
 @media(max-width:640px) { .request-organizer,.request-apply { align-items:stretch; flex-direction:column; width:100%; } .request-organizer > .field { flex:auto; } }
+
+.request-modal .form-grid > .field.wide { grid-column:1 / -1; }
+.request-modal .field > small { font-weight:400; line-height:1.5; margin-top:6px; }

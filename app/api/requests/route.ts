@@ -23,6 +23,11 @@ const requestData = z.object({
   dateTo: dateValue,
   startTime: optionalTime,
   endTime: optionalTime,
+  dayType:z.enum(["normal","holiday"]).default("normal"),
+  reason:z.enum(["sick","normal","other"]).default("normal"),
+  bothOvertime:z.boolean().default(false),
+  earlyStartTime:optionalTime.default(""),
+  earlyEndTime:optionalTime.default(""),
   details: z.string().trim().min(5).max(3000),
   attachmentName: z.string().trim().max(180).default(""),
   attachmentType: z.string().trim().max(100).default(""),
@@ -76,7 +81,9 @@ function numberValue(value: unknown) {
 }
 
 function requestFromRow(row: Record<string, unknown>): EmployeeRequest {
+  const metadata=row.manualData?JSON.parse(String(row.manualData)):{};
   return {
+    dayType:metadata.dayType||"normal",reason:metadata.reason||(row.leaveKind==="sick_leave"?"sick":"normal"),
     isManual: Boolean(row.manualData) && JSON.parse(String(row.manualData)).origin !== "employee",
     id: numberValue(row.id),
     employeeId: numberValue(row.employeeId),
@@ -132,7 +139,9 @@ function durationForRequest(data: z.infer<typeof requestData>, policy: RequestPo
   if (["early_leave","late_arrival"].includes(data.type) && !data.startTime) throw new Error("Enter the time you left or plan to leave.");
   if (data.type === "early_arrival") {
     if (!data.startTime) throw new Error("Enter the approved early-arrival time.");
-    const duration = minutesFromTime(policy.workdayStartsAt) - minutesFromTime(data.startTime);
+    const end=data.endTime||policy.workdayStartsAt;
+    if(end>policy.workdayStartsAt) throw new Error(`Early overtime must end by ${policy.workdayStartsAt}.`);
+    const duration = minutesFromTime(end) - minutesFromTime(data.startTime);
     if (duration <= 0) throw new Error(`Early-arrival time must be before ${policy.workdayStartsAt}.`);
     return duration;
   }
@@ -331,11 +340,12 @@ export async function POST(request: Request) {
       if(row.manual_data && JSON.parse(String(row.manual_data)).origin!=="employee") return accessError(400,"Edit this entry in Manual Requests to preserve its category.");
       if(String(row.updated_at)!==payload.version) return accessError(409,"Request changed. Reload before editing.");
 
+      if(payload.data.bothOvertime) return accessError(400,"Edit each overtime request separately.");
       const duration=durationForRequest(payload.data,await requestPolicy());
       const overlay=requestOverlay(payload.data,payload.leavePaid);
       await assertExchangeAvailable(Number(row.employee_id),overlay,payload.id);
       const update=database.prepare("UPDATE employee_requests SET type=?,leave_kind=?,date_from=?,date_to=?,start_time=?,end_time=?,duration_minutes=?,details=?,leave_paid=?,manual_data=?,reviewed_by_user_id=?,updated_at=strftime('%Y-%m-%d %H:%M:%f','now') WHERE id=? AND updated_at=?")
-        .bind(payload.data.type,payload.data.leaveKind,payload.data.dateFrom,payload.data.dateTo,payload.data.startTime,payload.data.endTime,duration,payload.data.details,payload.leavePaid?1:0,row.status==='approved'?JSON.stringify(overlay):'',session.userId,payload.id,payload.version);
+        .bind(payload.data.type,payload.data.leaveKind,payload.data.dateFrom,payload.data.dateTo,payload.data.startTime,payload.data.endTime,duration,payload.data.details,payload.leavePaid?1:0,JSON.stringify(overlay),session.userId,payload.id,payload.version);
       await database.batch([database.prepare("INSERT INTO hr_manual_request_guard SELECT CASE WHEN EXISTS(SELECT 1 FROM employee_requests WHERE id=? AND updated_at=?) THEN 1 ELSE 0 END").bind(payload.id,payload.version),exchangeGuard(Number(row.employee_id),overlay,payload.id),...(row.status==='approved'?[approvalConflictGuard(Number(row.employee_id),overlay,payload.id)]:[]),...(row.status==='approved' && !row.manual_data?[legacyRequestCleanup(row)]:[]),update,...(row.status==='approved'?seedRequest(Number(row.employee_id),overlay):[]),database.prepare("DELETE FROM hr_manual_request_guard")]);
     }
     if (payload.action === "delete") {
@@ -352,18 +362,20 @@ export async function POST(request: Request) {
       const employee = await database.prepare("SELECT id FROM employees WHERE id = ? AND active = 1").bind(session.employeeId).first<{ id: number }>();
       if (!employee) return accessError(400, "Your linked employee profile is inactive or unavailable.");
       const policy = await requestPolicy();
-      await validatePolicyRequest(session.employeeId, payload.data, policy);
-      const duration = durationForRequest(payload.data, policy);
-      await assertExchangeAvailable(session.employeeId,requestOverlay(payload.data,true));
-      if (payload.data.type === "overtime" && duration <= 0) {
-        throw new Error(`Overtime must extend beyond ${policy.overtimeStartsAt}.`);
-      }
-      if (payload.data.type === "mission" || payload.data.type === "overtime") {
-        const overlap = await database.prepare(`SELECT id FROM employee_requests
-          WHERE employee_id = ? AND type = ? AND date_from = ? AND status IN ('pending','approved')
-            AND start_time < ? AND end_time > ? LIMIT 1`)
-          .bind(session.employeeId, payload.data.type, payload.data.dateFrom, payload.data.endTime, payload.data.startTime).first<{ id: number }>();
-        if (overlap) return accessError(409, `This ${payload.data.type} overlaps another pending or approved request.`);
+      if(payload.data.bothOvertime && payload.data.type!=="overtime") throw new Error("Both is available only for overtime.");
+      const entries=[payload.data];
+      if(payload.data.bothOvertime) entries.push({...payload.data,type:"early_arrival",startTime:payload.data.earlyStartTime,endTime:payload.data.earlyEndTime,bothOvertime:false});
+      const durations:number[]=[];
+      for(const data of entries){
+        await validatePolicyRequest(session.employeeId,data,policy);
+        const duration=durationForRequest(data,policy);durations.push(duration);
+        await assertExchangeAvailable(session.employeeId,requestOverlay(data,true));
+        if(data.type==='overtime' && (duration<=0 || data.startTime<policy.overtimeApprovalAfter)) throw new Error('Extra overtime starts at '+policy.overtimeApprovalAfter+' or later.');
+        if(['mission','overtime','early_arrival'].includes(data.type)){
+          const overlap=await database.prepare("SELECT id FROM employee_requests WHERE employee_id=? AND type=? AND date_from=? AND status IN ('pending','approved') AND (CAST(substr(start_time,1,2) AS INTEGER)*60+CAST(substr(start_time,4,2) AS INTEGER))<? AND (CAST(substr(start_time,1,2) AS INTEGER)*60+CAST(substr(start_time,4,2) AS INTEGER)+duration_minutes)>? LIMIT 1")
+            .bind(session.employeeId,data.type,data.dateFrom,minutesFromTime(data.startTime)+duration,minutesFromTime(data.startTime)).first();
+          if(overlap)return accessError(409,'This request overlaps another pending or approved request.');
+        }
       }
       const attachment = attachmentBuffer(payload.data);
       let attachmentKey = "";
@@ -380,23 +392,21 @@ export async function POST(request: Request) {
             contentType: attachment.contentType,
           });
         }
-        const creationGuard=exchangeGuard(session.employeeId,requestOverlay(payload.data,true));
-        const insertion = database.prepare(`INSERT INTO employee_requests
-          (employee_id, requester_user_id, type, leave_kind, date_from, date_to, start_time, end_time,
-           duration_minutes, details, attachment_key, attachment_name, attachment_type)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-          .bind(session.employeeId, session.userId, payload.data.type, payload.data.leaveKind, payload.data.dateFrom,
-            payload.data.dateTo, payload.data.startTime, payload.data.endTime, duration, payload.data.details,
-            attachmentKey, attachmentName, attachment?.contentType ?? "");
-        const results=await database.batch([creationGuard,insertion,database.prepare("DELETE FROM hr_manual_request_guard")]);
-        createdRequestId = Number(results[1].lastInsertRowid);
+        const statements=entries.flatMap((data,index)=>[
+          exchangeGuard(session.employeeId!,requestOverlay(data,true)),
+          database.prepare(`INSERT INTO employee_requests
+            (employee_id,requester_user_id,type,leave_kind,date_from,date_to,start_time,end_time,duration_minutes,details,attachment_key,attachment_name,attachment_type,manual_data)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(session.employeeId,session.userId,data.type,data.leaveKind,data.dateFrom,data.dateTo,data.startTime,data.endTime,durations[index],data.details,index===0?attachmentKey:'',index===0?attachmentName:'',index===0?(attachment?.contentType??''):'',JSON.stringify(requestOverlay(data,true)))
+        ]);
+        const results=await database.batch([...statements,database.prepare("DELETE FROM hr_manual_request_guard")]);
+        createdRequestId=Number(results[1].lastInsertRowid);
       } catch (error) {
         if (attachmentKey) await del(attachmentKey).catch(() => undefined);
         throw error;
       }
       await notifyUsers(await administratorUserIds(session.userId), {
         type: "employee_request_created",
-        title: "New employee request",
+        title: payload.data.bothOvertime?"New Early + Extra overtime requests":"New employee request",
         message: `${sessionName(session)} sent a ${requestTypeLabels[payload.data.type]} for ${payload.data.dateFrom}.`,
         targetView: "requests",
         entityId: createdRequestId,
@@ -452,7 +462,7 @@ export async function POST(request: Request) {
     if (payload.action === "decide") {
       const row = await database.prepare(`SELECT r.id, r.employee_id AS employeeId, e.name AS employeeName,
           e.title AS employeeTitle, r.requester_user_id AS requesterUserId, requester.display_name AS requesterName,
-          r.type, r.leave_kind AS leaveKind, r.date_from AS dateFrom, r.date_to AS dateTo,
+          r.manual_data AS manualData, r.type, r.leave_kind AS leaveKind, r.date_from AS dateFrom, r.date_to AS dateTo,
           r.start_time AS startTime, r.end_time AS endTime, r.duration_minutes AS durationMinutes, r.leave_paid AS leavePaid,
           r.details, r.attachment_name AS attachmentName, r.attachment_type AS attachmentType,
           CASE WHEN r.attachment_key <> '' THEN 1 ELSE 0 END AS hasAttachment,
@@ -471,7 +481,7 @@ export async function POST(request: Request) {
       if(payload.decision === "approved") await assertExchangeAvailable(employeeRequest.employeeId,overlay,employeeRequest.id);
       const decision = database.prepare(`UPDATE employee_requests SET status = ?, leave_paid = ?, reviewer_note = ?, reviewed_by_user_id = ?,
         reviewed_at = CURRENT_TIMESTAMP, decision_token = ?, manual_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'`)
-        .bind(payload.decision, payload.decision === "approved" ? (leavePaid ? 1 : 0) : null, payload.note, session.userId, decisionToken, payload.decision === "approved" ? JSON.stringify(overlay) : "", payload.id);
+        .bind(payload.decision, payload.decision === "approved" ? (leavePaid ? 1 : 0) : null, payload.note, session.userId, decisionToken, JSON.stringify(overlay), payload.id);
       const versionGuard=database.prepare("INSERT INTO hr_manual_request_guard SELECT CASE WHEN EXISTS(SELECT 1 FROM employee_requests WHERE id=? AND status='pending' AND updated_at=?) THEN 1 ELSE 0 END").bind(employeeRequest.id,employeeRequest.updatedAt);
       await database.batch(payload.decision === "approved" ? [versionGuard,exchangeGuard(employeeRequest.employeeId,overlay,employeeRequest.id),approvalConflictGuard(employeeRequest.employeeId,overlay,employeeRequest.id),decision, ...seedRequest(employeeRequest.employeeId,overlay),database.prepare("DELETE FROM hr_manual_request_guard")] : [versionGuard,decision,database.prepare("DELETE FROM hr_manual_request_guard")]);
       const applied = await database.prepare("SELECT id FROM employee_requests WHERE id = ? AND decision_token = ?").bind(payload.id, decisionToken).first<{ id: number }>();

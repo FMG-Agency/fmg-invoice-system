@@ -42,6 +42,8 @@ const emptyState: RequestsState = {
 
 type RequestDraft = {
   type: EmployeeRequestType;
+  dayType:"normal"|"holiday";
+  reason:"sick"|"normal"|"other";
   leaveKind: EmployeeLeaveKind;
   dateFrom: string;
   dateTo: string;
@@ -53,7 +55,8 @@ type RequestDraft = {
   attachmentBase64: string;
 };
 
-const requestTypes: EmployeeRequestType[] = ["leave", "early_leave", "late_arrival", "friday_exchange", "mission", "overtime", "early_arrival"];
+const requestCategories = [{type:"early_leave",label:"Arrival / departure permission"},{type:"leave",label:"Absence permission"},{type:"overtime",label:"Overtime"},{type:"friday_exchange",label:"Friday exchange"},{type:"mission",label:"Assignment / mission"}] as const;
+const categoryFor = (type:EmployeeRequestType) => type==="late_arrival"?"early_leave":type==="early_arrival"?"overtime":type;
 const leaveKinds: EmployeeLeaveKind[] = ["vacation", "occasional_leave", "resort_leave", "sick_leave", "urgent_leave", "normal_leave"];
 
 function today() {
@@ -63,7 +66,7 @@ function today() {
 
 function blankDraft(): RequestDraft {
   return {
-    type: "leave",
+    type: "leave",dayType:"normal",reason:"normal",
     leaveKind: "vacation",
     dateFrom: today(),
     dateTo: today(),
@@ -167,6 +170,8 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState<"all" | "mine" | "review" | "pending" | "decided">("all");
+  const [bothOvertime,setBothOvertime]=useState(false);
+  const [earlyTimes,setEarlyTimes]=useState({startTime:"09:00",endTime:"11:00"});
   const [createOpen, setCreateOpen] = useState(false);
   const [reviewing, setReviewing] = useState<EmployeeRequest | null>(null);
   const [decisionNote, setDecisionNote] = useState("");
@@ -244,8 +249,9 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
       showToast(`Attach a medical report for sick leave longer than ${state.sickReportAfterDays} days.`);
       return;
     }
-    const saved = await mutate(editingRequest?{action:"edit",id:editingRequest.id,version:editingRequest.updatedAt,data:draft,leavePaid:reviewLeavePaid}:{ action: "create", data: draft }, editingRequest?"Request updated; attendance recalculated.":"Your request was sent to the administrator.");
+    const saved = await mutate(editingRequest?{action:"edit",id:editingRequest.id,version:editingRequest.updatedAt,data:draft,leavePaid:reviewLeavePaid}:{ action: "create", data: {...draft,bothOvertime,earlyStartTime:earlyTimes.startTime,earlyEndTime:earlyTimes.endTime} }, editingRequest?"Request updated; attendance recalculated.":"Your request was sent to the administrator.");
     if (saved) {
+      setBothOvertime(false);
       setEditingRequest(null);
       setCreateOpen(false);
       setDraft(blankDraft());
@@ -285,7 +291,7 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
       <article className="panel request-summary"><span className="request-summary-icon yellow"><Clock3 size={21} /></span><div><small>PENDING</small><strong>{state.pendingCount}</strong><p>Waiting for a decision</p></div></article>
       <article className="panel request-summary"><span className="request-summary-icon"><FileCheck2 size={21} /></span><div><small>APPROVED</small><strong>{approved}</strong><p>Reflected in attendance</p></div></article>
       <article className="panel request-summary"><span className="request-summary-icon dark"><AlarmClock size={21} /></span><div><small>APPROVED WORK TIME</small><strong>{minutesLabel(approvedOvertime)}</strong><p>Requested mission & overtime hours</p></div></article>
-      <button className="primary-button request-create" onClick={() => {setEditingRequest(null);setDraft(blankDraft());setCreateOpen(true);}} disabled={!canCreate}><Plus size={17} /> New request</button>
+      <button className="primary-button request-create" onClick={() => {setBothOvertime(false);setEditingRequest(null);setDraft(blankDraft());setCreateOpen(true);}} disabled={!canCreate}><Plus size={17} /> New request</button>
     </section>
 
     {!loading && !canCreate && <section className="request-link-warning"><ShieldAlert size={20} /><div><strong>Your account is not linked to an employee profile.</strong><p>An administrator can link it from Users & Access. Only administrators approve, reject, or edit requests.</p></div></section>}
@@ -307,7 +313,7 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
           <div className={`request-type-icon ${request.type}`}>{typeIcon(request.type, 21)}</div>
           <div className="request-card-main">
             <div className="request-card-title"><div><span>{requestLabel(request.type)}</span><h3>{request.employeeName}</h3><small>{request.employeeTitle || "Employee"} · Request #{request.id}</small></div><span className={`request-status ${request.status}`}>{request.status}</span></div>
-            <div className="request-meta"><span><CalendarDays size={14} /> {dateLabel(request.dateFrom)}{request.dateTo !== request.dateFrom ? ` → ${dateLabel(request.dateTo)}` : ""}</span>{request.type === "leave" && <span>{leaveLabel(request.leaveKind)}{request.status === "approved" ? ` · ${request.leavePaid === false ? "Unpaid" : "Paid"}` : ""}</span>}{request.status==="approved" && !["leave","friday_exchange"].includes(request.type) && <span>{request.leavePaid===false?"Unpaid":"Paid / excused"}</span>}{request.startTime && <span><Clock3 size={14} /> {request.startTime}{request.endTime ? ` – ${request.endTime}` : ""}{request.durationMinutes ? ` · ${minutesLabel(request.durationMinutes)} requested` : request.type === "mission" ? ` · No eligible OT after ${timeLabel(state.overtimeStartsAt)}` : ""}</span>}</div>
+            <div className="request-meta"><span><CalendarDays size={14} /> {dateLabel(request.dateFrom)}{request.dateTo !== request.dateFrom ? ` → ${dateLabel(request.dateTo)}` : ""}</span>{request.type === "leave" && <span>{leaveLabel(request.leaveKind)}{request.status === "approved" ? ` · ${request.leavePaid === false ? "Unpaid" : "Paid"}` : ""}</span>}{request.type==="mission"&&<span>{request.dayType==="holiday"?"Holiday · ×2":"Normal working day · ×1"}</span>}{request.type==="leave"&&request.reason==="other"&&<span>Other reason</span>}{request.status==="approved" && !["leave","friday_exchange"].includes(request.type) && <span>{request.leavePaid===false?"Unpaid":"Paid / excused"}</span>}{request.startTime && <span><Clock3 size={14} /> {request.startTime}{request.endTime ? ` – ${request.endTime}` : ""}{request.durationMinutes ? ` · ${minutesLabel(request.durationMinutes)} requested` : request.type === "mission" ? ` · No eligible OT after ${timeLabel(state.overtimeStartsAt)}` : ""}</span>}</div>
             <p className="request-details">{request.details}</p>
             {request.hasAttachment && <a className="request-attachment" href={`/api/requests/attachment/${request.id}`} target="_blank" rel="noreferrer"><Paperclip size={14} /> {request.attachmentName || "View attachment"}</a>}
             <div className="request-route"><Route size={15} /><span>Sent by <strong>{request.requesterName}</strong></span><ArrowRight size={14} /><span>{request.assignedReviewerName ? <>Forwarded to <strong>{request.assignedReviewerName}</strong></> : <strong>Administrator</strong>}</span></div>
@@ -317,7 +323,7 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
             {state.isAdmin && request.status === "pending" && <label><span>Share for viewing</span><select value={request.assignedReviewerId ?? ""} disabled={saving} onChange={(event) => void mutate({ action: "assign", id: request.id, reviewerId: event.target.value ? Number(event.target.value) : null }, event.target.value ? "Request shared for viewing; the administrator still makes the decision." : "Request returned to administrator review.")}><option value="">Administrator only</option>{state.reviewers.filter((reviewer) => reviewer.id !== request.requesterUserId).map((reviewer) => <option key={reviewer.id} value={reviewer.id}>{reviewer.displayName} · {reviewer.roleLabel}</option>)}</select></label>}
             {canReview && <button className="table-review" onClick={() => { setReviewing(request); setDecisionNote(""); setReviewLeavePaid(request.leavePaid ?? true); }}><FileCheck2 size={15} /> Review request</button>}
             {ownRequest && request.status === "pending" && <button className="request-cancel" disabled={saving} onClick={() => window.confirm("Cancel this pending request?") && void mutate({ action: "cancel", id: request.id }, "Request cancelled.")}><X size={15} /> Cancel</button>}
-            {state.isAdmin && <button className="table-review" disabled={saving} onClick={()=>{if(request.isManual){showToast("Edit this request in Employees → Manual Requests to preserve its original category and payroll settings.");return;}setEditingRequest(request);setDraft({...blankDraft(),...request,attachmentBase64:""});setReviewLeavePaid(request.leavePaid??true);setCreateOpen(true);}}>{request.isManual?"Edit in Manual Requests":"Edit request"}</button>}
+            {state.isAdmin && <button className="table-review" disabled={saving} onClick={()=>{if(request.isManual){showToast("Edit this request in Employees → Manual Requests to preserve its original category and payroll settings.");return;}setBothOvertime(false);setEditingRequest(request);setDraft({...blankDraft(),...request,dayType:request.dayType||"normal",reason:request.reason||"normal",attachmentBase64:""});setReviewLeavePaid(request.leavePaid??true);setCreateOpen(true);}}>{request.isManual?"Edit in Manual Requests":"Edit request"}</button>}
             {state.isAdmin && <button className="request-cancel" disabled={saving} onClick={() => void deleteRequest(request)}><Trash2 size={15} /> Delete</button>}
           </div>
         </article></Fragment>;
@@ -326,14 +332,19 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
 
     {createOpen && <RequestModal title={editingRequest?`Edit request #${editingRequest.id}`:"Send a new request"} description={`This written request will be recorded for ${state.employeeName} and delivered to the administrator.`} onClose={() => {setCreateOpen(false);setEditingRequest(null);setDraft(blankDraft());}}>
       <form className="modal-form" onSubmit={createRequest}>
-        <div className="request-type-picker">{requestTypes.map((type) => <button type="button" key={type} className={draft.type === type ? "active" : ""} onClick={() => setDraft((current) => ({ ...current, type, dateTo: type === "leave" ? current.dateTo : current.dateFrom, startTime: "", endTime: "" }))}>{typeIcon(type, 18)}<span><strong>{requestLabel(type)}</strong><small>{requestDescription(type, state)}</small></span></button>)}</div>
+        <div className="request-type-picker">{requestCategories.map(({type,label})=><button type="button" key={type} className={categoryFor(draft.type)===type?"active":""} onClick={()=>{setBothOvertime(false);setDraft(current=>({...current,type,dateTo:current.dateFrom,startTime:type==="overtime"?"22:00":type==="early_leave"?"17:00":type==="mission"?"11:00":"",endTime:type==="overtime"?"23:00":type==="mission"?"19:00":""}));}}>{typeIcon(type,18)}<span><strong>{label}</strong><small>{requestDescription(type,state)}</small></span></button>)}</div>
+        {["early_leave","late_arrival"].includes(draft.type)&&<label className="field"><span>Permission type</span><select value={draft.type} onChange={e=>setDraft({...draft,type:e.target.value as EmployeeRequestType,startTime:e.target.value==="late_arrival"?"12:00":"17:00",endTime:""})}><option value="early_leave">Early departure · رحيل بدري</option><option value="late_arrival">Late arrival · قدوم متأخر</option></select></label>}
+        {["overtime","early_arrival"].includes(draft.type)&&<label className="field"><span>Overtime type</span><select value={bothOvertime?"both":draft.type} onChange={e=>{setBothOvertime(e.target.value==="both");setDraft({...draft,type:e.target.value==="early_arrival"?"early_arrival":"overtime",startTime:e.target.value==="early_arrival"?"09:00":"22:00",endTime:e.target.value==="early_arrival"?"11:00":"23:00"});}}><option value="overtime">Extra · after 22:00 · ×2</option><option value="early_arrival">Early · before 11:00 · ×2.5</option>{!editingRequest&&<option value="both">Both · Early + Extra</option>}</select>{bothOvertime&&<small>Two requests will be sent together. Submit at least one day in advance. Each needs administrator approval and can be edited separately.</small>}</label>}
+
         <div className="form-grid">
-          {draft.type === "leave" && <label className="field"><span>Leave type</span><select value={draft.leaveKind} onChange={(event) => setDraft({ ...draft, leaveKind: event.target.value as EmployeeLeaveKind })}>{leaveKinds.map((kind) => <option value={kind} key={kind}>{leaveLabel(kind)}</option>)}</select></label>}
-          <label className="field"><span>{draft.type === "friday_exchange" ? "Friday to work" : draft.type === "leave" ? "From date" : "Request date"}</span><input required type="date" min={editingRequest?undefined:today()} value={draft.dateFrom} onChange={(event) => setDraft({ ...draft, dateFrom: event.target.value, dateTo: draft.type === "leave" && draft.dateTo >= event.target.value ? draft.dateTo : event.target.value })} /></label>
+          {draft.type === "leave" && <><label className="field"><span>Reason</span><select value={draft.reason} onChange={e=>setDraft({...draft,reason:e.target.value as RequestDraft["reason"],leaveKind:e.target.value==="sick"?"sick_leave":"normal_leave"})}><option value="normal">Normal</option><option value="sick">Sick</option><option value="other">Other</option></select></label><label className="field"><span>Leave type</span><select value={draft.leaveKind} onChange={(event) => setDraft({ ...draft, leaveKind: event.target.value as EmployeeLeaveKind, reason:event.target.value==="sick_leave"?"sick":draft.reason==="sick"?"normal":draft.reason })}>{leaveKinds.map((kind) => <option value={kind} key={kind}>{leaveLabel(kind)}</option>)}</select></label></>}
+          <label className="field wide"><span>{draft.type === "friday_exchange" ? "Friday to work" : draft.type === "leave" ? "From date" : "Request date"}</span><input required type="date" min={editingRequest?undefined:today()} value={draft.dateFrom} onChange={(event) => setDraft({ ...draft, dateFrom: event.target.value, dateTo: draft.type === "leave" && draft.dateTo >= event.target.value ? draft.dateTo : event.target.value })} /></label>
           {["leave","friday_exchange"].includes(draft.type) && <label className="field"><span>{draft.type==="friday_exchange"?"Replacement day off":"To date"}</span><input required type="date" min={draft.type==="leave"?draft.dateFrom:undefined} value={draft.dateTo} onChange={(event) => setDraft({ ...draft, dateTo: event.target.value })} /></label>}
           {["early_leave","late_arrival"].includes(draft.type) && <label className="field"><span>{draft.type==="late_arrival"?"Arrival time":"Leaving time"}</span><input required type="time" value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label>}
-          {draft.type === "early_arrival" && <label className="field"><span>Early arrival time</span><input required type="time" max={state.workdayStartsAt} value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label>}
+          {draft.type === "early_arrival" && <><label className="field"><span>Early · from</span><input required type="time" max={state.workdayStartsAt} value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label><label className="field"><span>Early · to</span><input type="time" required max={state.workdayStartsAt} value={draft.endTime||state.workdayStartsAt} onChange={e=>setDraft({...draft,endTime:e.target.value})}/></label></>}
           {(draft.type === "mission" || draft.type === "overtime") && <><label className="field"><span>{draft.type === "mission" ? "Mission" : "Overtime"} starts</span><input required type="time" value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label><label className="field"><span>{draft.type === "mission" ? "Mission" : "Overtime"} ends</span><input required type="time" value={draft.endTime} onChange={(event) => setDraft({ ...draft, endTime: event.target.value })} /></label></>}
+          {bothOvertime&&!editingRequest&&<><label className="field"><span>Early · from</span><input type="time" required max={state.workdayStartsAt} value={earlyTimes.startTime} onChange={e=>setEarlyTimes({...earlyTimes,startTime:e.target.value})}/></label><label className="field"><span>Early · to</span><input type="time" required max={state.workdayStartsAt} value={earlyTimes.endTime} onChange={e=>setEarlyTimes({...earlyTimes,endTime:e.target.value})}/></label></>}
+          {draft.type==="mission"&&<label className="field"><span>Working day or holiday</span><select value={draft.dayType} onChange={e=>setDraft({...draft,dayType:e.target.value as RequestDraft["dayType"]})}><option value="normal">Normal working day · ×1</option><option value="holiday">Holiday · ×2</option></select></label>}
           <label className="field wide"><span>Reason & task details</span><textarea required minLength={5} rows={5} value={draft.details} onChange={(event) => setDraft({ ...draft, details: event.target.value })} placeholder={draft.type === "mission" ? "Where is the mission, for which client/project, and what work will be completed?" : draft.type === "early_arrival" ? "Describe the urgent task agreed with your manager." : "Explain the reason and all information the reviewer needs."} /></label>
           <label className="field wide"><span>Attachment <small>PDF, JPG or PNG · maximum 3 MB</small></span><input type="file" accept="application/pdf,image/jpeg,image/png" onChange={(event) => void chooseAttachment(event.target.files?.[0])} />{draft.attachmentName && <small className="field-hint"><Paperclip size={13} /> {draft.attachmentName}</small>}</label>
         </div>
@@ -345,6 +356,8 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
 
     {reviewing && <RequestModal title={`Review request #${reviewing.id}`} description={`${reviewing.employeeName} · ${requestLabel(reviewing.type)} · ${dateLabel(reviewing.dateFrom)}`} onClose={() => setReviewing(null)}>
       <div className="request-review-summary"><span className={`request-type-icon ${reviewing.type}`}>{typeIcon(reviewing.type, 20)}</span><div><strong>{reviewing.details}</strong><p>{reviewing.type === "friday_exchange" ? `Work: ${dateLabel(reviewing.dateFrom)} · Day off: ${dateLabel(reviewing.dateTo)}` : reviewing.type === "leave" ? `${leaveLabel(reviewing.leaveKind)} · ${dateLabel(reviewing.dateFrom)} → ${dateLabel(reviewing.dateTo)}` : reviewing.startTime ? `${reviewing.startTime}${reviewing.endTime ? ` – ${reviewing.endTime}` : ""}` : ""}{reviewing.durationMinutes ? ` · ${minutesLabel(reviewing.durationMinutes)} eligible` : ""}</p></div></div>
+      {reviewing.type==="mission"&&<p className="request-payroll-note">{reviewing.dayType==="holiday"?"Holiday assignment · hours ×2":"Normal working day · additional assignment hours ×1"}</p>}
+      {reviewing.type==="leave"&&reviewing.reason==="other"&&<p>Absence reason: Other</p>}
       {reviewing.hasAttachment && <a className="request-attachment review" href={`/api/requests/attachment/${reviewing.id}`} target="_blank" rel="noreferrer"><Paperclip size={15} /> Open {reviewing.attachmentName || "attachment"}</a>}
       {reviewing.type !== "friday_exchange" && <label className="field"><span>Payroll treatment <small>Chosen by the reviewer</small></span><select value={reviewLeavePaid ? "paid" : "unpaid"} onChange={(event) => setReviewLeavePaid(event.target.value === "paid")}><option value="paid">Paid / excused · include eligible pay</option><option value="unpaid">Unpaid · no additional pay / normal deduction</option></select></label>}
       <label className="field"><span>Decision note <small>Visible to the employee</small></span><textarea rows={4} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} placeholder="Add the manager's approval note, or explain the rejection." /></label>

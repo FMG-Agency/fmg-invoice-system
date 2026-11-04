@@ -434,6 +434,8 @@ export type EmployeeLeaveKind = "vacation" | "occasional_leave" | "resort_leave"
 
 export type EmployeeRequest = {
   isManual?: boolean;
+  dayType?: "normal" | "holiday";
+  reason?: "sick" | "normal" | "other";
   id: number;
   employeeId: number;
   employeeName: string;
