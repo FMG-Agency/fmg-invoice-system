@@ -17,7 +17,7 @@ const dateValue = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value=>{const d
 const timeValue = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const optionalTime = z.union([timeValue, z.literal("")]);
 const requestData = z.object({
-  type: z.enum(["leave", "early_leave", "late_arrival", "friday_exchange", "mission", "overtime", "early_arrival"]),
+  type: z.enum(["leave", "early_leave", "late_arrival", "friday_exchange", "friday_work", "mission", "overtime", "early_arrival"]),
   leaveKind: z.enum(["vacation", "occasional_leave", "resort_leave", "sick_leave", "urgent_leave", "normal_leave"]),
   dateFrom: dateValue,
   dateTo: dateValue,
@@ -53,6 +53,7 @@ const defaultPolicy: RequestPolicy = {
 };
 
 const requestTypeLabels: Record<EmployeeRequest["type"], string> = {
+  friday_work: "Friday work",
   friday_exchange: "Friday exchange",
   leave: "leave request",
   late_arrival: "late-arrival permission",
@@ -134,6 +135,7 @@ function minutesFromTime(value: string) {
 
 function durationForRequest(data: z.infer<typeof requestData>, policy: RequestPolicy) {
   if(data.type === "friday_exchange") { manualRequestSchema.parse(requestOverlay(data,true)); return 0; }
+  if(data.type === "friday_work" && new Date(data.dateFrom+"T12:00:00Z").getUTCDay()!==5) throw new Error("Friday work requires a Friday date.");
   const dates = datesBetween(data.dateFrom, data.dateTo);
   if (data.type !== "leave" && dates.length !== 1) throw new Error("Attendance requests must be for one day.");
   if (["early_leave","late_arrival"].includes(data.type) && !data.startTime) throw new Error("Enter the time you left or plan to leave.");
@@ -151,7 +153,7 @@ function durationForRequest(data: z.infer<typeof requestData>, policy: RequestPo
   const end = minutesFromTime(data.endTime);
   const duration = end - start + (data.type === "overtime" && end <= start && end <= 360 ? 1440 : 0);
   if (duration <= 0 || duration > 16 * 60) throw new Error("End time must be after the start time.");
-  return data.type === "mission" ? duration : Math.max(0, start + duration - Math.max(start, minutesFromTime(policy.overtimeStartsAt)));
+  return ["mission","friday_work"].includes(data.type) ? duration : Math.max(0, start + duration - Math.max(start, minutesFromTime(policy.overtimeStartsAt)));
 }
 
 function cairoNow() {
@@ -372,7 +374,7 @@ export async function POST(request: Request) {
         const duration=durationForRequest(data,policy);durations.push(duration);
         await assertExchangeAvailable(session.employeeId,requestOverlay(data,true));
         if(data.type==='overtime' && (duration<=0 || data.startTime<policy.overtimeApprovalAfter)) throw new Error('Extra overtime starts at '+policy.overtimeApprovalAfter+' or later.');
-        if(['mission','overtime','early_arrival'].includes(data.type)){
+        if(['mission','friday_work','overtime','early_arrival'].includes(data.type)){
           const overlap=await database.prepare("SELECT id FROM employee_requests WHERE employee_id=? AND type=? AND date_from=? AND status IN ('pending','approved') AND (CAST(substr(start_time,1,2) AS INTEGER)*60+CAST(substr(start_time,4,2) AS INTEGER))<? AND (CAST(substr(start_time,1,2) AS INTEGER)*60+CAST(substr(start_time,4,2) AS INTEGER)+duration_minutes)>? LIMIT 1")
             .bind(session.employeeId,data.type,data.dateFrom,minutesFromTime(data.startTime)+duration,minutesFromTime(data.startTime)).first();
           if(overlap)return accessError(409,'This request overlaps another pending or approved request.');

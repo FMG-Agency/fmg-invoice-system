@@ -118,4 +118,18 @@ test('Employee request reviews and Friday exchanges reach payroll safely',async 
     const sick=await call({action:'create',data:draft({leaveKind:'sick_leave',dateFrom:'2025-09-01',dateTo:'2025-09-05'})},employee);assert.equal(sick.status,400);
   });
 
+  await t.test('Friday work is separate from exchange, pays actual hours once and requires admin approval',async()=>{
+    const data=draft({type:'friday_work',dateFrom:'2025-10-03',dateTo:'2025-10-03',startTime:'11:00',endTime:'15:00'});
+    const invalid=await call({action:'create',data:{...data,dateFrom:'2025-10-04',dateTo:'2025-10-04'}},employee);assert.equal(invalid.status,400);
+    const result=await call({action:'create',data},employee);assert.equal(result.status,200,JSON.stringify(result));
+    const request=result.requests.find(r=>r.dateFrom==='2025-10-03');assert.equal(request.type,'friday_work');assert.equal(request.durationMinutes,240);assert.equal(request.status,'pending');
+    assert.equal((await app.getHrState('2025-10')).attendance.length,0);
+    await db.prepare("INSERT INTO attendance_records(employee_id,work_date,first_in,last_out,status) VALUES(1,'2025-10-03','11:00','19:00','present')").run();
+    let saved=await decide(request.id);let state=await app.getHrState('2025-10');let record=state.attendance[0];
+    assert.equal(record.paidWeekendMinutes,240);assert.equal(record.overtimePay,480);assert.equal(record.fridayPay,0);assert.equal(record.isRestDay,undefined);
+    const edited=await call({action:'edit',id:request.id,version:saved.updatedAt,data,leavePaid:false});assert.equal(edited.status,200);
+    state=await app.getHrState('2025-10');assert.equal(state.attendance[0].overtimePay,0);assert.equal(state.attendance[0].fridayPay,0);
+    assert.equal((await call({action:'create',data},employee)).status,409);
+  });
+
 });

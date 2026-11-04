@@ -55,7 +55,7 @@ type RequestDraft = {
   attachmentBase64: string;
 };
 
-const requestCategories = [{type:"early_leave",label:"Arrival / departure permission"},{type:"leave",label:"Absence permission"},{type:"overtime",label:"Overtime"},{type:"friday_exchange",label:"Friday exchange"},{type:"mission",label:"Assignment / mission"}] as const;
+const requestCategories = [{type:"early_leave",label:"Arrival / departure permission"},{type:"leave",label:"Absence permission"},{type:"overtime",label:"Overtime"},{type:"friday_work",label:"Friday work"},{type:"friday_exchange",label:"Friday exchange"},{type:"mission",label:"Assignment / mission"}] as const;
 const categoryFor = (type:EmployeeRequestType) => type==="late_arrival"?"early_leave":type==="early_arrival"?"overtime":type;
 const leaveKinds: EmployeeLeaveKind[] = ["vacation", "occasional_leave", "resort_leave", "sick_leave", "urgent_leave", "normal_leave"];
 
@@ -81,6 +81,7 @@ function blankDraft(): RequestDraft {
 
 function requestLabel(type: EmployeeRequestType) {
   return {
+    friday_work: "Friday work",
     friday_exchange: "Friday exchange",
     leave: "Leave request",
     late_arrival: "Late arrival permission", early_leave: "Early-leave excuse",
@@ -103,6 +104,7 @@ function leaveLabel(kind: EmployeeLeaveKind) {
 
 function requestDescription(type: EmployeeRequestType, state: RequestsState) {
   return {
+    friday_work: "Friday hours ×2 after approval",
     friday_exchange: "Work Friday and take another day off",
     leave: "Administrator chooses paid or unpaid",
     early_leave: "Approval prevents the half-day deduction",
@@ -143,6 +145,7 @@ function typeIcon(type: EmployeeRequestType, size: number) {
 }
 
 function policyNote(draft: RequestDraft, state: RequestsState) {
+  if(draft.type === "friday_work") return "Choose a Friday and the hours worked. Paid approval adds the actual hours ×2 to Paid weekend in attendance, without exchanging your day off. Past Fridays are allowed.";
   if(draft.dateFrom < today()) return "Past dates are allowed. This request stays pending until an administrator reviews it; only approved requests affect attendance and payroll. Any required medical report must still be attached.";
   if (draft.type === "friday_exchange") return "Friday becomes a normal working day. The replacement date becomes your weekly paid day off, after administrator approval.";
   if (draft.type === "late_arrival") return "Administrator approval excuses the late-arrival deduction when marked paid.";
@@ -283,7 +286,7 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
 
   const approved = state.requests.filter((request) => request.status === "approved").length;
   const approvedOvertime = state.requests
-    .filter((request) => request.status === "approved" && ["mission", "overtime", "early_arrival"].includes(request.type))
+    .filter((request) => request.status === "approved" && ["mission", "friday_work", "overtime", "early_arrival"].includes(request.type))
     .reduce((sum, request) => sum + request.durationMinutes, 0);
   const canCreate = Boolean(state.employeeId);
 
@@ -333,7 +336,7 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
 
     {createOpen && <RequestModal title={editingRequest?`Edit request #${editingRequest.id}`:"Send a new request"} description={`This written request will be recorded for ${state.employeeName} and delivered to the administrator.`} onClose={() => {setCreateOpen(false);setEditingRequest(null);setDraft(blankDraft());}}>
       <form className="modal-form" onSubmit={createRequest}>
-        <div className="request-type-picker">{requestCategories.map(({type,label})=><button type="button" key={type} className={categoryFor(draft.type)===type?"active":""} onClick={()=>{setBothOvertime(false);setDraft(current=>({...current,type,dateTo:current.dateFrom,startTime:type==="overtime"?"22:00":type==="early_leave"?"17:00":type==="mission"?"11:00":"",endTime:type==="overtime"?"23:00":type==="mission"?"19:00":""}));}}>{typeIcon(type,18)}<span><strong>{label}</strong><small>{requestDescription(type,state)}</small></span></button>)}</div>
+        <div className="request-type-picker">{requestCategories.map(({type,label})=><button type="button" key={type} className={categoryFor(draft.type)===type?"active":""} onClick={()=>{setBothOvertime(false);setDraft(current=>({...current,type,dateTo:current.dateFrom,startTime:type==="overtime"?"22:00":type==="early_leave"?"17:00":["mission","friday_work"].includes(type)?"11:00":"",endTime:type==="overtime"?"23:00":["mission","friday_work"].includes(type)?"19:00":""}));}}>{typeIcon(type,18)}<span><strong>{label}</strong><small>{requestDescription(type,state)}</small></span></button>)}</div>
         {["early_leave","late_arrival"].includes(draft.type)&&<label className="field"><span>Permission type</span><select value={draft.type} onChange={e=>setDraft({...draft,type:e.target.value as EmployeeRequestType,startTime:e.target.value==="late_arrival"?"12:00":"17:00",endTime:""})}><option value="early_leave">Early departure · رحيل بدري</option><option value="late_arrival">Late arrival · قدوم متأخر</option></select></label>}
         {["overtime","early_arrival"].includes(draft.type)&&<label className="field"><span>Overtime type</span><select value={bothOvertime?"both":draft.type} onChange={e=>{setBothOvertime(e.target.value==="both");setDraft({...draft,type:e.target.value==="early_arrival"?"early_arrival":"overtime",startTime:e.target.value==="early_arrival"?"09:00":"22:00",endTime:e.target.value==="early_arrival"?"11:00":"23:00"});}}><option value="overtime">Extra · after 22:00 · ×2</option><option value="early_arrival">Early · before 11:00 · ×2.5</option>{!editingRequest&&<option value="both">Both · Early + Extra</option>}</select>{bothOvertime&&<small>Two requests will be sent together. Past dates are allowed; upcoming early work requires one day’s notice. Each needs administrator approval and can be edited separately.</small>}</label>}
 
@@ -343,7 +346,7 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
           {["leave","friday_exchange"].includes(draft.type) && <label className="field"><span>{draft.type==="friday_exchange"?"Replacement day off":"To date"}</span><input required type="date" min={draft.type==="leave"?draft.dateFrom:undefined} value={draft.dateTo} onChange={(event) => setDraft({ ...draft, dateTo: event.target.value })} /></label>}
           {["early_leave","late_arrival"].includes(draft.type) && <label className="field"><span>{draft.type==="late_arrival"?"Arrival time":"Leaving time"}</span><input required type="time" value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label>}
           {draft.type === "early_arrival" && <><label className="field"><span>Early · from</span><input required type="time" max={state.workdayStartsAt} value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label><label className="field"><span>Early · to</span><input type="time" required max={state.workdayStartsAt} value={draft.endTime||state.workdayStartsAt} onChange={e=>setDraft({...draft,endTime:e.target.value})}/></label></>}
-          {(draft.type === "mission" || draft.type === "overtime") && <><label className="field"><span>{draft.type === "mission" ? "Mission" : "Overtime"} starts</span><input required type="time" value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label><label className="field"><span>{draft.type === "mission" ? "Mission" : "Overtime"} ends</span><input required type="time" value={draft.endTime} onChange={(event) => setDraft({ ...draft, endTime: event.target.value })} /></label></>}
+          {["mission","friday_work","overtime"].includes(draft.type) && <><label className="field"><span>{draft.type === "friday_work" ? "Friday work" : draft.type === "mission" ? "Mission" : "Overtime"} starts</span><input required type="time" value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label><label className="field"><span>{draft.type === "mission" ? "Mission" : "Overtime"} ends</span><input required type="time" value={draft.endTime} onChange={(event) => setDraft({ ...draft, endTime: event.target.value })} /></label></>}
           {bothOvertime&&!editingRequest&&<><label className="field"><span>Early · from</span><input type="time" required max={state.workdayStartsAt} value={earlyTimes.startTime} onChange={e=>setEarlyTimes({...earlyTimes,startTime:e.target.value})}/></label><label className="field"><span>Early · to</span><input type="time" required max={state.workdayStartsAt} value={earlyTimes.endTime} onChange={e=>setEarlyTimes({...earlyTimes,endTime:e.target.value})}/></label></>}
           {draft.type==="mission"&&<label className="field"><span>Working day or holiday</span><select value={draft.dayType} onChange={e=>setDraft({...draft,dayType:e.target.value as RequestDraft["dayType"]})}><option value="normal">Normal working day · ×1</option><option value="holiday">Holiday · ×2</option></select></label>}
           <label className="field wide"><span>Reason & task details</span><textarea required minLength={5} rows={5} value={draft.details} onChange={(event) => setDraft({ ...draft, details: event.target.value })} placeholder={draft.type === "mission" ? "Where is the mission, for which client/project, and what work will be completed?" : draft.type === "early_arrival" ? "Describe the urgent task agreed with your manager." : "Explain the reason and all information the reviewer needs."} /></label>

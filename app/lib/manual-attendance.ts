@@ -108,7 +108,7 @@ export function manualAttendance(source: Source, requests: ManualRequest[], empl
   result.earlyMissionMinutes = sum(early);
   result.totalMissionMinutes = result.normalMissionMinutes + result.earlyMissionMinutes + result.paidWeekendMissionMinutes;
   result.overtimePay = round(result.totalMissionMinutes * rate);
-  result.fridayPay = round(Math.max(friday && hasPunches && !result.paidWeekendMinutes ? result.fridayPay : 0, sum(holiday)*rate));
+  result.fridayPay = round(Math.max(friday && hasPunches && !missions.some(r => r.type === "paid_weekend") ? result.fridayPay : 0, sum(holiday)*rate));
   return {...record,...result, overtimeApproved: record.overtimeApproved || requests.some(r => r.type === "overtime" && r.leavePaid !== false), earlyOvertimeApproved: record.earlyOvertimeApproved || requests.some(r => r.type === "early_arrival" && r.leavePaid !== false)};
 }
 

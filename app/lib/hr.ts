@@ -95,7 +95,7 @@ const hrSchemaStatements = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     employee_id INTEGER NOT NULL REFERENCES employees(id),
     requester_user_id INTEGER NOT NULL REFERENCES auth_users(id),
-    type TEXT NOT NULL CHECK(type IN ('leave','early_leave','mission','overtime','early_arrival','late_arrival','friday_exchange')),
+    type TEXT NOT NULL CHECK(type IN ('leave','early_leave','mission','overtime','early_arrival','late_arrival','friday_exchange','friday_work')),
     leave_kind TEXT NOT NULL DEFAULT 'vacation' CHECK(leave_kind IN ('vacation','occasional_leave','resort_leave','sick_leave','urgent_leave','normal_leave')),
     date_from TEXT NOT NULL,
     date_to TEXT NOT NULL,
@@ -130,7 +130,7 @@ const hrSchemaStatements = [
 
 export async function ensureEmployeeRequestPolicySchema() {
   const table = await database.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'employee_requests'").first<{ sql: string }>();
-  if (!table || (table.sql.includes("'overtime'") && table.sql.includes("'resort_leave'") && table.sql.includes("'friday_exchange'") && table.sql.includes("'late_arrival'"))) return;
+  if (!table || (table.sql.includes("'overtime'") && table.sql.includes("'resort_leave'") && table.sql.includes("'friday_exchange'") && table.sql.includes("'friday_work'") && table.sql.includes("'late_arrival'"))) return;
   const columns = await database.prepare("PRAGMA table_info(employee_requests)").all<Record<string, unknown>>();
   const names = new Set(columns.results.map((column) => String(column.name)));
   const manualData = names.has("manual_data") ? "manual_data" : "''";
@@ -142,7 +142,7 @@ export async function ensureEmployeeRequestPolicySchema() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       employee_id INTEGER NOT NULL REFERENCES employees(id),
       requester_user_id INTEGER NOT NULL REFERENCES auth_users(id),
-      type TEXT NOT NULL CHECK(type IN ('leave','early_leave','mission','overtime','early_arrival','late_arrival','friday_exchange')),
+      type TEXT NOT NULL CHECK(type IN ('leave','early_leave','mission','overtime','early_arrival','late_arrival','friday_exchange','friday_work')),
       leave_kind TEXT NOT NULL DEFAULT 'vacation' CHECK(leave_kind IN ('vacation','occasional_leave','resort_leave','sick_leave','urgent_leave','normal_leave')),
       date_from TEXT NOT NULL, date_to TEXT NOT NULL, start_time TEXT NOT NULL DEFAULT '', end_time TEXT NOT NULL DEFAULT '',
       duration_minutes INTEGER NOT NULL DEFAULT 0, leave_paid INTEGER, details TEXT NOT NULL,
