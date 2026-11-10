@@ -1250,3 +1250,16 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; -
 
 .request-modal .form-grid > .field.wide { grid-column:1 / -1; }
 .request-modal .field > small { font-weight:400; line-height:1.5; margin-top:6px; }
+
+/* Use the available workspace width, including when the desktop sidebar is open. */
+.page-wrap[data-layout]:not([data-layout="wide"]) :is(.toolbar,.filters-row,.page-heading,.hr-commandbar,.hr-command-actions) { flex-wrap:wrap; }
+.page-wrap[data-layout]:not([data-layout="wide"]) :is(.dashboard-grid,.editor-layout) { grid-template-columns:minmax(0,1fr); }
+.page-wrap[data-layout]:not([data-layout="wide"]) .stats-grid { grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr)); }
+.page-wrap[data-layout]:not([data-layout="wide"]) :is(.filter-search,.filters-row select,.toolbar > *) { min-width:0; max-width:100%; }
+.page-wrap[data-layout="small"] :is(.form-grid,.request-summary-grid) { grid-template-columns:minmax(0,1fr); }
+.table-scroll,.items-table-wrap { max-width:100%; min-width:0; overscroll-behavior-x:contain; }
+.horizontal-scroll-control { box-sizing:border-box; position:fixed; z-index:110; height:36px; display:flex; align-items:center; gap:6px; padding:2px 4px; border:1px solid var(--line-strong); border-radius:20px; background:var(--surface); color:var(--ink); box-shadow:0 3px 16px #0003; }
+.horizontal-scroll-control button { flex:0 0 30px; height:30px; display:grid; place-items:center; border:0; border-radius:50%; background:var(--surface-2); color:inherit; cursor:pointer; }
+.horizontal-scroll-control button:disabled { opacity:.35; }
+.horizontal-scroll-control input { flex:1; min-width:0; height:26px; accent-color:var(--yellow-ink); cursor:ew-resize; }
+@media print { .horizontal-scroll-control { display:none!important; } }
