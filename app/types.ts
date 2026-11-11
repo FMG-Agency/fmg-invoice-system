@@ -497,7 +497,7 @@ export type RequestsState = {
   pendingCount: number;
 };
 
-export type NotificationTargetView = "client-portal-admin" | "dashboard" | "work-order" | "requests" | "tasks";
+export type NotificationTargetView = "standard-tasks" | "client-portal-admin" | "dashboard" | "work-order" | "requests" | "tasks";
 
 export type SystemNotification = {
   id: number;

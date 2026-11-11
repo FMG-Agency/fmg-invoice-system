@@ -12,12 +12,12 @@ test("portal owners see assigned active clients and schedule one designer task p
     "client-accounts": "export const ensureClientAccountsDatabase=()=>{}; export const getClientAccount=id=>({client:{id},invoices:[],summaries:[]});",
     "notifications": "export const notifyUsers=ids=>globalThis.recipient=ids;",
   };
-  await build({ stdin:{contents:"export * from './app/api/client-portal/route';export {database} from './app/lib/database';export {getTasksState} from './app/lib/tasks';", resolveDir:process.cwd()}, outfile:fileURLToPath(bundle),bundle:true,platform:"node",format:"esm",packages:"external",
+  await build({ stdin:{contents:"export * from './app/api/client-portal/route';export {database} from './app/lib/database';export {getTasksState} from './app/lib/tasks';export {prepareStandardMonth} from './app/lib/standard-tasks';", resolveDir:process.cwd()}, outfile:fileURLToPath(bundle),bundle:true,platform:"node",format:"esm",packages:"external",
     plugins:[{name:"portal-fixture",setup(api){
       api.onResolve({filter:/\/(auth-server|client-accounts|notifications)$/},args=>({path:args.path.split("/").pop(),namespace:"mock"}));
       api.onLoad({filter:/.*/,namespace:"mock"},args=>({contents:mocks[args.path]}));
     }}]});
-  const {database:db,POST,GET,getTasksState}=await import(bundle.href);
+  const {database:db,POST,GET,getTasksState,prepareStandardMonth}=await import(bundle.href);
   const fields="name company_name owner_name phone email address notes agency_key lifecycle_status activity start_date payment_schedule monthly_fee contract_status relationship_stage created_at updated_at".split(" ");
   await db.prepare("CREATE TABLE clients(id INTEGER PRIMARY KEY,"+fields.map(f=>f+" TEXT").join(",")+")").run();
   await db.prepare("CREATE TABLE documents(client_id INTEGER,date TEXT,type TEXT)").run();
@@ -50,4 +50,18 @@ test("portal owners see assigned active clients and schedule one designer task p
   assert.equal(tasks.length,1);
   assert.equal(tasks[0].planTask,true);
   assert.equal(tasks[0].assignedUsers[0].id,4);
+  assert.equal((await getTasksState(globalThis.viewer,"regular")).tasks.length,0);
+  await db.prepare("UPDATE agency_tasks SET status='submitted' WHERE id=?").bind(tasks[0].id).run();
+  await prepareStandardMonth("2026-12");
+  await prepareStandardMonth("2026-12");
+  const december=(await getTasksState(globalThis.viewer,"2026-12")).tasks;
+  assert.equal(december.length,1);
+  assert.equal(december[0].startAt,"2026-12-12T11:00");
+  assert.equal(december[0].deadlineAt,"2026-12-14T19:00");
+  assert.equal(december[0].status,"assigned");
+  assert.equal((await getTasksState(globalThis.viewer,"2026-11")).tasks[0].status,"submitted");
+  login(3,"Account Manager");
+  assert.equal((await getTasksState(globalThis.viewer,"2026-12")).tasks.length,0);
+  login(2,"Operation Manager");
+  assert.equal((await getTasksState(globalThis.viewer,"2026-12")).tasks.length,1);
 });

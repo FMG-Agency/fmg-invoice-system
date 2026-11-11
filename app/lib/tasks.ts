@@ -5,6 +5,7 @@ import type { AuthSession } from "./auth-server";
 const CAIRO_TIME_ZONE = "Africa/Cairo";
 
 const taskSchema = [
+  `CREATE TABLE IF NOT EXISTS skipped_plan_months (slot TEXT PRIMARY KEY)`, 
   `CREATE TABLE IF NOT EXISTS agency_tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
@@ -44,7 +45,7 @@ let tasksDatabaseReady: Promise<void> | null = null;
 export async function ensureTasksDatabase() {
   tasksDatabaseReady ??= database.batch(taskSchema.map((statement) => database.prepare(statement))).then(async () => {
     const columns = (await database.prepare("PRAGMA table_info(agency_tasks)").all<{name:string}>()).results;
-    for (const [name, value] of [["plan_slot", ""], ["individual_tracking", ""], ["grid_post_notes_json", "[]"], ["task_notes", ""], ["grid_cells_json", "[]"], ["assigned_users_json", "[]"], ["submission_method", "link"], ["submission_notes", ""], ["submitted_by_name", ""]]) {
+    for (const [name, value] of [["plan_generated", ""], ["plan_slot", ""], ["individual_tracking", ""], ["grid_post_notes_json", "[]"], ["task_notes", ""], ["grid_cells_json", "[]"], ["assigned_users_json", "[]"], ["submission_method", "link"], ["submission_notes", ""], ["submitted_by_name", ""]]) {
       if (columns.some(c => c.name === name)) continue;
       try { await database.prepare(`ALTER TABLE agency_tasks ADD COLUMN ${name} TEXT NOT NULL DEFAULT '${value}'`).run(); }
       catch(error) { if (!/duplicate column/i.test(String(error))) throw error; }
@@ -214,14 +215,24 @@ export async function taskAssignees(session: AuthSession): Promise<TaskAssignee[
   }));
 }
 
-export async function getTasksState(session: AuthSession): Promise<TasksState> {
+export async function getTasksState(session: AuthSession, calendar?: string): Promise<TasksState> {
   const role = taskWorkflowRole(session);
   const assignedAccess = "(t.assigned_user_id = ? OR EXISTS (SELECT 1 FROM json_each(t.assigned_users_json) a WHERE json_extract(a.value, '$.id') = ?))";
-  const accessWhere = role === "administrator" || role === "operation_manager"
+  let accessWhere = role === "administrator" || role === "operation_manager"
     ? "1 = 1"
     : role === "account_manager"
       ? `(${assignedAccess} OR t.created_by_user_id = ?)`
       : `(${assignedAccess} OR t.created_by_user_id = ?)`;
+  let selection = "";
+  if (calendar === "regular") selection = " AND t.plan_slot=''";
+  else if (calendar && /^(20\d\d|2100)-(0[1-9]|1[0-2])$/.test(calendar)) {
+    const [year,month] = calendar.split("-").map(Number);
+    const planner = !session.isAdmin && await database.prepare("SELECT 1 FROM portal_planners WHERE user_id=?").bind(session.userId).first();
+    if (planner) {
+      accessWhere = `(t.assigned_user_id=${Number(session.userId)} OR EXISTS (SELECT 1 FROM portal_client_managers m WHERE m.client_id=CAST(t.plan_slot AS INTEGER) AND m.manager_id=${Number(session.userId)}))`;
+    }
+    selection = ` AND t.plan_slot LIKE '%/${year}/${month}/%'`;
+  }
   const query = database.prepare(`SELECT (SELECT json_group_array(json_object('userId',s.user_id,'userName',s.user_name,'part',s.part,'method',s.method,'url',s.url,'notes',s.notes,'submittedAt',s.submitted_at,'lateMinutes',s.late_minutes)) FROM task_submissions s WHERE s.task_id=t.id) AS submissionsJson, t.grid_post_notes_json AS gridPostNotesJson, t.task_notes AS taskNotes, t.grid_cells_json AS gridCellsJson, t.assigned_users_json AS assignedUsersJson, t.submission_method AS submissionMethod, t.submission_notes AS submissionNotes, t.submitted_by_name AS submittedByName, t.id, t.plan_slot AS planSlot, t.title, t.details, t.brief, t.grid_notes AS gridNotes,
       t.references_json AS referencesJson, t.start_at AS startAt, t.deadline_at AS deadlineAt,
       t.assigned_user_id AS assignedUserId, t.assigned_user_name AS assignedUserName,
@@ -229,10 +240,10 @@ export async function getTasksState(session: AuthSession): Promise<TasksState> {
       t.created_by_name AS createdByName, t.created_by_role AS createdByRole, t.status,
       t.submission_url AS submissionUrl, t.submitted_at AS submittedAt, t.late_minutes AS lateMinutes,
       t.created_at AS createdAt, t.updated_at AS updatedAt
-    FROM agency_tasks t WHERE ${accessWhere}
+    FROM agency_tasks t WHERE ${accessWhere}${selection}
     ORDER BY CASE t.status WHEN 'assigned' THEN 0 ELSE 1 END, t.deadline_at ASC, t.id DESC
     LIMIT 1000`);
-  const rows = role === "administrator" || role === "operation_manager"
+  const rows = !accessWhere.includes("?")
     ? await query.all<Record<string, unknown>>()
     : role === "account_manager"
       ? await query.bind(session.userId, session.userId, session.userId).all<Record<string, unknown>>()

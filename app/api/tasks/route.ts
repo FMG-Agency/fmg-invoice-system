@@ -1,6 +1,8 @@
 import { archiveStatement } from '../../lib/trash';
 import { z } from "zod";
 import { ensureAuthDatabase, getSession, requirePermission } from "../../lib/auth-server";
+import { prepareStandardMonth } from "../../lib/standard-tasks";
+import { ensureClientPortalDatabase } from "../../lib/client-portal";
 import { administratorUserIds, notifyUsers, workflowRecipientUserIds } from "../../lib/notifications";
 import { database } from "../../lib/database";
 import {
@@ -56,6 +58,11 @@ function errorResponse(error: unknown) {
   return Response.json({ error: message }, { status: error instanceof z.ZodError ? 400 : 500 });
 }
 
+function taskCalendar(request: Request) {
+  const month = new URL(request.url).searchParams.get("month");
+  return month && /^(20\d\d|2100)-(0[1-9]|1[0-2])$/.test(month) ? month : "regular";
+}
+
 export async function GET(request: Request) {
   try {
     const authError = await requirePermission(request, "tasks");
@@ -63,7 +70,12 @@ export async function GET(request: Request) {
     await ensureTasksDatabase();
     const session = await getSession(request);
     if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
-    return Response.json(await getTasksState(session));
+    const calendar = taskCalendar(request);
+    if (calendar !== "regular") {
+      await ensureClientPortalDatabase();
+      await prepareStandardMonth(calendar);
+    }
+    return Response.json(await getTasksState(session,calendar));
   } catch (error) {
     return errorResponse(error);
   }
@@ -86,13 +98,13 @@ export async function POST(request: Request) {
 
     if (payload.action === "delete") {
       if (!session.isAdmin) return Response.json({ error: "Only administrators can delete tasks." }, { status: 403 });
-      const deleted = await database.batch([await archiveStatement("agency_tasks", "id = ?", [payload.id], session), database.prepare("DELETE FROM task_submissions WHERE task_id = ?").bind(payload.id), database.prepare("DELETE FROM agency_tasks WHERE id = ?").bind(payload.id)]);
-      if (!Number(deleted[2].rowsAffected)) return Response.json({ error: "Task not found." }, { status: 404 });
-      return Response.json(await getTasksState(session));
+      const deleted = await database.batch([await archiveStatement("agency_tasks", "id = ?", [payload.id], session), database.prepare("INSERT OR IGNORE INTO skipped_plan_months(slot) SELECT plan_slot FROM agency_tasks WHERE id=? AND plan_slot<>''").bind(payload.id), database.prepare("DELETE FROM task_submissions WHERE task_id = ?").bind(payload.id), database.prepare("DELETE FROM agency_tasks WHERE id = ?").bind(payload.id)]);
+      if (!Number(deleted[3].rowsAffected)) return Response.json({ error: "Task not found." }, { status: 404 });
+      return Response.json(await getTasksState(session,taskCalendar(request)));
     }
 
     if (payload.action === "update") {
-      const task=await database.prepare("SELECT created_by_user_id,assigned_users_json,assigned_user_id FROM agency_tasks WHERE id=?").bind(payload.id).first<Record<string,unknown>>();
+      const task=await database.prepare("SELECT plan_slot,created_by_user_id,assigned_users_json,assigned_user_id FROM agency_tasks WHERE id=?").bind(payload.id).first<Record<string,unknown>>();
       if(!task)return Response.json({error:"Task not found."},{status:404});
       if(!session.isAdmin&&Number(task.created_by_user_id)!==session.userId)return Response.json({error:"Only the task creator or an administrator can edit this task."},{status:403});
       const start=cairoLocalEpoch(payload.data.startAt),end=cairoLocalEpoch(payload.data.deadlineAt);
@@ -102,8 +114,8 @@ export async function POST(request: Request) {
         .bind(payload.data.title,payload.data.details,payload.data.brief,payload.data.notes,payload.data.gridNotes,JSON.stringify(payload.data.references),JSON.stringify(payload.data.gridCells),JSON.stringify(payload.data.gridCells.map((_,i)=>payload.data.gridPostNotes[i]||"")),payload.data.startAt,payload.data.deadlineAt,payload.id,session.isAdmin?1:0,session.userId).run();
       if(!result.meta.changes)return Response.json({error:"Task no longer available."},{status:409});
       const ids=[Number(task.assigned_user_id),...JSON.parse(String(task.assigned_users_json||"[]")).map((a:{id:number})=>a.id)];
-      await notifyUsers([...new Set(ids)],{type:"task_updated",title:"Task updated",message:sessionName(session)+" updated “"+payload.data.title+"”.",targetView:"tasks",entityId:payload.id,actorUserId:session.userId});
-      return Response.json(await getTasksState(session));
+      await notifyUsers([...new Set(ids)],{type:"task_updated",title:"Task updated",message:sessionName(session)+" updated “"+payload.data.title+"”.",targetView:task.plan_slot?"standard-tasks":"tasks",entityId:payload.id,actorUserId:session.userId});
+      return Response.json(await getTasksState(session,taskCalendar(request)));
     }
 
     if (payload.action === "create") {
@@ -139,7 +151,7 @@ export async function POST(request: Request) {
         actorUserId: session.userId,
       });
     } else {
-      const task = await database.prepare(`SELECT assigned_users_json AS assignedUsersJson, id, title, assigned_user_id AS assignedUserId,
+      const task = await database.prepare(`SELECT plan_slot,assigned_users_json AS assignedUsersJson, id, title, assigned_user_id AS assignedUserId,
           created_by_user_id AS createdByUserId, deadline_at AS deadlineAt, status
         FROM agency_tasks WHERE id = ?`).bind(payload.id).first<Record<string, unknown>>();
       if (!task) return Response.json({ error: "Task not found." }, { status: 404 });
@@ -174,13 +186,13 @@ export async function POST(request: Request) {
         type: "task_submitted",
         title: finished ? "Task fully submitted" : "Task part submitted",
         message: `${sessionName(session)} submitted their part of “${String(task.title ?? "Task")}”${lateMinutes ? ` ${lateMinutes} minutes late` : " on time"}. ${finished ? "All employees have delivered." : "Waiting for remaining employees."}`,
-        targetView: "tasks",
+        targetView: task.plan_slot ? "standard-tasks" : "tasks",
         entityId: payload.id,
         actorUserId: session.userId,
       });
     }
 
-    return Response.json(await getTasksState(session));
+    return Response.json(await getTasksState(session,taskCalendar(request)));
   } catch (error) {
     return errorResponse(error);
   }

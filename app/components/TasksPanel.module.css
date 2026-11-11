@@ -218,3 +218,15 @@
 
 .planCard { border-inline-start:4px solid #9981eb; }
 .planBadge { display:inline-block; padding:3px 8px; border-radius:6px; background:#ece5ff; color:#42316d; }
+
+.monthPicker { display:flex; gap:12px; align-items:center; margin-bottom:16px; font-weight:650; }
+.monthPicker input { color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:8px 12px; }
+.calendar { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:clamp(10px,2vw,24px); }
+.calendar header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin-bottom:16px; }
+.calendar header h2 { margin:0; }
+.calendarGrid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:2px; }
+.calendarGrid>strong { text-align:center; font-size:.8rem; padding-block:6px; }
+.calendarGrid>div { min-height:72px; border:1px solid var(--line); padding:clamp(2px,.5vw,8px); border-radius:5px; }
+.calendarGrid time { display:block; font-size:.8rem; }
+.calendarGrid button { display:block; width:100%; margin-top:4px; padding:4px; border:0; border-radius:4px; background:#fff0b7; color:#4a3700; cursor:pointer; font-size:.72rem; text-align:start; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.calendarGrid button[data-done=true] { background:#cbf2d8; color:#154b2a; }

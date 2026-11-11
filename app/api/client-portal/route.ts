@@ -77,10 +77,10 @@ export async function POST(request: Request) {
       const title=`${client.name} · ${payload.month}/${payload.year} content plan · Part ${payload.part}`;
       const task=await database.prepare(`INSERT INTO agency_tasks(plan_slot,title,start_at,deadline_at,assigned_user_id,assigned_user_name,assigned_user_role,created_by_user_id,created_by_name,created_by_role,individual_tracking)
         VALUES(?,?,?,?,?,?,?,?,?,?,'1') ON CONFLICT(plan_slot) WHERE plan_slot<>'' DO UPDATE SET
-        start_at=excluded.start_at,deadline_at=excluded.deadline_at,assigned_user_id=excluded.assigned_user_id,assigned_user_name=excluded.assigned_user_name,assigned_user_role=excluded.assigned_user_role
+        plan_generated='',start_at=excluded.start_at,deadline_at=excluded.deadline_at,assigned_user_id=excluded.assigned_user_id,assigned_user_name=excluded.assigned_user_name,assigned_user_role=excluded.assigned_user_role
         WHERE agency_tasks.status='assigned' RETURNING id`).bind(slot,title,payload.startAt,payload.deadlineAt,designer.id,designer.displayName,designer.roleLabel,session.userId,session.displayName,session.roleLabel).first<{id:number}>();
       if (!task) return Response.json({error:"This plan has already been delivered."},{status:409});
-      await notifyUsers([designer.id],{type:"task_assigned",title:"Client plan scheduled",message:title+" · Due "+payload.deadlineAt.replace("T"," "),targetView:"tasks",entityId:task.id,actorUserId:session.userId});
+      await notifyUsers([designer.id],{type:"task_assigned",title:"Client plan scheduled",message:title+" · Due "+payload.deadlineAt.replace("T"," "),targetView:"standard-tasks",entityId:task.id,actorUserId:session.userId});
       return Response.json(await getClientPortalState(session,id,payload.year));
     }
     if (payload.action === "savePlan") {

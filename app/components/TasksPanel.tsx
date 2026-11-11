@@ -120,7 +120,16 @@ function TaskModal({ eyebrow, title, description, onClose, children }: { eyebrow
   </div>;
 }
 
-export function TasksPanel({ showToast }: { showToast: (message: string) => void }) {
+export function TasksPanel({standard=false,showToast}:{standard?:boolean;showToast:(message:string)=>void}) {
+  const [month,setMonth]=useState(()=>{const now=cairoLocalParts();return now.year+"-"+now.month;});
+  return <>
+    {standard && <label className={styles.monthPicker}>Calendar month<input type="month" min="2020-01" max="2100-12" value={month} onChange={event=>{if (/^\d{4}-\d{2}$/.test(event.target.value)) setMonth(event.target.value);}}/></label>}
+    <TaskWorkspace key={standard?month:"regular"} month={standard?month:""} showToast={showToast}/>
+  </>;
+}
+
+function TaskWorkspace({month,showToast}:{month:string;showToast:(message:string)=>void}) {
+  const endpoint=month?"/api/tasks?month="+month:"/api/tasks";
   const [state, setState] = useState<TasksState>(emptyState);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -128,7 +137,7 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
   const [createOpen, setCreateOpen] = useState(false);
   const [draft, setDraft] = useState<TaskDraft>(blankDraft);
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
-  const [scope, setScope] = useState<"all" | "mine" | "created" | "submitted">("mine");
+  const [scope, setScope] = useState<"all" | "mine" | "created" | "submitted">(month?"all":"mine");
   const [dailyDate, setDailyDate] = useState(() => {
     const parts = cairoLocalParts();
     return `${parts.year}-${parts.month}-${parts.day}`;
@@ -142,7 +151,7 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
 
   async function refresh(showError = true) {
     try {
-      const response = await fetch("/api/tasks", { cache: "no-store" });
+      const response = await fetch(endpoint, { cache: "no-store" });
       const result = await response.json() as TasksState | { error?: string };
       if (!response.ok) throw new Error("error" in result && result.error ? result.error : "Could not load tasks.");
       setState(result as TasksState);
@@ -165,7 +174,7 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
   async function mutate(body: Record<string, unknown>) {
     setSaving(true);
     try {
-      const response = await fetch("/api/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const result = await response.json() as TasksState | { error?: string };
       if (!response.ok) throw new Error("error" in result && result.error ? result.error : "Could not save the task.");
       setState(result as TasksState);
@@ -261,7 +270,10 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
   }
 
   return <div className={styles.workspace}>
-    <section className={styles.hero}>
+    {month ? <PlanCalendar month={month} tasks={state.tasks} loading={loading} onOpen={id=>{
+      setScope("all");setExpanded(current=>new Set(current).add(id));
+      requestAnimationFrame(()=>document.getElementById("task-"+id)?.scrollIntoView({block:"center",behavior:"smooth"}));
+    }}/> : <section className={styles.hero}>
       <div className={styles.heroCopy}><span><CheckCircle2 size={14} /> FMG TASK FLOW</span><h2>Daily work, clear ownership.</h2><p>Assign detailed work, keep every reference together, and measure delivery against the exact deadline.</p></div>
       {state.canCreate && <button type="button" className={styles.createButton} onClick={openCreate}><Plus size={17} /> Assign a task</button>}
       <div className={styles.stats}>
@@ -270,9 +282,9 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
         <article><span><Check size={18} /></span><div><small>SUBMITTED TODAY</small><strong>{stats.submittedToday}</strong></div></article>
         <article className={stats.overdue ? styles.dangerStat : ""}><span><Clock3 size={18} /></span><div><small>OVERDUE</small><strong>{stats.overdue}</strong></div></article>
       </div>
-    </section>
+    </section>}
 
-    {state.canViewDaily && <section className={styles.dailyPanel}>
+    {!month && state.canViewDaily && <section className={styles.dailyPanel}>
       <header><div><span>DAILY DELIVERY BOARD</span><h2>Who is working on what?</h2><p>The date starts on today in Cairo. Multi-day tasks stay visible on every active day.</p></div><div className={styles.dailyFilters}><label><CalendarDays size={15} /><span>Day</span><input type="date" value={dailyDate} onChange={(event) => setDailyDate(event.target.value)} /></label><label><UsersRound size={15} /><span>Employee</span><select value={dailyEmployee} onChange={(event) => setDailyEmployee(event.target.value)}><option value="all">All team members</option>{state.assignees.map((assignee) => <option key={assignee.id} value={assignee.id}>{assignee.displayName}</option>)}</select></label></div></header>
       <div className={styles.dailySummary}><span><strong>{dailyTasks.length}</strong> tasks</span><span><strong>{dailyTasks.filter((task) => task.status === "submitted").length}</strong> submitted</span><span><strong>{dailyTasks.filter((task) => task.status === "assigned").length}</strong> not submitted</span><span><strong>{dailyTasks.filter((task) => task.liveLateMinutes > 0 && task.status === "assigned").length}</strong> overdue</span></div>
       {dailyGroups.length ? <div className={styles.dailyGroups}>{dailyGroups.map(([userId, group]) => <article key={userId} className={styles.dailyPerson}>
@@ -282,10 +294,10 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
     </section>}
 
     <section className={styles.taskPanel}>
-      <header><div><span>TASK WORKSPACE</span><h2>{state.canViewDaily ? "All task details" : "Your tasks"}</h2><p>Open a task to see its brief, grid direction, references, and submission status.</p></div><div className={styles.scopeFilters}>
+      <header><div><span>{month?"MONTHLY PLANS":"TASK WORKSPACE"}</span><h2>{month?"Plan deliveries":state.canViewDaily ? "All task details" : "Your tasks"}</h2><p>Open a task to see its brief, grid direction, references, and submission status.</p></div><div className={styles.scopeFilters}>
         <button className={scope === "mine" ? styles.activeFilter : ""} onClick={() => setScope("mine")}>Assigned to me <span>{state.tasks.filter((task) => task.assignedUsers.some(a => a.id === state.userId)).length}</span></button>
         {state.canCreate && <button className={scope === "created" ? styles.activeFilter : ""} onClick={() => setScope("created")}>Created by me <span>{state.tasks.filter((task) => task.createdByUserId === state.userId).length}</span></button>}
-        {state.canViewDaily && <button className={scope === "all" ? styles.activeFilter : ""} onClick={() => setScope("all")}>All <span>{state.tasks.length}</span></button>}
+        {(month || state.canViewDaily) && <button className={scope === "all" ? styles.activeFilter : ""} onClick={() => setScope("all")}>All <span>{state.tasks.length}</span></button>}
         <button className={scope === "submitted" ? styles.activeFilter : ""} onClick={() => setScope("submitted")}>Submitted <span>{state.tasks.filter((task) => (state.role === "member" ? personalTask(task,state.userId) : task).status === "submitted").length}</span></button>
       </div></header>
 
@@ -363,4 +375,28 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
       </form>
     </TaskModal>}
   </div>;
+}
+
+function PlanCalendar({month,tasks,loading,onOpen}:{month:string;tasks:AgencyTask[];loading:boolean;onOpen:(id:number)=>void}) {
+  const [year,number]=month.split("-").map(Number);
+  const days=new Date(year,number,0).getDate();
+  const blanks=(new Date(year,number-1,1).getDay()+1)%7;
+  const delivered=tasks.filter(task=>task.status==="submitted").length;
+  return <section className={styles.calendar}>
+    <header><h2>{new Date(year,number-1).toLocaleString("en",{month:"long",year:"numeric"})}</h2>
+      <span>{loading?"Loading plans…":delivered+" delivered · "+(tasks.length-delivered)+" pending"}</span></header>
+    <div className={styles.calendarGrid}>
+      {["Sat","Sun","Mon","Tue","Wed","Thu","Fri"].map(day=><strong key={day}>{day}</strong>)}
+      {Array.from({length:blanks},(_,index)=><div key={"blank"+index}/>)}
+      {Array.from({length:days},(_,index)=>{
+        const date=month+"-"+String(index+1).padStart(2,"0");
+        return <div key={date}><time dateTime={date}>{index+1}</time>
+          {tasks.filter(task=>task.deadlineAt.startsWith(date)||task.startAt.startsWith(date)).map(task=>
+            <button key={task.id} onClick={()=>onOpen(task.id)} data-done={task.status==="submitted"} title={task.title}>
+              <b>{task.status==="submitted"?"✓ Delivered":task.deadlineAt.startsWith(date)?"Due":"Start"}</b> {task.title}
+            </button>)}</div>;
+      })}
+    </div>
+    {!loading && !tasks.length && <p>No plans scheduled for this month.</p>}
+  </section>;
 }

@@ -72,7 +72,7 @@ import { DocumentPdfPreview } from "./DocumentPdfPreview";
 import { ReadingSize } from "./ReadingSize";
 import { WorkOrderPanel } from "./WorkOrderPanel";
 
-type View = "manual-requests" | "trash" | "home" | "dashboard" | "tasks" | "invoice" | "quotation" | "media-guide" | "work-order" | "production-directory" | "clients" | "client-accounts" | "monthly-clients" | "client-portal-admin" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
+type View = "manual-requests" | "trash" | "home" | "dashboard" | "tasks" | "standard-tasks" | "invoice" | "quotation" | "media-guide" | "work-order" | "production-directory" | "clients" | "client-accounts" | "monthly-clients" | "client-portal-admin" | "employees" | "attendance" | "requests" | "categories" | "data" | "settings" | "users";
 type Mutation = (body: Record<string, unknown>) => Promise<AppState>;
 const companyNames: Record<CompanyKey, string> = { fmg: "FMG Agency", digital_empire: "The Digital Empire" };
 type AuthState = {
@@ -196,6 +196,7 @@ const emptyHrState: HrState = {
 const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof LayoutDashboard; permission: AccessPermission | "users" }> = [
   { id: "home", label: "Home", eyebrow: "Your workspace", icon: House, permission: "dashboard" },
   { id: "dashboard", label: "Dashboard", eyebrow: "Overview", icon: LayoutDashboard, permission: "dashboard" },
+  { id: "standard-tasks", label: "Standard Tasks", eyebrow: "Monthly plan calendar", icon: CalendarRange, permission: "tasks" },
   { id: "tasks", label: "Tasks", eyebrow: "Assign, deliver & track", icon: CheckCircle2, permission: "tasks" },
   { id: "invoice", label: "New Invoice", eyebrow: "Create", icon: ReceiptText, permission: "invoices" },
   { id: "quotation", label: "New Quotation", eyebrow: "Create", icon: FilePlus2, permission: "quotations" },
@@ -219,13 +220,14 @@ const navItems: Array<{ id: View; label: string; eyebrow: string; icon: typeof L
 
 type NavGroupId = "production" | "documents" | "clients" | "services" | "people" | "administration";
 type NavSection =
-  | { id: "home" | "dashboard" | "tasks"; item: View }
+  | { id: "home" | "dashboard" | "tasks" | "standard-tasks"; item: View }
   | { id: NavGroupId; label: string; eyebrow: string; icon: typeof LayoutDashboard; items: View[] };
 
 const navSections: NavSection[] = [
   { id: "home", item: "home" },
   { id: "dashboard", item: "dashboard" },
   { id: "tasks", item: "tasks" },
+  { id: "standard-tasks", item: "standard-tasks" },
   { id: "production", label: "Production", eyebrow: "Orders, talent & crew", icon: FilePenLine, items: ["work-order", "production-directory"] },
   { id: "documents", label: "Documents", eyebrow: "Create & archive", icon: FileText, items: ["invoice", "quotation", "data"] },
   { id: "clients", label: "Clients", eyebrow: "Directory & experience", icon: UsersRound, items: ["clients", "client-accounts", "monthly-clients", "client-portal-admin"] },
@@ -248,6 +250,7 @@ const viewCopy: Record<View, { eyebrow: string; title: string; description: stri
   trash: {eyebrow:"RECENTLY DELETED",title:"Trash",description:"Recover deleted records within 7 days."},
   home: { eyebrow: "WELCOME TO FMG", title: "Make great work happen.", description: "Your people, projects and next steps. One place to begin." },
   dashboard: { eyebrow: "FMG CONTROL CENTER", title: "Good evening, FMG.", description: "Your agency documents, clients, and activity in one calm workspace." },
+  "standard-tasks": { eyebrow: "CLIENT PLANS", title: "Standard Tasks", description: "Monthly plan schedules and deliveries." },
   tasks: { eyebrow: "TEAM DELIVERY", title: "Tasks", description: "Assign daily work, keep briefs and references together, and measure every delivery against its deadline." },
   invoice: { eyebrow: "CREATE DOCUMENT", title: "New invoice", description: "Select a client and category, then add the billable work." },
   quotation: { eyebrow: "CREATE DOCUMENT", title: "New quotation", description: "Turn a scoped project into a polished client proposal." },
@@ -729,7 +732,7 @@ export function FmgSystem() {
           {view === "home" && <HomePage name={auth.displayName || auth.username} role={auth.roleLabel} chooseView={chooseView} canOpenView={canOpenView} />}
           {view === "dashboard" && <Dashboard state={state} hrState={hrState} chooseView={chooseView} canOpenView={canOpenView} />}
           {view === "trash" && auth.isAdmin && <TrashPanel showToast={showToast} onRestored={() => void loadWorkspace()} />}
-          {view === "tasks" && <TasksPanel showToast={showToast} />}
+          {(view === "tasks" || view === "standard-tasks") && <TasksPanel key={view} standard={view === "standard-tasks"} showToast={showToast} />}
           {view === "clients" && <ClientsPanel clients={state.clients} mutate={mutate} busy={busy} showToast={showToast} />}
           {view === "client-accounts" && <ClientFinancePanel mode="accounts" initialClients={state.clients} showToast={showToast} />}
           {view === "monthly-clients" && <ClientFinancePanel mode="monthly" initialClients={state.clients} showToast={showToast} />}
