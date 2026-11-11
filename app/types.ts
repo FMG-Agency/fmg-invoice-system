@@ -242,6 +242,12 @@ export type ClientPortalPlanPart = {
 };
 
 export type ClientPortalState = {
+  planning?: {
+    managers?: {id:number; displayName:string}[];
+    managerId: number | null;
+    designers: {id:number; displayName:string}[];
+    schedules: {slot:string; startAt:string; deadlineAt:string; designerId:number; status:string}[];
+  };
   viewerMode: "client" | "staff";
   client: Client | null;
   clients: Array<Client & { portalUsername: string }>;
@@ -531,6 +537,7 @@ export type TaskGridCell = "design" | "carousel" | "video";
 export type TaskTeamMember = { id: number; displayName: string; roleLabel: string; part?: string };
 export type TaskSubmission = { userId: number; userName: string; part: string; method: string; url: string; notes: string; submittedAt: string; lateMinutes: number };
 export type AgencyTask = {
+  planTask?: boolean;
   submissions: TaskSubmission[];
   gridCells: TaskGridCell[];
   gridPostNotes: string[];

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getSession, requirePermission } from "../../../../lib/auth-server";
-import { ensureClientPortalDatabase, getClientPortalState } from "../../../../lib/client-portal";
+import { ensureClientPortalDatabase, getClientPortalState, portalClientAllowed } from "../../../../lib/client-portal";
 import { database } from "../../../../lib/database";
 import { deletePrivateFile, getPrivateFile, putPrivateFile } from "../../../../lib/file-storage";
 
@@ -53,6 +53,7 @@ async function contextFor(request: Request, context: { params: Promise<{ clientI
   const numericClientId = Number(clientId);
   if (!Number.isInteger(numericClientId) || numericClientId <= 0) return { response: Response.json({ error: "Invalid client." }, { status: 400 }) } as const;
   if (session.clientId !== null && session.clientId !== numericClientId) return { response: Response.json({ error: "Access denied." }, { status: 403 }) } as const;
+  if (!await portalClientAllowed(session,numericClientId)) return {response:Response.json({error:"Client access denied."},{status:403})} as const;
   await ensureClientPortalDatabase();
   const client = await database.prepare(`SELECT id, portal_logo_key AS portalLogoKey, portal_logo_type AS portalLogoType
     FROM clients WHERE id = ?`).bind(numericClientId).first<LogoRow>();

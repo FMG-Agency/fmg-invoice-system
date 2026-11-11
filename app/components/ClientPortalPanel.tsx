@@ -157,7 +157,7 @@ export function ClientPortalShell({ roleLabel="Client Portal", userId, displayNa
 
 export function ClientPortalAdmin({ showToast }: { showToast: (message: string) => void }) {
   const [state, setState] = useState<ClientPortalState | null>(null);
-  const [clientId, setClientId] = useState(ELEVE_CLIENT_ID);
+  const [clientId, setClientId] = useState(0);
   const [year, setYear] = useState(currentYear());
   const [month, setMonth] = useState(currentMonth());
   const [loading, setLoading] = useState(true);
@@ -169,7 +169,7 @@ export function ClientPortalAdmin({ showToast }: { showToast: (message: string) 
     void fetch(`/api/client-portal?${query}`, { cache: "no-store" }).then(portalJson).then((result) => {
       if (!active) return;
       setState(result);
-      if (!clientId && result.client) setClientId(result.client.id);
+      if (result.client && result.client.id !== clientId) setClientId(result.client.id);
     }).catch((error: unknown) => active && showToast(error instanceof Error ? error.message : "Could not load client plans.")).finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [clientId, showToast, year]);
@@ -196,18 +196,52 @@ export function ClientPortalAdmin({ showToast }: { showToast: (message: string) 
     </section>
 
     <section className={styles.adminControls}>
-      <label><span>Client</span><select value={clientId || ""} onChange={(event) => { setLoading(true); setClientId(Number(event.target.value)); }}><option value="">Choose client</option>{state?.clients.map((client) => <option key={client.id} value={client.id}>{client.companyName || client.name}</option>)}</select></label>
+      <label><span>Active clients ({state?.clients.length ?? 0})</span><select value={clientId || ""} onChange={(event) => { setLoading(true); setClientId(Number(event.target.value)); }}><option value="">Choose client</option>{state?.clients.map((client) => <option key={client.id} value={client.id}>{client.companyName || client.name}</option>)}</select></label>
       <label><span>Year</span><select value={year} onChange={(event) => { setLoading(true); setYear(Number(event.target.value)); }}>{[...new Set([currentYear() - 1, currentYear(), currentYear() + 1, ...(state?.years ?? [])])].sort((left, right) => right - left).map((value) => <option key={value}>{value}</option>)}</select></label>
       <div className={styles.clientAccessStatus}><UserRound size={17} /><span><strong>{portalUsername || "No portal login yet"}</strong><small>{portalUsername ? "Client can sign in now" : "Create it from Users & Access → Client Portal preset"}</small></span></div>
     </section>
 
-    {loading && !state ? <div className={styles.adminLoading}>Loading portal workspace…</div> : state?.client ? <>
+    {loading || (state?.client && state.client.id !== clientId) ? <div className={styles.adminLoading}>Loading portal workspace…</div> : state?.client ? <>
       {state.client.id===ELEVE_CLIENT_ID&&<ProductArrivals key={state.client.id}/>}
       <ClientLogoManager key={`${state.client.id}-${state.client.portalLogoUpdatedAt || "no-logo"}`} client={state.client} year={year} onUpdate={updateState} showToast={showToast} />
       <MonthPicker year={year} selected={month} plans={state.plans} onSelect={setMonth} />
+      {state.planning && <PlanningForm key={`${clientId}-${year}-${month}`} clientId={clientId} year={year} month={month} planning={state.planning} update={updateState} />}
       <div className={styles.adminMonthHeading}><div><span>{monthNames[month - 1].toUpperCase()} {year}</span><h2>Publish monthly plan parts</h2><p>Each link is private to {state.client.companyName || state.client.name} after sign-in.</p></div><div><strong>{monthPlans.filter((plan) => plan.published).length}/2</strong><small>parts live</small></div></div>
       <div className={styles.editorGrid}>{([1, 2] as const).map((part) => <PlanPartEditor key={`${clientId}-${year}-${month}-${part}-${monthPlans.find((plan) => plan.part === part)?.updatedAt || "new"}`} part={part} year={year} month={month} clientId={clientId} plan={monthPlans.find((item) => item.part === part)} onUpdate={updateState} />)}</div>
-    </> : <PortalEmpty icon={UserRound} title="Choose a client" body="Select a client to start building their private monthly plan library." />}
+    </> : <PortalEmpty icon={UserRound} title="No active clients to show" body="Active clients appear here once they are available to your account." />}
+  </section>;
+}
+
+function PlanningForm({clientId, year, month, planning, update}: {
+  clientId:number; year:number; month:number; planning:NonNullable<ClientPortalState["planning"]>;
+  update:(request:Promise<Response>, success:string)=>Promise<void>;
+}) {
+  const [part,setPart] = useState(1);
+  const [busy,setBusy] = useState(false);
+  const schedule = planning.schedules.find(item => item.slot === [clientId,year,month,part].join("/"));
+  async function send(payload:Record<string,unknown>, message:string) {
+    setBusy(true);
+    try {
+      await update(fetch("/api/client-portal",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({clientId,year,...payload})}),message);
+    } catch { /* The portal displays the server error in a toast. */ }
+    finally { setBusy(false); }
+  }
+  return <section className={styles.planning}>
+    {planning.managers && <label>Account manager<select disabled={busy} value={planning.managerId ?? ""} onChange={e=>void send({action:"manager",managerId:Number(e.target.value)||null},"Client assignment saved.")}>
+      <option value="">Unassigned</option>{planning.managers.map(person=><option key={person.id} value={person.id}>{person.displayName}</option>)}</select></label>}
+    <h3>{monthNames[month-1]} plan schedule</h3>
+    <label>Plan part<select value={part} onChange={e=>setPart(Number(e.target.value))}><option value={1}>Part 1</option><option value={2}>Part 2</option></select></label>
+    <form key={part} onSubmit={event=>{
+      event.preventDefault();
+      const data=new FormData(event.currentTarget);
+      void send({action:"schedule",month,part,designerId:Number(data.get("designer")),startAt:data.get("start"),deadlineAt:data.get("deadline")},"Designer task saved.");
+    }}>
+      <label>Graphic designer<select name="designer" required defaultValue={schedule?.designerId ?? ""}><option value="">Choose designer</option>{planning.designers.map(person=><option key={person.id} value={person.id}>{person.displayName}</option>)}</select></label>
+      <label>Start · Cairo<input type="datetime-local" name="start" required defaultValue={schedule?.startAt}/></label>
+      <label>Deadline · Cairo<input type="datetime-local" name="deadline" required defaultValue={schedule?.deadlineAt}/></label>
+      <button className="btn btn-primary" disabled={busy || !planning.designers.length || schedule?.status==="submitted"}>{schedule?.status==="submitted"?"Delivered":schedule?"Update task":"Assign plan task"}</button>
+    </form>
+    {!planning.designers.length && <small>No active designer found. Check the user's role or employee job title.</small>}
   </section>;
 }
 

@@ -293,10 +293,10 @@ export function TasksPanel({ showToast }: { showToast: (message: string) => void
         const open = expanded.has(task.id);
         const mine = task.assignedUsers.some(person => person.id === state.userId);
         const displayTask = mine ? personalTask(task,state.userId) : task;
-        return <article id={`task-${task.id}`} key={task.id} className={`${styles.taskCard} ${displayTask.liveLateMinutes && displayTask.status === "assigned" ? styles.overdueCard : ""}`}>
+        return <article id={`task-${task.id}`} key={task.id} className={`${styles.taskCard} ${task.planTask ? styles.planCard : ""} ${displayTask.liveLateMinutes && displayTask.status === "assigned" ? styles.overdueCard : ""}`}>
           <button type="button" className={styles.taskToggle} onClick={() => toggleTask(task.id)} aria-expanded={open}>
             <span className={displayTask.status === "submitted" ? styles.doneIcon : displayTask.liveLateMinutes ? styles.lateIcon : styles.progressIcon}>{displayTask.status === "submitted" ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}</span>
-            <span className={styles.taskIdentity}><small>#{String(task.id).padStart(4, "0")} · {task.assignedUsers.map(a => a.displayName).join(", ")}</small><strong>{task.title}</strong><em>Assigned by {task.createdByName} · {task.status === "submitted" ? "All delivered" : `${task.submissions.length}/${task.assignedUsers.length} delivered`}{mine && displayTask.status === "submitted" && task.status !== "submitted" ? " · Your part is done — waiting for teammates" : ""}</em></span>
+            <span className={styles.taskIdentity}><small>{task.planTask && <b className={styles.planBadge}>Client plan</b>} #{String(task.id).padStart(4, "0")} · {task.assignedUsers.map(a => a.displayName).join(", ")}</small><strong>{task.title}</strong><em>Assigned by {task.createdByName} · {task.status === "submitted" ? "All delivered" : `${task.submissions.length}/${task.assignedUsers.length} delivered`}{mine && displayTask.status === "submitted" && task.status !== "submitted" ? " · Your part is done — waiting for teammates" : ""}</em></span>
             <span className={styles.schedule}><small>START</small><strong>{dateTimeLabel(task.startAt)}</strong></span>
             <span className={styles.schedule}><small>DEADLINE</small><strong>{dateTimeLabel(task.deadlineAt)}</strong></span>
             <span className={`${styles.statusBadge} ${displayTask.status === "submitted" ? styles.doneText : displayTask.liveLateMinutes ? styles.lateText : styles.openText}`}>{statusCopy(displayTask)}</span>

@@ -3,6 +3,7 @@ import {z} from "zod";
 import {database} from "../../lib/database";
 import {getSession,requirePermission} from "../../lib/auth-server";
 import {administratorUserIds,notifyUsers} from "../../lib/notifications";
+import {portalClientAllowed} from "../../lib/client-portal";
 import {ELEVE_CLIENT_ID} from "../../lib/product-arrivals";
 import {trashDelete} from "../../lib/trash";
 
@@ -27,6 +28,7 @@ async function access(request:Request){
   const session=await getSession(request);if(!session)return Response.json({error:"Sign in first."},{status:401});
   if(session.clientId!==null&&session.clientId!==ELEVE_CLIENT_ID)return Response.json({error:"This feature is not enabled for this client."},{status:403});
   if(session.clientId!==null&&!clientAccess(session.roleLabel).arrivals)return Response.json({error:"This role cannot access product arrivals."},{status:403});
+  if (!await portalClientAllowed(session,ELEVE_CLIENT_ID)) return Response.json({error:"Client access denied."},{status:403});
   return session;
 }
 async function list(){const rows=await database.prepare("SELECT id,title,quantity,album_url,notes,status,created_at,updated_at,created_by,(SELECT display_name FROM auth_users WHERE id=client_product_arrivals.created_by) AS created_by_name FROM client_product_arrivals WHERE client_id=? ORDER BY id DESC LIMIT 200").bind(ELEVE_CLIENT_ID).all();return Response.json({arrivals:rows.results},{headers:{"Cache-Control":"private, no-store"}});}

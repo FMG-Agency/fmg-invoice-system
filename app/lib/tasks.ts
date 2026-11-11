@@ -44,11 +44,12 @@ let tasksDatabaseReady: Promise<void> | null = null;
 export async function ensureTasksDatabase() {
   tasksDatabaseReady ??= database.batch(taskSchema.map((statement) => database.prepare(statement))).then(async () => {
     const columns = (await database.prepare("PRAGMA table_info(agency_tasks)").all<{name:string}>()).results;
-    for (const [name, value] of [["individual_tracking", ""], ["grid_post_notes_json", "[]"], ["task_notes", ""], ["grid_cells_json", "[]"], ["assigned_users_json", "[]"], ["submission_method", "link"], ["submission_notes", ""], ["submitted_by_name", ""]]) {
+    for (const [name, value] of [["plan_slot", ""], ["individual_tracking", ""], ["grid_post_notes_json", "[]"], ["task_notes", ""], ["grid_cells_json", "[]"], ["assigned_users_json", "[]"], ["submission_method", "link"], ["submission_notes", ""], ["submitted_by_name", ""]]) {
       if (columns.some(c => c.name === name)) continue;
       try { await database.prepare(`ALTER TABLE agency_tasks ADD COLUMN ${name} TEXT NOT NULL DEFAULT '${value}'`).run(); }
       catch(error) { if (!/duplicate column/i.test(String(error))) throw error; }
     }
+    await database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_task_plan_slot ON agency_tasks(plan_slot) WHERE plan_slot <> ''").run();
     const legacy = await database.prepare("SELECT * FROM agency_tasks WHERE individual_tracking = ''").all<Record<string,unknown>>();
     for (const row of legacy.results) {
       const team = JSON.parse(String(row.assigned_users_json || "[]")) as {id:number;displayName:string}[];
@@ -157,6 +158,7 @@ function taskFromRow(row: Record<string, unknown>, nowEpoch: number): AgencyTask
   return {
     submissions: JSON.parse(String(row.submissionsJson || "[]")),
     id: numberValue(row.id),
+    planTask: Boolean(row.planSlot),
     title: String(row.title ?? ""),
     details: String(row.details ?? ""),
     brief: String(row.brief ?? ""),
@@ -220,7 +222,7 @@ export async function getTasksState(session: AuthSession): Promise<TasksState> {
     : role === "account_manager"
       ? `(${assignedAccess} OR t.created_by_user_id = ?)`
       : `(${assignedAccess} OR t.created_by_user_id = ?)`;
-  const query = database.prepare(`SELECT (SELECT json_group_array(json_object('userId',s.user_id,'userName',s.user_name,'part',s.part,'method',s.method,'url',s.url,'notes',s.notes,'submittedAt',s.submitted_at,'lateMinutes',s.late_minutes)) FROM task_submissions s WHERE s.task_id=t.id) AS submissionsJson, t.grid_post_notes_json AS gridPostNotesJson, t.task_notes AS taskNotes, t.grid_cells_json AS gridCellsJson, t.assigned_users_json AS assignedUsersJson, t.submission_method AS submissionMethod, t.submission_notes AS submissionNotes, t.submitted_by_name AS submittedByName, t.id, t.title, t.details, t.brief, t.grid_notes AS gridNotes,
+  const query = database.prepare(`SELECT (SELECT json_group_array(json_object('userId',s.user_id,'userName',s.user_name,'part',s.part,'method',s.method,'url',s.url,'notes',s.notes,'submittedAt',s.submitted_at,'lateMinutes',s.late_minutes)) FROM task_submissions s WHERE s.task_id=t.id) AS submissionsJson, t.grid_post_notes_json AS gridPostNotesJson, t.task_notes AS taskNotes, t.grid_cells_json AS gridCellsJson, t.assigned_users_json AS assignedUsersJson, t.submission_method AS submissionMethod, t.submission_notes AS submissionNotes, t.submitted_by_name AS submittedByName, t.id, t.plan_slot AS planSlot, t.title, t.details, t.brief, t.grid_notes AS gridNotes,
       t.references_json AS referencesJson, t.start_at AS startAt, t.deadline_at AS deadlineAt,
       t.assigned_user_id AS assignedUserId, t.assigned_user_name AS assignedUserName,
       t.assigned_user_role AS assignedUserRole, t.created_by_user_id AS createdByUserId,

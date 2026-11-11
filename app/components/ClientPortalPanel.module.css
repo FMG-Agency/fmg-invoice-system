@@ -194,3 +194,10 @@
   .editorCard footer { flex-wrap: wrap; }
   .editorCard footer > span { display: none; }
 }
+
+.planning { display:grid; gap:14px; padding:clamp(16px,3vw,28px); border:1px solid var(--line); background:var(--surface); border-radius:16px; }
+.planning h3 { margin:0; }
+.planning form { display:flex; flex-wrap:wrap; align-items:end; gap:12px; }
+.planning label { display:grid; gap:6px; font-weight:600; }
+.planning form label { flex:1 1 165px; min-width:0; }
+.planning input,.planning select { width:100%; min-width:0; padding:10px; color:inherit; background:var(--surface); border:1px solid var(--line); border-radius:8px; }

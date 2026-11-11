@@ -1,10 +1,17 @@
 import {clientAccess} from './client-access';
+import { ensureTasksDatabase, taskAssignees } from "./tasks";
 import { database } from "./database";
 import { ensureClientAccountsDatabase, getClientAccount } from "./client-accounts";
 import type { AuthSession } from "./auth-server";
 import type { Client, ClientPortalPlanPart, ClientPortalState } from "../types";
 
 const portalSchema = [
+  `CREATE TABLE IF NOT EXISTS portal_planners (user_id INTEGER PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE)`,
+  `INSERT OR IGNORE INTO portal_planners SELECT id FROM auth_users WHERE lower(username) IN ('hana','sandy') AND client_id IS NULL AND active=1`,
+  `CREATE TABLE IF NOT EXISTS portal_client_managers (
+    client_id INTEGER PRIMARY KEY REFERENCES clients(id) ON DELETE CASCADE,
+    manager_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE
+  )`,
   `CREATE TABLE IF NOT EXISTS client_portal_plans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
@@ -64,7 +71,28 @@ function mapPlan(row: Record<string, unknown>): ClientPortalPlanPart {
   };
 }
 
-async function listClients(): Promise<Array<Client & { portalUsername: string }>> {
+export async function isPortalPlanner(session: AuthSession) {
+  if (session.clientId !== null || session.isAdmin) return false;
+  await ensureClientPortalDatabase();
+  return Boolean(await database.prepare("SELECT 1 FROM portal_planners WHERE user_id=?").bind(session.userId).first());
+}
+
+export async function portalClientAllowed(session: AuthSession, clientId: number) {
+  if (session.clientId !== null) return session.clientId === clientId;
+  if (!await isPortalPlanner(session)) return true;
+  return Boolean(await database.prepare("SELECT 1 FROM portal_client_managers m JOIN clients c ON c.id=m.client_id WHERE c.lifecycle_status='active' AND m.client_id=? AND m.manager_id=?").bind(clientId,session.userId).first());
+}
+
+export async function planningPeople(session: AuthSession) {
+  const people = await taskAssignees(session);
+  const planners = await database.prepare("SELECT user_id FROM portal_planners").all<{user_id:number}>();
+  return {
+    designers: people.filter(person => /\b(?:graphic|graghic|graphics)\s+designer\b/i.test(person.roleLabel + " " + person.employeeTitle)),
+    managers: people.filter(person => planners.results.some(row => row.user_id === person.id)),
+  };
+}
+
+async function listClients(session: AuthSession, scoped:boolean): Promise<Array<Client & { portalUsername: string }>> {
   const result = await database.prepare(`SELECT c.id, c.name, c.company_name AS companyName, c.owner_name AS ownerName,
       c.phone, c.email, c.address, c.notes, c.agency_key AS agencyKey, c.lifecycle_status AS lifecycleStatus,
       c.activity, c.start_date AS startDate, c.payment_schedule AS paymentSchedule, c.monthly_fee AS monthlyFee,
@@ -73,7 +101,8 @@ async function listClients(): Promise<Array<Client & { portalUsername: string }>
       c.portal_logo_updated_at AS portalLogoUpdatedAt,
       c.created_at AS createdAt, c.updated_at AS updatedAt, COALESCE(u.username, '') AS portalUsername
     FROM clients c LEFT JOIN auth_users u ON u.id = (SELECT MIN(id) FROM auth_users WHERE client_id=c.id AND active=1)
-    ORDER BY c.company_name COLLATE NOCASE, c.name COLLATE NOCASE`).all<Record<string, unknown>>();
+    WHERE c.lifecycle_status='active' AND (?=0 OR EXISTS (SELECT 1 FROM portal_client_managers m WHERE m.client_id=c.id AND m.manager_id=?))
+    ORDER BY COALESCE(NULLIF(TRIM(c.company_name),''),c.name) COLLATE NOCASE, c.id`).bind(scoped?1:0,session.userId).all<Record<string, unknown>>();
   return result.results.map((row) => ({
     id: numberValue(row.id),
     name: String(row.name || ""),
@@ -102,12 +131,21 @@ async function listClients(): Promise<Array<Client & { portalUsername: string }>
 export async function getClientPortalState(session: AuthSession, requestedClientId: number | null, requestedYear: number): Promise<ClientPortalState> {
   await ensureClientPortalDatabase();
   await ensureClientAccountsDatabase();
-  const clients = session.clientId === null ? await listClients() : [];
-  const clientId = session.clientId ?? requestedClientId ?? clients[0]?.id ?? null;
+  const scoped = await isPortalPlanner(session);
+  const clients = session.clientId === null ? await listClients(session,scoped) : [];
+  const clientId = session.clientId ?? clients.find(client => client.id === requestedClientId)?.id ?? clients[0]?.id ?? null;
   const currentYear = new Date().getFullYear();
   const year = Number.isInteger(requestedYear) && requestedYear >= 2020 && requestedYear <= 2100 ? requestedYear : currentYear;
   if (!clientId) return { viewerMode: session.clientId === null ? "staff" : "client", client: null, clients, year, years: [currentYear], invoices: [], summaries: [], plans: [] };
 
+  let planning: ClientPortalState["planning"];
+  if (session.clientId === null && (session.isAdmin || scoped)) {
+    await ensureTasksDatabase();
+    const people = await planningPeople(session);
+    const manager = await database.prepare("SELECT manager_id FROM portal_client_managers WHERE client_id=?").bind(clientId).first<{manager_id:number}>();
+    const schedules = await database.prepare("SELECT plan_slot AS slot,start_at AS startAt,deadline_at AS deadlineAt,assigned_user_id AS designerId,status FROM agency_tasks WHERE plan_slot LIKE ?").bind(`${clientId}/${year}/%`).all<NonNullable<ClientPortalState["planning"]>["schedules"][number]>();
+    planning = {managerId:manager?.manager_id ?? null, designers:people.designers, schedules:schedules.results, ...(session.isAdmin ? {managers:people.managers} : {})};
+  }
   const account = await getClientAccount(clientId);
   if (!account) return { viewerMode: session.clientId === null ? "staff" : "client", client: null, clients, year, years: [currentYear], invoices: [], summaries: [], plans: [] };
   const [plansResult, yearsResult, logoResult] = await Promise.all([
@@ -127,6 +165,7 @@ export async function getClientPortalState(session: AuthSession, requestedClient
   const years = [...new Set([currentYear, year, ...yearsResult.results.map((row) => numberValue(row.year)).filter(Boolean)])].sort((left, right) => right - left);
   return {
     viewerMode: session.clientId === null ? "staff" : "client",
+    planning,
     client: {
       ...account.client,
       ...(session.clientId !== null ? {notes:'',monthlyFee:0,paymentSchedule:'',contractStatus:'not_set' as const} : {}),
