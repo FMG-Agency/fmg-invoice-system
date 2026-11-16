@@ -538,6 +538,7 @@ export type TaskTeamMember = { id: number; displayName: string; roleLabel: strin
 export type TaskSubmission = { userId: number; userName: string; part: string; method: string; url: string; notes: string; submittedAt: string; lateMinutes: number };
 export type AgencyTask = {
   planTask?: boolean;
+  planSlot?: string;
   submissions: TaskSubmission[];
   gridCells: TaskGridCell[];
   gridPostNotes: string[];

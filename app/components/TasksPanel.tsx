@@ -128,14 +128,14 @@ export function TasksPanel({standard=false,showToast}:{standard?:boolean;showToa
   </>;
 }
 
-function TaskWorkspace({month,showToast}:{month:string;showToast:(message:string)=>void}) {
+export function TaskWorkspace({month,showToast,plan}:{month:string;showToast:(message:string)=>void;plan?:{clientId:number;year:number;month:number;part:1|2;startAt:string;deadlineAt:string;designerId:number;title:string;close:()=>void;save:(request:Promise<Response>,message:string)=>Promise<void>}}) {
   const endpoint=month?"/api/tasks?month="+month:"/api/tasks";
   const [state, setState] = useState<TasksState>(emptyState);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing,setEditing]=useState<AgencyTask|null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [draft, setDraft] = useState<TaskDraft>(blankDraft);
+  const [createOpen, setCreateOpen] = useState(Boolean(plan));
+  const [draft, setDraft] = useState<TaskDraft>(()=>plan?{...blankDraft(),title:plan.title,startAt:plan.startAt,deadlineAt:plan.deadlineAt,assignedUserId:plan.designerId}:blankDraft());
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   const [scope, setScope] = useState<"all" | "mine" | "created" | "submitted">(month?"all":"mine");
   const [dailyDate, setDailyDate] = useState(() => {
@@ -155,6 +155,10 @@ function TaskWorkspace({month,showToast}:{month:string;showToast:(message:string
       const result = await response.json() as TasksState | { error?: string };
       if (!response.ok) throw new Error("error" in result && result.error ? result.error : "Could not load tasks.");
       setState(result as TasksState);
+      if(plan) {
+        const existing=(result as TasksState).tasks.find(task=>task.planSlot===[plan.clientId,plan.year,plan.month,plan.part].join("/"));
+        if(existing) openEdit({...existing,startAt:plan.startAt,deadlineAt:plan.deadlineAt,assignedUserId:plan.designerId});
+      }
       setDailyDate((current) => current || (result as TasksState).currentDate);
     } catch (error) {
       if (showError) showToast(error instanceof Error ? error.message : "Could not load tasks.");
@@ -165,6 +169,7 @@ function TaskWorkspace({month,showToast}:{month:string;showToast:(message:string
 
   useEffect(() => {
     void refresh();
+    if(plan) return;
     const interval = window.setInterval(() => void refresh(false), 30_000);
     return () => window.clearInterval(interval);
     // The panel owns polling for task and notification freshness.
@@ -202,6 +207,14 @@ function TaskWorkspace({month,showToast}:{month:string;showToast:(message:string
   async function createTask(event: React.FormEvent) {
     event.preventDefault();
     const references = draft.references.filter((reference) => reference.url.trim()).map((reference) => ({ label: reference.label.trim(), url: reference.url.trim() }));
+    if(plan) {
+      setSaving(true);
+      try {
+        await plan.save(fetch("/api/client-portal",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"schedule",clientId:plan.clientId,year:plan.year,month:plan.month,part:plan.part,designerId:draft.assignedUserId,startAt:draft.startAt,deadlineAt:draft.deadlineAt,data:{...draft,references}})}),"Monthly task assigned.");
+        plan.close();
+      } catch { /* Parent displays the error. */ } finally {setSaving(false);}
+      return;
+    }
     const done = await mutate({ action: editing?"update":"create", ...(editing?{id:editing.id}:{}), data: { ...draft, references } });
     if (!done) return;
     setCreateOpen(false);
@@ -270,6 +283,7 @@ function TaskWorkspace({month,showToast}:{month:string;showToast:(message:string
   }
 
   return <div className={styles.workspace}>
+    {!plan && <>
     {month ? <PlanCalendar month={month} tasks={state.tasks} loading={loading} onOpen={id=>{
       setScope("all");setExpanded(current=>new Set(current).add(id));
       requestAnimationFrame(()=>document.getElementById("task-"+id)?.scrollIntoView({block:"center",behavior:"smooth"}));
@@ -339,7 +353,8 @@ function TaskWorkspace({month,showToast}:{month:string;showToast:(message:string
       })}</div> : <div className={styles.emptyTasks}><CheckCircle2 size={30} /><strong>No tasks in this view.</strong><span>Assigned work and completed submissions will appear here.</span></div>}
     </section>
 
-    {createOpen && <TaskModal eyebrow={editing?"EDIT TASK":"ASSIGN NEW WORK"} title={editing?"Edit task":"Create a detailed task"} description={editing ? "Update the task brief, notes, grid and schedule. Existing deliveries stay recorded." : state.role === "account_manager" ? "Account Managers can assign to the team, excluding administrators and Operation Managers." : "Choose any internal user, define the work, and set an exact start and deadline."} onClose={() => !saving && setCreateOpen(false)}>
+    </>}
+    {createOpen && <TaskModal eyebrow={editing?"EDIT TASK":"ASSIGN NEW WORK"} title={editing?"Edit task":"Create a detailed task"} description={editing ? "Update the task brief, notes, grid and schedule. Existing deliveries stay recorded." : state.role === "account_manager" ? "Account Managers can assign to the team, excluding administrators and Operation Managers." : "Choose any internal user, define the work, and set an exact start and deadline."} onClose={() => {if(!saving){setCreateOpen(false);plan?.close();}}}>
       <form className={styles.taskForm} onSubmit={(event) => void createTask(event)}>
         <div className={styles.formGrid}>
           <>
@@ -359,7 +374,7 @@ function TaskWorkspace({month,showToast}:{month:string;showToast:(message:string
         <section className={styles.referencesEditor}><header><div><Link2 size={16} /><span><strong>References</strong><small>Add one link or several — all optional.</small></span></div><button type="button" onClick={() => setDraft((current) => ({ ...current, references: [...current.references, { label: "", url: "" }] }))}><Plus size={14} /> Add reference</button></header>
           {draft.references.length ? <div>{draft.references.map((reference, index) => <div className={styles.referenceRow} key={index}><span>{index + 1}</span><input value={reference.label} onChange={(event) => updateReference(index, "label", event.target.value)} placeholder="Reference name" /><input required type="url" value={reference.url} onChange={(event) => updateReference(index, "url", event.target.value)} placeholder="https://…" /><button type="button" onClick={() => setDraft((current) => ({ ...current, references: current.references.filter((_, refIndex) => refIndex !== index) }))} aria-label={`Remove reference ${index + 1}`}><X size={14} /></button></div>)}</div> : <p>No references added yet.</p>}
         </section>
-        <footer><button type="button" className={styles.cancelButton} onClick={() => setCreateOpen(false)} disabled={saving}>Cancel</button><button className={styles.saveButton} disabled={saving || !draft.assignedUserId}>{saving ? <><LoaderCircle size={16} /> Saving…</> : <><Send size={16} /> {editing?"Save changes":"Assign & notify"}</>}</button></footer>
+        <footer><button type="button" className={styles.cancelButton} onClick={() => {setCreateOpen(false);plan?.close();}} disabled={saving}>Cancel</button><button className={styles.saveButton} disabled={loading || saving || !draft.assignedUserId}>{saving ? <><LoaderCircle size={16} /> Saving…</> : <><Send size={16} /> {editing?"Save changes":"Assign & notify"}</>}</button></footer>
       </form>
     </TaskModal>}
 

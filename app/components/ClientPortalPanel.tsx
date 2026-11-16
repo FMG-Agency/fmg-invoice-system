@@ -1,5 +1,6 @@
 "use client";
 
+import {TaskWorkspace} from "./TasksPanel";
 import {clientAccess} from '../lib/client-access';
 import {
   ArrowUpRight,
@@ -217,6 +218,7 @@ function PlanningForm({clientId, year, month, planning, update}: {
   update:(request:Promise<Response>, success:string)=>Promise<void>;
 }) {
   const [part,setPart] = useState(1);
+  const [detailed,setDetailed]=useState<{startAt:string;deadlineAt:string;designerId:number}|null>(null);
   const [busy,setBusy] = useState(false);
   const schedule = planning.schedules.find(item => item.slot === [clientId,year,month,part].join("/"));
   async function send(payload:Record<string,unknown>, message:string) {
@@ -234,13 +236,14 @@ function PlanningForm({clientId, year, month, planning, update}: {
     <form key={part} onSubmit={event=>{
       event.preventDefault();
       const data=new FormData(event.currentTarget);
-      void send({action:"schedule",month,part,designerId:Number(data.get("designer")),startAt:data.get("start"),deadlineAt:data.get("deadline")},"Designer task saved.");
+      setDetailed({designerId:Number(data.get("designer")),startAt:String(data.get("start")),deadlineAt:String(data.get("deadline"))});
     }}>
       <label>Graphic designer<select name="designer" required defaultValue={schedule?.designerId ?? ""}><option value="">Choose designer</option>{planning.designers.map(person=><option key={person.id} value={person.id}>{person.displayName}</option>)}</select></label>
       <label>Start · Cairo<input type="datetime-local" name="start" required defaultValue={schedule?.startAt}/></label>
       <label>Deadline · Cairo<input type="datetime-local" name="deadline" required defaultValue={schedule?.deadlineAt}/></label>
       <button className="btn btn-primary" disabled={busy || !planning.designers.length || schedule?.status==="submitted"}>{schedule?.status==="submitted"?"Delivered":schedule?"Update task":"Assign plan task"}</button>
     </form>
+    {detailed && <TaskWorkspace month={year+"-"+String(month).padStart(2,"0")} showToast={()=>{}} plan={{...detailed,clientId,year,month,part:part as 1|2,title:monthNames[month-1]+" content plan · Part "+part,close:()=>setDetailed(null),save:update}}/>}
     {!planning.designers.length && <small>No active designer found. Check the user's role or employee job title.</small>}
   </section>;
 }

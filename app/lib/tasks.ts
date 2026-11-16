@@ -160,6 +160,7 @@ function taskFromRow(row: Record<string, unknown>, nowEpoch: number): AgencyTask
     submissions: JSON.parse(String(row.submissionsJson || "[]")),
     id: numberValue(row.id),
     planTask: Boolean(row.planSlot),
+    planSlot: String(row.planSlot || ""),
     title: String(row.title ?? ""),
     details: String(row.details ?? ""),
     brief: String(row.brief ?? ""),

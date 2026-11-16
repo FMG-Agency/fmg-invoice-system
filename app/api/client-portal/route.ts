@@ -1,8 +1,9 @@
 import { trashDelete } from '../../lib/trash';
+import { taskData } from "../../lib/task-input";
 import { z } from "zod";
 import { getSession, requirePermission } from "../../lib/auth-server";
 import { ensureClientPortalDatabase, getClientPortalState, portalClientAllowed, planningPeople, isPortalPlanner } from "../../lib/client-portal";
-import { cairoLocalEpoch, ensureTasksDatabase } from "../../lib/tasks";
+import { taskAssignees, cairoLocalEpoch, ensureTasksDatabase } from "../../lib/tasks";
 import { notifyUsers } from "../../lib/notifications";
 import { database } from "../../lib/database";
 
@@ -22,7 +23,7 @@ const planData = z.object({
 });
 const actionPayload = z.discriminatedUnion("action", [
   z.object({action:z.literal("manager"), clientId:planData.shape.clientId, year:planData.shape.year, managerId:z.number().int().positive().nullable()}),
-  z.object({action:z.literal("schedule"), clientId:planData.shape.clientId, year:planData.shape.year, month:planData.shape.month, part:planData.shape.part, designerId:z.number().int().positive(), startAt:z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/), deadlineAt:z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)}),
+  z.object({action:z.literal("schedule"), data:taskData.optional(), clientId:planData.shape.clientId, year:planData.shape.year, month:planData.shape.month, part:planData.shape.part, designerId:z.number().int().positive(), startAt:z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/), deadlineAt:z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)}),
   z.object({ action: z.literal("savePlan"), data: planData }),
   z.object({ action: z.literal("deletePlan"), id: z.number().int().positive(), clientId: z.number().int().positive(), year: z.number().int().min(2020).max(2100) }),
 ]);
@@ -73,14 +74,18 @@ export async function POST(request: Request) {
       const client=await database.prepare("SELECT COALESCE(NULLIF(company_name,''),name) AS name FROM clients WHERE id=? AND lifecycle_status='active'").bind(id).first<{name:string}>();
       if (!client || !designer || !(cairoLocalEpoch(payload.deadlineAt)>cairoLocalEpoch(payload.startAt))) return Response.json({error:"Choose an active client, a designer and a deadline after the start."},{status:400});
       await ensureTasksDatabase();
+      const ids=[...new Set([designer.id,...(payload.data?.additionalUserIds || [])])];
+      const people=await taskAssignees(session);
+      if(ids.some(id=>!people.some(person=>person.id===id))) return Response.json({error:"Choose active team members."},{status:400});
+      const team=ids.map(id=>{const person=people.find(p=>p.id===id)!;return {id,displayName:person.displayName,roleLabel:person.roleLabel,part:payload.data?.assignments.find(a=>a.userId===id)?.part || ""};});
       const slot=[id,payload.year,payload.month,payload.part].join("/");
-      const title=`${client.name} · ${payload.month}/${payload.year} content plan · Part ${payload.part}`;
-      const task=await database.prepare(`INSERT INTO agency_tasks(plan_slot,title,start_at,deadline_at,assigned_user_id,assigned_user_name,assigned_user_role,created_by_user_id,created_by_name,created_by_role,individual_tracking)
-        VALUES(?,?,?,?,?,?,?,?,?,?,'1') ON CONFLICT(plan_slot) WHERE plan_slot<>'' DO UPDATE SET
-        plan_generated='',start_at=excluded.start_at,deadline_at=excluded.deadline_at,assigned_user_id=excluded.assigned_user_id,assigned_user_name=excluded.assigned_user_name,assigned_user_role=excluded.assigned_user_role
-        WHERE agency_tasks.status='assigned' RETURNING id`).bind(slot,title,payload.startAt,payload.deadlineAt,designer.id,designer.displayName,designer.roleLabel,session.userId,session.displayName,session.roleLabel).first<{id:number}>();
+      const title=payload.data?.title || `${client.name} · ${payload.month}/${payload.year} content plan · Part ${payload.part}`;
+      const task=await database.prepare(`INSERT INTO agency_tasks(plan_slot,title,start_at,deadline_at,assigned_user_id,assigned_user_name,assigned_user_role,created_by_user_id,created_by_name,created_by_role,details,brief,task_notes,grid_notes,references_json,grid_cells_json,grid_post_notes_json,assigned_users_json,individual_tracking)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'1') ON CONFLICT(plan_slot) WHERE plan_slot<>'' DO UPDATE SET
+        title=excluded.title,details=excluded.details,brief=excluded.brief,task_notes=excluded.task_notes,grid_notes=excluded.grid_notes,references_json=excluded.references_json,grid_cells_json=excluded.grid_cells_json,grid_post_notes_json=excluded.grid_post_notes_json,assigned_users_json=excluded.assigned_users_json,plan_generated='',start_at=excluded.start_at,deadline_at=excluded.deadline_at,assigned_user_id=excluded.assigned_user_id,assigned_user_name=excluded.assigned_user_name,assigned_user_role=excluded.assigned_user_role
+        WHERE agency_tasks.status='assigned' RETURNING id`).bind(slot,title,payload.startAt,payload.deadlineAt,designer.id,designer.displayName,designer.roleLabel,session.userId,session.displayName,session.roleLabel,payload.data?.details || "",payload.data?.brief || "",payload.data?.notes || "",payload.data?.gridNotes || "",JSON.stringify(payload.data?.references || []),JSON.stringify(payload.data?.gridCells || []),JSON.stringify(payload.data?.gridPostNotes || []),JSON.stringify(team)).first<{id:number}>();
       if (!task) return Response.json({error:"This plan has already been delivered."},{status:409});
-      await notifyUsers([designer.id],{type:"task_assigned",title:"Client plan scheduled",message:title+" · Due "+payload.deadlineAt.replace("T"," "),targetView:"standard-tasks",entityId:task.id,actorUserId:session.userId});
+      await notifyUsers(ids,{type:"task_assigned",title:"Client plan scheduled",message:title+" · Due "+payload.deadlineAt.replace("T"," "),targetView:"standard-tasks",entityId:task.id,actorUserId:session.userId});
       return Response.json(await getClientPortalState(session,id,payload.year));
     }
     if (payload.action === "savePlan") {

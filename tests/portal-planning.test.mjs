@@ -32,7 +32,7 @@ test("portal owners see assigned active clients and schedule one designer task p
   assert.equal(res.status,200);
   assert.deepEqual((await res.json()).clients.map(c=>c.id),[2,1]);
   login(3,"Account Manager");
-  const schedule={action:"schedule",month:11,part:1,designerId:4,startAt:"2026-11-12T11:00",deadlineAt:"2026-11-13T19:00"};
+  const schedule={action:"schedule",month:11,part:1,data:{title:"Monthly design",details:"Create the collection",brief:"Brief",notes:"Note",assignedUserId:4,startAt:"2026-11-12T11:00",deadlineAt:"2026-11-13T19:00",references:[{label:"Reference",url:"https://example.com"}],gridCells:["design"],gridPostNotes:["Post note"]},designerId:4,startAt:"2026-11-12T11:00",deadlineAt:"2026-11-13T19:00"};
   assert.equal((await post(schedule)).status,403);
   assert.equal((await (await GET(new Request("https://fixture/api/client-portal?clientId=1"))).json()).client,null);
   login(2,"Operation Manager");
@@ -59,6 +59,9 @@ test("portal owners see assigned active clients and schedule one designer task p
   assert.equal(december[0].startAt,"2026-12-12T11:00");
   assert.equal(december[0].deadlineAt,"2026-12-14T19:00");
   assert.equal(december[0].status,"assigned");
+  assert.equal(december[0].details,"Create the collection");
+  assert.equal(december[0].gridPostNotes[0],"Post note");
+  assert.equal(december[0].references[0].url,"https://example.com");
   assert.equal((await getTasksState(globalThis.viewer,"2026-11")).tasks[0].status,"submitted");
   login(3,"Account Manager");
   assert.equal((await getTasksState(globalThis.viewer,"2026-12")).tasks.length,0);
