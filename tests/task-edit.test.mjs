@@ -11,7 +11,11 @@ const call=(body)=>app.POST(new Request('https://fixture/api/tasks',{method:'POS
 assert.equal((await call({action:'update',id:1,data})).status,401);
 for(const id of [2,4]){globalThis.taskSession={userId:id,isAdmin:false,roleLabel:id===4?'Operation Manager':'Designer',displayName:'Other',username:'other'};assert.equal((await call({action:'update',id:1,data})).status,403)}
 for(const id of [1,3]){globalThis.taskSession={userId:id,isAdmin:id===3,roleLabel:id===3?'Administrator':'Team Member',displayName:'Editor',username:'editor'};const r=await call({action:'update',id:1,data});assert.equal(r.status,200);assert.equal((await r.json()).tasks[0].title,'Updated')}
-assert.equal(globalThis.taskNotices.length,2);assert.deepEqual(globalThis.taskNotices[0].ids,[2]);assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM task_submissions').first()).n,1);assert.equal((await db.prepare('SELECT created_by_user_id AS creator FROM agency_tasks').first()).creator,1);
+const r=await call({action:'update',id:1,data:{...data,assignedUserId:4,additionalUserIds:[2]}});
+assert.equal(r.status,200);assert.equal((await r.json()).tasks[0].status,'assigned');
+assert.deepEqual(globalThis.taskNotices.at(-1).ids,[4,2]);
+assert.equal((await call({action:'update',id:1,data:{...data,assignedUserId:999}})).status,400);
+assert.equal(globalThis.taskNotices.length,3);assert.deepEqual(globalThis.taskNotices[0].ids,[2]);assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM task_submissions').first()).n,1);assert.equal((await db.prepare('SELECT created_by_user_id AS creator FROM agency_tasks').first()).creator,1);
 assert.equal((await call({action:'update',id:1,data:{...data,deadlineAt:data.startAt}})).status,400);
 globalThis.taskSession={userId:1,isAdmin:false,roleLabel:'Team Member'};assert.equal((await call({action:'delete',id:1})).status,403);
 });

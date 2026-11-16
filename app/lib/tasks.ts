@@ -251,7 +251,7 @@ export async function getTasksState(session: AuthSession, calendar?: string): Pr
   const now = cairoNow();
   return {
     tasks: rows.results.map((row) => taskFromRow(row, Date.now())),
-    assignees: await taskAssignees(session),
+    assignees: await taskAssignees({...session,roleLabel:role==="member"?"Operation Manager":session.roleLabel}),
     userId: session.userId,
     role,
     canCreate: canCreateTasks(session),
