@@ -7,7 +7,7 @@ import type { Client, ClientPortalPlanPart, ClientPortalState } from "../types";
 
 const portalSchema = [
   `CREATE TABLE IF NOT EXISTS portal_planners (user_id INTEGER PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE)`,
-  `INSERT OR IGNORE INTO portal_planners SELECT id FROM auth_users WHERE lower(username) IN ('hana','sandy') AND client_id IS NULL AND active=1`,
+  `INSERT OR IGNORE INTO portal_planners SELECT id FROM auth_users WHERE (lower(username) IN ('hana','sandy') OR lower(replace(role_label,'_',' '))='account manager') AND client_id IS NULL AND active=1`,
   `CREATE TABLE IF NOT EXISTS portal_client_managers (
     client_id INTEGER PRIMARY KEY REFERENCES clients(id) ON DELETE CASCADE,
     manager_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE

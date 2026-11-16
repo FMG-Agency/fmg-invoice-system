@@ -230,3 +230,5 @@
 .calendarGrid time { display:block; font-size:.8rem; }
 .calendarGrid button { display:block; width:100%; margin-top:4px; padding:4px; border:0; border-radius:4px; background:#fff0b7; color:#4a3700; cursor:pointer; font-size:.72rem; text-align:start; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .calendarGrid button[data-done=true] { background:#cbf2d8; color:#154b2a; }
+
+.assignActions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }

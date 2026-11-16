@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { AgencyTask, TaskGridCell, TaskReference, TasksState } from "../types";
+import type { ClientPortalState, AgencyTask, TaskGridCell, TaskReference, TasksState } from "../types";
 import styles from "./TasksPanel.module.css";
 
 const emptyState: TasksState = {
@@ -134,6 +134,7 @@ export function TaskWorkspace({month,showToast,plan}:{month:string;showToast:(me
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing,setEditing]=useState<AgencyTask|null>(null);
+  const [planOpen,setPlanOpen]=useState(false);
   const [createOpen, setCreateOpen] = useState(Boolean(plan));
   const [draft, setDraft] = useState<TaskDraft>(()=>plan?{...blankDraft(),title:plan.title,startAt:plan.startAt,deadlineAt:plan.deadlineAt,assignedUserId:plan.designerId}:blankDraft());
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
@@ -289,7 +290,7 @@ export function TaskWorkspace({month,showToast,plan}:{month:string;showToast:(me
       requestAnimationFrame(()=>document.getElementById("task-"+id)?.scrollIntoView({block:"center",behavior:"smooth"}));
     }}/> : <section className={styles.hero}>
       <div className={styles.heroCopy}><span><CheckCircle2 size={14} /> FMG TASK FLOW</span><h2>Daily work, clear ownership.</h2><p>Assign detailed work, keep every reference together, and measure delivery against the exact deadline.</p></div>
-      {state.canCreate && <button type="button" className={styles.createButton} onClick={openCreate}><Plus size={17} /> Assign a task</button>}
+      {state.canCreate && <div className={styles.assignActions}><button type="button" className={styles.createButton} onClick={openCreate}><Plus size={17} /> Assign a task</button><button type="button" className={styles.createButton} onClick={()=>setPlanOpen(true)}><CalendarDays size={17}/> Assign plan task</button></div>}
       <div className={styles.stats}>
         <article><span><UserRound size={18} /></span><div><small>MY OPEN TASKS</small><strong>{stats.mine}</strong></div></article>
         <article><span><CalendarDays size={18} /></span><div><small>OPEN TODAY</small><strong>{stats.dueToday}</strong></div></article>
@@ -354,6 +355,7 @@ export function TaskWorkspace({month,showToast,plan}:{month:string;showToast:(me
     </section>
 
     </>}
+    {planOpen && <PlanTaskLauncher showToast={showToast} close={()=>setPlanOpen(false)}/>}
     {createOpen && <TaskModal eyebrow={editing?"EDIT TASK":"ASSIGN NEW WORK"} title={editing?"Edit task":"Create a detailed task"} description={editing ? "Update the task brief, notes, grid and schedule. Existing deliveries stay recorded." : state.role === "account_manager" ? "Account Managers can assign to the team, excluding administrators and Operation Managers." : "Choose any internal user, define the work, and set an exact start and deadline."} onClose={() => {if(!saving){setCreateOpen(false);plan?.close();}}}>
       <form className={styles.taskForm} onSubmit={(event) => void createTask(event)}>
         <div className={styles.formGrid}>
@@ -414,4 +416,61 @@ function PlanCalendar({month,tasks,loading,onOpen}:{month:string;tasks:AgencyTas
     </div>
     {!loading && !tasks.length && <p>No plans scheduled for this month.</p>}
   </section>;
+}
+
+function PlanTaskLauncher({showToast,close}:{showToast:(message:string)=>void;close:()=>void}) {
+  const now=cairoLocalParts();
+  const [month,setMonth]=useState(now.year+"-"+now.month);
+  const [clientId,setClientId]=useState(0);
+  const [part,setPart]=useState<1|2>(1);
+  const [portal,setPortal]=useState<ClientPortalState|null>(null);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  const [editing,setEditing]=useState(false);
+  const [year,monthNumber]=month.split("-").map(Number);
+  useEffect(()=>{
+    let active=true;
+    setLoading(true);setError("");
+    fetch("/api/client-portal?year="+year+"&clientId="+clientId,{cache:"no-store"})
+      .then(async response=>{
+        const data=await response.json() as ClientPortalState & {error?:string};
+        if(!response.ok) throw new Error(data.error || "Could not load client plans.");
+        if(active){setPortal(data);if(!clientId && data.client)setClientId(data.client.id);}
+      }).catch(error=>{if(active)setError(error instanceof Error?error.message:"Could not load plans.");})
+      .finally(()=>{if(active)setLoading(false);});
+    return ()=>{active=false;};
+  },[clientId,year]);
+  const client=portal?.clients.find(item=>item.id===clientId);
+  const schedule=portal?.planning?.schedules.find(item=>item.slot===[clientId,year,monthNumber,part].join("/"));
+  if(editing && client && portal?.planning) return <TaskWorkspace month={month} showToast={showToast} plan={{
+    clientId,year,month:monthNumber,part,title:(client.companyName || client.name)+" · "+month+" · Part "+part,
+    startAt:schedule?.startAt || month+"-"+(part===1?"01":"16")+"T11:00",
+    deadlineAt:schedule?.deadlineAt || month+"-"+(part===1?"15":String(new Date(year,monthNumber,0).getDate()))+"T20:00",
+    designerId:schedule?.designerId || portal.planning.designers[0]?.id || 0,
+    close,
+    save:async(request,message)=>{
+      try {
+        const response=await request;
+        const data=await response.json() as ClientPortalState & {error?:string};
+        if(!response.ok)throw new Error(data.error || "Could not assign the plan.");
+        showToast(message);
+      } catch(error) {showToast(error instanceof Error?error.message:"Could not assign the plan.");throw error;}
+    }
+  }}/>;
+  return <TaskModal eyebrow="MONTHLY CLIENT PLAN" title="Assign plan task" description="Choose the client and month, then add the task details." onClose={close}>
+    <form className={styles.taskForm} onSubmit={event=>{event.preventDefault();setEditing(true);}}>
+      <div className={styles.formGrid}>
+        <label><span>Client</span><select required disabled={loading} value={clientId || ""} onChange={event=>setClientId(Number(event.target.value))}>
+          <option value="">Choose client</option>{portal?.clients.map(client=><option key={client.id} value={client.id}>{client.companyName || client.name}</option>)}
+        </select></label>
+        <label><span>Month</span><input required type="month" min="2020-01" max="2100-12" value={month} onChange={event=>setMonth(event.target.value)}/></label>
+        <label><span>Plan part</span><select value={part} onChange={event=>setPart(Number(event.target.value) as 1|2)}><option value={1}>Part 1</option><option value={2}>Part 2</option></select></label>
+      </div>
+      {loading && <p>Loading your clients…</p>}
+      {error && <p role="alert">{error}</p>}
+      {!loading && !error && !portal?.clients.length && <p>No active clients assigned. Ask an administrator to assign your clients in Client Portal.</p>}
+      {schedule?.status==="submitted" && <p>This plan has already been delivered.</p>}
+      <footer><button type="button" className={styles.cancelButton} onClick={close}>Cancel</button><button className={styles.saveButton} disabled={loading || Boolean(error) || !client || !portal?.planning?.designers.length || schedule?.status==="submitted"}>Continue to task details</button></footer>
+    </form>
+  </TaskModal>;
 }
