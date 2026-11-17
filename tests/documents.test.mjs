@@ -151,7 +151,7 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   assert.equal((await app.tasks(request({action:'submit',id:shared.id,submissionMethod:'flash_drive'}))).status,409);
   globalThis.documentTestSession={...globalThis.documentTestSession,userId:101,isAdmin:true,roleLabel:'Administrator'};
   const finished=await call(app.tasks,{action:'submit',id:shared.id,submissionMethod:'link',submissionUrl:'https://example.com/video',submissionPart:'Video'});
-  assert.equal(finished.tasks[0].status,'submitted');
+  assert.equal(finished.tasks[0].status,'review');
   assert.equal(finished.tasks[0].submissions.length,2);
   assert.equal(finished.tasks[0].submissions.find(s=>s.userId===102).notes,'USB handed to manager');
   assert.ok(finished.tasks[0].submissions.every(s=>s.submittedAt && s.lateMinutes>0));

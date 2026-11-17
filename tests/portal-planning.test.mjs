@@ -62,7 +62,7 @@ test("portal owners see assigned active clients and schedule one designer task p
   assert.equal(december[0].details,"Create the collection");
   assert.equal(december[0].gridPostNotes[0],"Post note");
   assert.equal(december[0].references[0].url,"https://example.com");
-  assert.equal((await getTasksState(globalThis.viewer,"2026-11")).tasks[0].status,"submitted");
+  assert.equal((await getTasksState(globalThis.viewer,"2026-11")).tasks[0].status,"review");
   login(3,"Account Manager");
   assert.equal((await getTasksState(globalThis.viewer,"2026-12")).tasks.length,0);
   login(2,"Operation Manager");

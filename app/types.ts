@@ -522,7 +522,7 @@ export type TaskReference = {
   url: string;
 };
 
-export type AgencyTaskStatus = "assigned" | "submitted";
+export type AgencyTaskStatus = "assigned" | "review" | "submitted";
 
 export type TaskAssignee = {
   id: number;
@@ -537,6 +537,9 @@ export type TaskGridCell = "design" | "carousel" | "video";
 export type TaskTeamMember = { id: number; displayName: string; roleLabel: string; part?: string };
 export type TaskSubmission = { userId: number; userName: string; part: string; method: string; url: string; notes: string; submittedAt: string; lateMinutes: number };
 export type AgencyTask = {
+  reviewRequired?: boolean;
+  creatorApproval?: string;
+  adminApproval?: string;
   planTask?: boolean;
   planSlot?: string;
   submissions: TaskSubmission[];

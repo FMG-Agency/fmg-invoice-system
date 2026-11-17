@@ -32,9 +32,9 @@ export async function prepareStandardMonth(calendar: string) {
       const duration = Date.parse(source.deadline_at+"Z") - Date.parse(source.start_at+"Z");
       deadline = new Date(Date.parse(start+"Z")+duration).toISOString().slice(0,16);
     }
-    return database.prepare(`INSERT INTO agency_tasks(plan_slot,plan_generated,title,start_at,deadline_at,
+    return database.prepare(`INSERT INTO agency_tasks(review_required,plan_slot,plan_generated,title,start_at,deadline_at,
       assigned_user_id,assigned_user_name,assigned_user_role,created_by_user_id,created_by_name,created_by_role,details,brief,task_notes,grid_notes,references_json,grid_cells_json,grid_post_notes_json,assigned_users_json,individual_tracking)
-      SELECT ?,'1',?,?,?,assigned_user_id,assigned_user_name,assigned_user_role,created_by_user_id,created_by_name,created_by_role,details,brief,task_notes,grid_notes,references_json,grid_cells_json,grid_post_notes_json,assigned_users_json,'1'
+      SELECT '1',?,'1',?,?,?,assigned_user_id,assigned_user_name,assigned_user_role,created_by_user_id,created_by_name,created_by_role,details,brief,task_notes,grid_notes,references_json,grid_cells_json,grid_post_notes_json,assigned_users_json,'1'
       FROM agency_tasks WHERE id=? AND NOT EXISTS (SELECT 1 FROM skipped_plan_months WHERE slot=?) ON CONFLICT(plan_slot) WHERE plan_slot<>'' DO NOTHING`)
       .bind(slot,source.client+" · "+month+"/"+year+" content plan · Part "+slot.slice(-1),start,deadline,source.id,slot);
   });

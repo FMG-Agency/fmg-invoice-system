@@ -100,9 +100,10 @@ function durationLabel(minutes: number) {
 
 function personalTask(task: AgencyTask, userId: number): AgencyTask {
   const delivery = task.submissions.find(item => item.userId === userId);
-  return delivery ? {...task,status:"submitted",submittedAt:delivery.submittedAt,lateMinutes:delivery.lateMinutes,liveLateMinutes:delivery.lateMinutes} : task;
+  return delivery ? {...task,status:task.reviewRequired && task.status!=="submitted"?"review":"submitted",submittedAt:delivery.submittedAt,lateMinutes:delivery.lateMinutes,liveLateMinutes:delivery.lateMinutes} : task;
 }
 function statusCopy(task: AgencyTask) {
+  if (task.status === "review") return "Awaiting approvals";
   if (task.status === "submitted") return task.lateMinutes ? `Submitted · ${durationLabel(task.lateMinutes)} late` : "Submitted on time";
   return task.liveLateMinutes ? `Overdue · ${durationLabel(task.liveLateMinutes)}` : "In progress";
 }
@@ -138,7 +139,7 @@ export function TaskWorkspace({month,showToast,plan}:{month:string;showToast:(me
   const [createOpen, setCreateOpen] = useState(Boolean(plan));
   const [draft, setDraft] = useState<TaskDraft>(()=>plan?{...blankDraft(),title:plan.title,startAt:plan.startAt,deadlineAt:plan.deadlineAt,assignedUserId:plan.designerId}:blankDraft());
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
-  const [scope, setScope] = useState<"all" | "mine" | "created" | "submitted">(month?"all":"mine");
+  const [scope, setScope] = useState<"all" | "mine" | "created" | "submitted" | "review">(month?"all":"mine");
   const [dailyDate, setDailyDate] = useState(() => {
     const parts = cairoLocalParts();
     return `${parts.year}-${parts.month}-${parts.day}`;
@@ -231,7 +232,7 @@ export function TaskWorkspace({month,showToast,plan}:{month:string;showToast:(me
     if (!done) return;
     setSubmitting(null);
     setSubmissionUrl("");
-    showToast("Your part was submitted. The task closes when everyone has delivered.");
+    showToast("Your part was submitted. Completion requires the sender and administrator approvals.");
   }
 
   function updateReference(index: number, key: keyof TaskReference, value: string) {
@@ -250,6 +251,7 @@ export function TaskWorkspace({month,showToast,plan}:{month:string;showToast:(me
   }, [state]);
 
   const filteredTasks = useMemo(() => state.tasks.filter((task) => {
+    if (scope === "review") return task.status==="review";
     if (scope === "mine") return task.assignedUsers.some(a => a.id === state.userId);
     if (scope === "created") return task.createdByUserId === state.userId;
     if (scope === "submitted") return (state.role === "member" ? personalTask(task,state.userId) : task).status === "submitted";
@@ -313,6 +315,7 @@ export function TaskWorkspace({month,showToast,plan}:{month:string;showToast:(me
         <button className={scope === "mine" ? styles.activeFilter : ""} onClick={() => setScope("mine")}>Assigned to me <span>{state.tasks.filter((task) => task.assignedUsers.some(a => a.id === state.userId)).length}</span></button>
         {state.canCreate && <button className={scope === "created" ? styles.activeFilter : ""} onClick={() => setScope("created")}>Created by me <span>{state.tasks.filter((task) => task.createdByUserId === state.userId).length}</span></button>}
         {(month || state.canViewDaily) && <button className={scope === "all" ? styles.activeFilter : ""} onClick={() => setScope("all")}>All <span>{state.tasks.length}</span></button>}
+        <button className={scope === "review" ? styles.activeFilter : ""} onClick={()=>setScope("review")}>Awaiting approvals <span>{state.tasks.filter(task=>task.status==="review").length}</span></button>
         <button className={scope === "submitted" ? styles.activeFilter : ""} onClick={() => setScope("submitted")}>Submitted <span>{state.tasks.filter((task) => (state.role === "member" ? personalTask(task,state.userId) : task).status === "submitted").length}</span></button>
       </div></header>
 
@@ -323,7 +326,7 @@ export function TaskWorkspace({month,showToast,plan}:{month:string;showToast:(me
         return <article id={`task-${task.id}`} key={task.id} className={`${styles.taskCard} ${task.planTask ? styles.planCard : ""} ${displayTask.liveLateMinutes && displayTask.status === "assigned" ? styles.overdueCard : ""}`}>
           <button type="button" className={styles.taskToggle} onClick={() => toggleTask(task.id)} aria-expanded={open}>
             <span className={displayTask.status === "submitted" ? styles.doneIcon : displayTask.liveLateMinutes ? styles.lateIcon : styles.progressIcon}>{displayTask.status === "submitted" ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}</span>
-            <span className={styles.taskIdentity}><small>{task.planTask && <b className={styles.planBadge}>Client plan</b>} #{String(task.id).padStart(4, "0")} · {task.assignedUsers.map(a => a.displayName).join(", ")}</small><strong>{task.title}</strong><em>Assigned by {task.createdByName} · {task.status === "submitted" ? "All delivered" : `${task.submissions.length}/${task.assignedUsers.length} delivered`}{mine && displayTask.status === "submitted" && task.status !== "submitted" ? " · Your part is done — waiting for teammates" : ""}</em></span>
+            <span className={styles.taskIdentity}><small>{task.planTask && <b className={styles.planBadge}>Client plan</b>} #{String(task.id).padStart(4, "0")} · {task.assignedUsers.map(a => a.displayName).join(", ")}</small><strong>{task.title}</strong><em>Assigned by {task.createdByName} · {task.status === "submitted" ? "Completed" : task.status==="review" ? "Awaiting sender and administrator approvals" : `${task.submissions.length}/${task.assignedUsers.length} delivered`}{mine && displayTask.status === "submitted" && task.status !== "submitted" ? " · Your part is done — waiting for teammates" : ""}</em></span>
             <span className={styles.schedule}><small>START</small><strong>{dateTimeLabel(task.startAt)}</strong></span>
             <span className={styles.schedule}><small>DEADLINE</small><strong>{dateTimeLabel(task.deadlineAt)}</strong></span>
             <span className={`${styles.statusBadge} ${displayTask.status === "submitted" ? styles.doneText : displayTask.liveLateMinutes ? styles.lateText : styles.openText}`}>{statusCopy(displayTask)}</span>
@@ -345,6 +348,11 @@ export function TaskWorkspace({month,showToast,plan}:{month:string;showToast:(me
                 </article>;
               })}
             </section>
+            {task.reviewRequired && <section className={styles.deliveries}><h3>Completion approvals</h3>
+              <p>Task sender: {task.creatorApproval || "Pending"}</p><p>Administrator: {task.adminApproval || "Pending"}</p>
+              {task.status==="review" && task.createdByUserId===state.userId && !task.creatorApproval && <button className={styles.saveButton} disabled={saving} onClick={()=>void mutate({action:"approve",id:task.id,role:"creator"})}>Approve as task sender</button>}
+              {task.status==="review" && state.role==="administrator" && !task.adminApproval && <button className={styles.saveButton} disabled={saving} onClick={()=>void mutate({action:"approve",id:task.id,role:"admin"})}>Approve as administrator</button>}
+            </section>}
             <footer>{(state.role === "administrator" || task.createdByUserId===state.userId)&&<button type="button" disabled={saving} onClick={()=>openEdit(task)}><Pencil size={14}/> Edit task</button>}{state.role === "administrator" && <button type="button" className={styles.deleteTaskButton} disabled={saving} onClick={() => void deleteTask(task)}><Trash2 size={14} /> Delete task</button>}
               {task.status === "submitted" && !task.submissions.length && task.submissionUrl && <a href={task.submissionUrl} target="_blank" rel="noopener noreferrer">Open historical submitted link</a>}
               {task.status === "assigned" && mine && !task.submissions.some(item=>item.userId===state.userId) && <button type="button" onClick={() => { setSubmitting(task); setSubmissionUrl(""); setSubmissionMethod("link"); setSubmissionNotes(""); setSubmissionPart(task.assignedUsers.find(person=>person.id===state.userId)?.part || ""); }}><Send size={14} /> Submit my part</button>}
@@ -410,7 +418,7 @@ function PlanCalendar({month,tasks,loading,onOpen}:{month:string;tasks:AgencyTas
         return <div key={date}><time dateTime={date}>{index+1}</time>
           {tasks.filter(task=>task.deadlineAt.startsWith(date)||task.startAt.startsWith(date)).map(task=>
             <button key={task.id} onClick={()=>onOpen(task.id)} data-done={task.status==="submitted"} title={task.title}>
-              <b>{task.status==="submitted"?"✓ Delivered":task.deadlineAt.startsWith(date)?"Due":"Start"}</b> {task.title}
+              <b>{task.status==="submitted"?"✓ Completed":task.status==="review"?"Awaiting approvals":task.deadlineAt.startsWith(date)?"Due":"Start"}</b> {task.title}
             </button>)}</div>;
       })}
     </div>

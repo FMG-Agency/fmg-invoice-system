@@ -45,7 +45,7 @@ let tasksDatabaseReady: Promise<void> | null = null;
 export async function ensureTasksDatabase() {
   tasksDatabaseReady ??= database.batch(taskSchema.map((statement) => database.prepare(statement))).then(async () => {
     const columns = (await database.prepare("PRAGMA table_info(agency_tasks)").all<{name:string}>()).results;
-    for (const [name, value] of [["plan_generated", ""], ["plan_slot", ""], ["individual_tracking", ""], ["grid_post_notes_json", "[]"], ["task_notes", ""], ["grid_cells_json", "[]"], ["assigned_users_json", "[]"], ["submission_method", "link"], ["submission_notes", ""], ["submitted_by_name", ""]]) {
+    for (const [name, value] of [["review_required", ""], ["creator_approval", ""], ["admin_approval", ""], ["plan_generated", ""], ["plan_slot", ""], ["individual_tracking", ""], ["grid_post_notes_json", "[]"], ["task_notes", ""], ["grid_cells_json", "[]"], ["assigned_users_json", "[]"], ["submission_method", "link"], ["submission_notes", ""], ["submitted_by_name", ""]]) {
       if (columns.some(c => c.name === name)) continue;
       try { await database.prepare(`ALTER TABLE agency_tasks ADD COLUMN ${name} TEXT NOT NULL DEFAULT '${value}'`).run(); }
       catch(error) { if (!/duplicate column/i.test(String(error))) throw error; }
@@ -151,7 +151,7 @@ function referencesValue(value: unknown): TaskReference[] {
 }
 
 function taskFromRow(row: Record<string, unknown>, nowEpoch: number): AgencyTask {
-  const status = String(row.status ?? "assigned") === "submitted" ? "submitted" : "assigned";
+  const status = String(row.status) === "submitted" ? (row.reviewRequired && (!row.creatorApproval || !row.adminApproval) ? "review" : "submitted") : "assigned";
   const deadlineEpoch = cairoLocalEpoch(String(row.deadlineAt ?? ""));
   const liveLateMinutes = status === "assigned" && Number.isFinite(deadlineEpoch)
     ? Math.max(0, Math.ceil((nowEpoch - deadlineEpoch) / 60_000))
@@ -159,6 +159,9 @@ function taskFromRow(row: Record<string, unknown>, nowEpoch: number): AgencyTask
   return {
     submissions: JSON.parse(String(row.submissionsJson || "[]")),
     id: numberValue(row.id),
+    reviewRequired: Boolean(row.reviewRequired),
+    creatorApproval: String(row.creatorApproval || ""),
+    adminApproval: String(row.adminApproval || ""),
     planTask: Boolean(row.planSlot),
     planSlot: String(row.planSlot || ""),
     title: String(row.title ?? ""),
@@ -234,7 +237,7 @@ export async function getTasksState(session: AuthSession, calendar?: string): Pr
     }
     selection = ` AND t.plan_slot LIKE '%/${year}/${month}/%'`;
   }
-  const query = database.prepare(`SELECT (SELECT json_group_array(json_object('userId',s.user_id,'userName',s.user_name,'part',s.part,'method',s.method,'url',s.url,'notes',s.notes,'submittedAt',s.submitted_at,'lateMinutes',s.late_minutes)) FROM task_submissions s WHERE s.task_id=t.id) AS submissionsJson, t.grid_post_notes_json AS gridPostNotesJson, t.task_notes AS taskNotes, t.grid_cells_json AS gridCellsJson, t.assigned_users_json AS assignedUsersJson, t.submission_method AS submissionMethod, t.submission_notes AS submissionNotes, t.submitted_by_name AS submittedByName, t.id, t.plan_slot AS planSlot, t.title, t.details, t.brief, t.grid_notes AS gridNotes,
+  const query = database.prepare(`SELECT (SELECT json_group_array(json_object('userId',s.user_id,'userName',s.user_name,'part',s.part,'method',s.method,'url',s.url,'notes',s.notes,'submittedAt',s.submitted_at,'lateMinutes',s.late_minutes)) FROM task_submissions s WHERE s.task_id=t.id) AS submissionsJson, t.grid_post_notes_json AS gridPostNotesJson, t.task_notes AS taskNotes, t.grid_cells_json AS gridCellsJson, t.assigned_users_json AS assignedUsersJson, t.submission_method AS submissionMethod, t.submission_notes AS submissionNotes, t.submitted_by_name AS submittedByName, t.review_required AS reviewRequired,t.creator_approval AS creatorApproval,t.admin_approval AS adminApproval,t.id, t.plan_slot AS planSlot, t.title, t.details, t.brief, t.grid_notes AS gridNotes,
       t.references_json AS referencesJson, t.start_at AS startAt, t.deadline_at AS deadlineAt,
       t.assigned_user_id AS assignedUserId, t.assigned_user_name AS assignedUserName,
       t.assigned_user_role AS assignedUserRole, t.created_by_user_id AS createdByUserId,

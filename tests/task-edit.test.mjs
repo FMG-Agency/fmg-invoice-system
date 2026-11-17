@@ -18,4 +18,17 @@ assert.equal((await call({action:'update',id:1,data:{...data,assignedUserId:999}
 assert.equal(globalThis.taskNotices.length,3);assert.deepEqual(globalThis.taskNotices[0].ids,[2]);assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM task_submissions').first()).n,1);assert.equal((await db.prepare('SELECT created_by_user_id AS creator FROM agency_tasks').first()).creator,1);
 assert.equal((await call({action:'update',id:1,data:{...data,deadlineAt:data.startAt}})).status,400);
 globalThis.taskSession={userId:1,isAdmin:false,roleLabel:'Team Member'};assert.equal((await call({action:'delete',id:1})).status,403);
+
+await db.prepare("UPDATE agency_tasks SET review_required='1',status='submitted' WHERE id=1").run();
+globalThis.taskSession={userId:2,isAdmin:false,roleLabel:'Designer',displayName:'Worker'};
+assert.equal((await call({action:'approve',id:1,role:'admin'})).status,403);
+globalThis.taskSession={userId:1,isAdmin:false,roleLabel:'Account Manager',displayName:'Creator'};
+let approval=await call({action:'approve',id:1,role:'creator'});
+assert.equal(approval.status,200);
+assert.equal((await approval.json()).tasks[0].status,'review');
+assert.equal((await call({action:'approve',id:1,role:'creator'})).status,409);
+globalThis.taskSession={userId:3,isAdmin:true,roleLabel:'Administrator',displayName:'Admin'};
+approval=await call({action:'approve',id:1,role:'admin'});
+assert.equal(approval.status,200);
+assert.equal((await approval.json()).tasks[0].status,'submitted');
 });

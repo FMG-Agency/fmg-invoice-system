@@ -19,6 +19,7 @@ export const runtime = "nodejs";
 
 import { taskData, httpUrl } from "../../lib/task-input";
 const payloadSchema = z.discriminatedUnion("action", [
+  z.object({action:z.literal("approve"),id:z.number().int().positive(),role:z.enum(["creator","admin"])}),
   z.object({ action: z.literal("delete"), id: z.number().int().positive() }),
   z.object({ action: z.literal("create"), data: taskData }),
   z.object({ action: z.literal("update"), id: z.number().int().positive(), data: taskData }),
@@ -74,6 +75,24 @@ export async function POST(request: Request) {
     }
     const payload = payloadSchema.parse(input);
 
+    if (payload.action === "approve") {
+      const task=await database.prepare("SELECT id,title,plan_slot,created_by_user_id,assigned_user_id,assigned_users_json FROM agency_tasks WHERE id=?").bind(payload.id).first<Record<string,unknown>>();
+      if(!task)return Response.json({error:"Task not found."},{status:404});
+      if(payload.role==="creator" ? Number(task.created_by_user_id)!==session.userId : !session.isAdmin) return Response.json({error:"Only the task sender and an administrator can approve their respective review."},{status:403});
+      const column=payload.role==="creator"?"creator_approval":"admin_approval";
+      const approval=sessionName(session)+" · "+cairoNow().dateTime;
+      const changed=await database.prepare(`UPDATE agency_tasks SET ${column}=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND review_required='1' AND status='submitted' AND ${column}=''`).bind(approval,payload.id).run();
+      if(!changed.meta.changes)return Response.json({error:"Approval is unavailable or already recorded."},{status:409});
+      const row=await database.prepare("SELECT creator_approval,admin_approval FROM agency_tasks WHERE id=?").bind(payload.id).first<Record<string,unknown>>();
+      const complete=Boolean(row?.creator_approval && row?.admin_approval);
+      const people=JSON.parse(String(task.assigned_users_json||"[]")) as {id:number}[];
+      await notifyUsers([...new Set([Number(task.assigned_user_id),...people.map(person=>person.id),Number(task.created_by_user_id),...await administratorUserIds()])],{
+        type:complete?"task_completed":"task_reviewed",title:complete?"Task completed":"Task approval recorded",
+        message:sessionName(session)+" approved “"+task.title+"”. "+(complete?"Both approvals are complete.":"Waiting for the second approval."),
+        targetView:task.plan_slot?"standard-tasks":"tasks",entityId:payload.id,actorUserId:session.userId,
+      });
+      return Response.json(await getTasksState(session,taskCalendar(request)));
+    }
     if (payload.action === "delete") {
       if (!session.isAdmin) return Response.json({ error: "Only administrators can delete tasks." }, { status: 403 });
       const deleted = await database.batch([await archiveStatement("agency_tasks", "id = ?", [payload.id], session), database.prepare("INSERT OR IGNORE INTO skipped_plan_months(slot) SELECT plan_slot FROM agency_tasks WHERE id=? AND plan_slot<>''").bind(payload.id), database.prepare("DELETE FROM task_submissions WHERE task_id = ?").bind(payload.id), database.prepare("DELETE FROM agency_tasks WHERE id = ?").bind(payload.id)]);
@@ -93,7 +112,7 @@ const ids=[...new Set([payload.data.assignedUserId,...payload.data.additionalUse
       if(ids.some(id=>!available.some(a=>a.id===id)))return Response.json({error:"Choose active team members."},{status:400});
       const team=ids.map(id=>{const a=available.find(a=>a.id===id)!;return {id,displayName:a.displayName,roleLabel:a.roleLabel,part:payload.data.assignments.find(p=>p.userId===id)?.part||""};});
 
-      const results=await database.batch([database.prepare(`UPDATE agency_tasks SET title=?,details=?,brief=?,task_notes=?,grid_notes=?,references_json=?,grid_cells_json=?,grid_post_notes_json=?,start_at=?,deadline_at=?,assigned_user_id=?,assigned_user_name=?,assigned_user_role=?,assigned_users_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND (?=1 OR created_by_user_id=?)`)
+      const results=await database.batch([database.prepare(`UPDATE agency_tasks SET creator_approval='',admin_approval='',title=?,details=?,brief=?,task_notes=?,grid_notes=?,references_json=?,grid_cells_json=?,grid_post_notes_json=?,start_at=?,deadline_at=?,assigned_user_id=?,assigned_user_name=?,assigned_user_role=?,assigned_users_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND (?=1 OR created_by_user_id=?)`)
         .bind(payload.data.title,payload.data.details,payload.data.brief,payload.data.notes,payload.data.gridNotes,JSON.stringify(payload.data.references),JSON.stringify(payload.data.gridCells),JSON.stringify(payload.data.gridCells.map((_,i)=>payload.data.gridPostNotes[i]||"")),payload.data.startAt,payload.data.deadlineAt,team[0].id,team[0].displayName,team[0].roleLabel,JSON.stringify(team),payload.id,session.isAdmin?1:0,session.userId),
         database.prepare(`UPDATE agency_tasks SET status=CASE WHEN EXISTS (
         SELECT 1 FROM json_each(assigned_users_json) a WHERE NOT EXISTS (
@@ -122,10 +141,10 @@ const ids=[...new Set([payload.data.assignedUserId,...payload.data.additionalUse
       const team = ids.map(id => { const a = available.find(a => a.id === id)!; return {id, displayName:a.displayName, roleLabel:a.roleLabel, part:payload.data.assignments.find(item=>item.userId===id)?.part || ""}; });
       const creatorName = sessionName(session);
       const result = await database.prepare(`INSERT INTO agency_tasks
-          (grid_post_notes_json, task_notes, grid_cells_json, assigned_users_json, title, details, brief, grid_notes, references_json, start_at, deadline_at,
+          (review_required,grid_post_notes_json, task_notes, grid_cells_json, assigned_users_json, title, details, brief, grid_notes, references_json, start_at, deadline_at,
             assigned_user_id, assigned_user_name, assigned_user_role,
             created_by_user_id, created_by_name, created_by_role)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        VALUES ('1',?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .bind(JSON.stringify(payload.data.gridCells.map((_, i) => payload.data.gridPostNotes[i] || "")), payload.data.notes, JSON.stringify(payload.data.gridCells), JSON.stringify(team), payload.data.title, payload.data.details, payload.data.brief, payload.data.gridNotes,
           JSON.stringify(payload.data.references), payload.data.startAt, payload.data.deadlineAt,
           allowedAssignee.id, allowedAssignee.displayName, allowedAssignee.roleLabel,
@@ -173,7 +192,7 @@ const ids=[...new Set([payload.data.assignedUserId,...payload.data.additionalUse
       ];
       await notifyUsers(recipients, {
         type: "task_submitted",
-        title: finished ? "Task fully submitted" : "Task part submitted",
+        title: finished ? "Task awaiting approval" : "Task part submitted",
         message: `${sessionName(session)} submitted their part of “${String(task.title ?? "Task")}”${lateMinutes ? ` ${lateMinutes} minutes late` : " on time"}. ${finished ? "All employees have delivered." : "Waiting for remaining employees."}`,
         targetView: task.plan_slot ? "standard-tasks" : "tasks",
         entityId: payload.id,
