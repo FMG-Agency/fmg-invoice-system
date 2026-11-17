@@ -67,4 +67,9 @@ test("portal owners see assigned active clients and schedule one designer task p
   assert.equal((await getTasksState(globalThis.viewer,"2026-12")).tasks.length,0);
   login(2,"Operation Manager");
   assert.equal((await getTasksState(globalThis.viewer,"2026-12")).tasks.length,1);
+  await db.prepare("INSERT INTO portal_shared_managers(user_id,manager_id) VALUES(3,2)").run();
+  login(3,"Account Manager");
+  const shared=await (await GET(new Request("https://fixture/api/client-portal?clientId=1&year=2026"))).json();
+  assert.deepEqual(shared.clients.map(c=>c.id),[1]);
+  assert.equal((await getTasksState(globalThis.viewer,"2026-12")).tasks.length,1);
 });

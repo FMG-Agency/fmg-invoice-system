@@ -6,6 +6,11 @@ import type { AuthSession } from "./auth-server";
 import type { Client, ClientPortalPlanPart, ClientPortalState } from "../types";
 
 const portalSchema = [
+  `CREATE TABLE IF NOT EXISTS portal_shared_managers (
+    user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    manager_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    PRIMARY KEY(user_id,manager_id)
+  )`,
   `CREATE TABLE IF NOT EXISTS portal_planners (user_id INTEGER PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE)`,
   `INSERT OR IGNORE INTO portal_planners SELECT id FROM auth_users WHERE (lower(username) IN ('hana','sandy') OR lower(replace(role_label,'_',' '))='account manager') AND client_id IS NULL AND active=1`,
   `CREATE TABLE IF NOT EXISTS portal_client_managers (
@@ -80,7 +85,7 @@ export async function isPortalPlanner(session: AuthSession) {
 export async function portalClientAllowed(session: AuthSession, clientId: number) {
   if (session.clientId !== null) return session.clientId === clientId;
   if (!await isPortalPlanner(session)) return true;
-  return Boolean(await database.prepare("SELECT 1 FROM portal_client_managers m JOIN clients c ON c.id=m.client_id WHERE c.lifecycle_status='active' AND m.client_id=? AND m.manager_id=?").bind(clientId,session.userId).first());
+  return Boolean(await database.prepare("SELECT 1 FROM portal_client_managers m JOIN clients c ON c.id=m.client_id WHERE c.lifecycle_status='active' AND m.client_id=? AND m.manager_id IN (SELECT ? UNION SELECT manager_id FROM portal_shared_managers WHERE user_id=?)").bind(clientId,session.userId,session.userId).first());
 }
 
 export async function planningPeople(session: AuthSession) {
@@ -101,8 +106,8 @@ async function listClients(session: AuthSession, scoped:boolean): Promise<Array<
       c.portal_logo_updated_at AS portalLogoUpdatedAt,
       c.created_at AS createdAt, c.updated_at AS updatedAt, COALESCE(u.username, '') AS portalUsername
     FROM clients c LEFT JOIN auth_users u ON u.id = (SELECT MIN(id) FROM auth_users WHERE client_id=c.id AND active=1)
-    WHERE c.lifecycle_status='active' AND (?=0 OR EXISTS (SELECT 1 FROM portal_client_managers m WHERE m.client_id=c.id AND m.manager_id=?))
-    ORDER BY COALESCE(NULLIF(TRIM(c.company_name),''),c.name) COLLATE NOCASE, c.id`).bind(scoped?1:0,session.userId).all<Record<string, unknown>>();
+    WHERE c.lifecycle_status='active' AND (?=0 OR EXISTS (SELECT 1 FROM portal_client_managers m WHERE m.client_id=c.id AND m.manager_id IN (SELECT ? UNION SELECT manager_id FROM portal_shared_managers WHERE user_id=?)))
+    ORDER BY COALESCE(NULLIF(TRIM(c.company_name),''),c.name) COLLATE NOCASE, c.id`).bind(scoped?1:0,session.userId,session.userId).all<Record<string, unknown>>();
   return result.results.map((row) => ({
     id: numberValue(row.id),
     name: String(row.name || ""),

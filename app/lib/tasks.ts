@@ -230,7 +230,7 @@ export async function getTasksState(session: AuthSession, calendar?: string): Pr
     const [year,month] = calendar.split("-").map(Number);
     const planner = !session.isAdmin && await database.prepare("SELECT 1 FROM portal_planners WHERE user_id=?").bind(session.userId).first();
     if (planner) {
-      accessWhere = `(t.assigned_user_id=${Number(session.userId)} OR EXISTS (SELECT 1 FROM portal_client_managers m WHERE m.client_id=CAST(t.plan_slot AS INTEGER) AND m.manager_id=${Number(session.userId)}))`;
+      accessWhere = `(t.assigned_user_id=${Number(session.userId)} OR EXISTS (SELECT 1 FROM portal_client_managers m WHERE m.client_id=CAST(t.plan_slot AS INTEGER) AND m.manager_id IN (SELECT ${Number(session.userId)} UNION SELECT manager_id FROM portal_shared_managers WHERE user_id=${Number(session.userId)})))`;
     }
     selection = ` AND t.plan_slot LIKE '%/${year}/${month}/%'`;
   }
