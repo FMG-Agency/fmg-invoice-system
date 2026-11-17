@@ -19,7 +19,7 @@ type UserDraft = {
 
 type AccountGroup = "employees" | "clients";
 type EmployeeOption = { id: number; name: string; title: string; department: string };
-type ClientOption = { id: number; name: string; companyName: string; ownerName: string };
+type ClientOption = { id: number; name: string; companyName: string; ownerName: string; lifecycleStatus:string };
 
 const accountManagerDraft: UserDraft = {
   username: "",
@@ -66,6 +66,8 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
+  const [showInactive,setShowInactive]=useState(false);
+  const [clientSearch,setClientSearch]=useState("");
   const [loading, setLoading] = useState(true);
   const [showPassword,setShowPassword]=useState(false);
   const [saving, setSaving] = useState(false);
@@ -96,6 +98,17 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
   const clientUsers = useMemo(() => users.filter(isClientAccount), [users]);
   const employeeUsers = useMemo(() => users.filter((user) => !isClientAccount(user)), [users]);
   const visibleUsers = activeGroup === "clients" ? clientUsers.filter(u=>u.clientId===selectedAccount) : employeeUsers;
+  const sortedClients=clients.filter(client=>(client.companyName+" "+client.name).toLowerCase().includes(clientSearch.toLowerCase())).sort((a,b)=>(a.companyName||a.name).localeCompare(b.companyName||b.name));
+  function clientCards(active:boolean) {
+    return <div className="brand-account-grid">{sortedClients.filter(client=>(client.lifecycleStatus==="active")===active).map(client=>{
+      const members=clientUsers.filter(user=>user.clientId===client.id);
+      const preview=members.find(user=>user.active && ["Client Owner","Client Portal"].includes(user.roleLabel)) || members.find(user=>user.active);
+      return <article key={client.id} className={selectedAccount===client.id?"brand-account selected":"brand-account"}>
+        <button className="brand-account-select" onClick={()=>setSelectedAccount(client.id)}><Building2 size={22}/><strong>{client.companyName||client.name}</strong><span>{members.length} users</span></button>
+        {active && (preview ? <AccountViewButton user={preview}/> : <small>No active portal user</small>)}
+      </article>;
+    })}</div>;
+  }
   const activeVisibleUsers = visibleUsers.filter((user) => user.active).length;
 
   function openCreate(group: AccountGroup = activeGroup) {
@@ -195,7 +208,7 @@ export function AccessPanel({ showToast }: { showToast: (message: string) => voi
         </div>
       </div>
 
-      {loading ? <div className="empty-panel"><div className="empty-icon"><UserCog size={24} /></div><h3>Loading users…</h3></div> : activeGroup === "employees" ? <EmployeeUsersTable users={employeeUsers} openEdit={openEdit} openCreate={() => openCreate("employees")} /> : <><div className="brand-account-grid">{clients.map(client=><button key={client.id} className={selectedAccount===client.id?"brand-account selected":"brand-account"} onClick={()=>setSelectedAccount(client.id)}><Building2 size={22}/><strong>{client.companyName||client.name}</strong><span>{clientUsers.filter(u=>u.clientId===client.id).length} users</span></button>)}</div>{selectedAccount&&<><div className="access-directory-head"><h3>Account Users · {clients.find(c=>c.id===selectedAccount)?.companyName||clients.find(c=>c.id===selectedAccount)?.name}</h3><button className="primary-button" onClick={()=>openCreate("clients")}><Plus size={16}/> Add account user</button></div><ClientUsersTable users={visibleUsers} openEdit={openEdit} openCreate={() => openCreate("clients")} /></>}</>}
+      {loading ? <div className="empty-panel"><div className="empty-icon"><UserCog size={24} /></div><h3>Loading users…</h3></div> : activeGroup === "employees" ? <EmployeeUsersTable users={employeeUsers} openEdit={openEdit} openCreate={() => openCreate("employees")} /> : <><div className="access-client-toolbar"><input placeholder="Search clients…" aria-label="Search clients" value={clientSearch} onChange={event=>setClientSearch(event.target.value)}/><button className="table-review" aria-expanded={showInactive} onClick={()=>{setShowInactive(!showInactive);if(showInactive && clients.find(c=>c.id===selectedAccount)?.lifecycleStatus!=="active")setSelectedAccount(null);}}>{showInactive?"Hide inactive clients":"Show inactive clients"}</button></div><h3>Active clients · {sortedClients.filter(c=>c.lifecycleStatus==="active").length}</h3>{clientCards(true)}{showInactive && <section className="inactive-client-section"><h3>Inactive clients · {sortedClients.filter(c=>c.lifecycleStatus!=="active").length}</h3>{clientCards(false)}</section>}{selectedAccount&&<><div className="access-directory-head"><h3>Account Users · {clients.find(c=>c.id===selectedAccount)?.companyName||clients.find(c=>c.id===selectedAccount)?.name}</h3><button className="primary-button" onClick={()=>openCreate("clients")}><Plus size={16}/> Add account user</button></div><ClientUsersTable users={visibleUsers} openEdit={openEdit} openCreate={() => openCreate("clients")} /></>}</>}
     </section>
 
     {open && <AccessModal

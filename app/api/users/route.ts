@@ -72,13 +72,14 @@ async function listEmployees() {
 }
 
 async function listClients() {
-  const result = await getDatabase().prepare(`SELECT id, name, company_name AS companyName, owner_name AS ownerName
+  const result = await getDatabase().prepare(`SELECT id, name, company_name AS companyName, owner_name AS ownerName, lifecycle_status AS lifecycleStatus
     FROM clients ORDER BY company_name COLLATE NOCASE, name COLLATE NOCASE`).all<Record<string, unknown>>();
   return result.results.map((row) => ({
     id: Number(row.id),
     name: String(row.name ?? ""),
     companyName: String(row.companyName ?? ""),
     ownerName: String(row.ownerName ?? ""),
+    lifecycleStatus: String(row.lifecycleStatus ?? "inactive"),
   }));
 }
 

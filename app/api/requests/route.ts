@@ -350,6 +350,11 @@ export async function POST(request: Request) {
       const update=database.prepare("UPDATE employee_requests SET type=?,leave_kind=?,date_from=?,date_to=?,start_time=?,end_time=?,duration_minutes=?,details=?,leave_paid=?,manual_data=?,reviewed_by_user_id=?,updated_at=strftime('%Y-%m-%d %H:%M:%f','now') WHERE id=? AND updated_at=?")
         .bind(payload.data.type,payload.data.leaveKind,payload.data.dateFrom,payload.data.dateTo,payload.data.startTime,payload.data.endTime,duration,payload.data.details,payload.leavePaid?1:0,JSON.stringify(overlay),session.userId,payload.id,payload.version);
       await database.batch([database.prepare("INSERT INTO hr_manual_request_guard SELECT CASE WHEN EXISTS(SELECT 1 FROM employee_requests WHERE id=? AND updated_at=?) THEN 1 ELSE 0 END").bind(payload.id,payload.version),exchangeGuard(Number(row.employee_id),overlay,payload.id),...(row.status==='approved'?[approvalConflictGuard(Number(row.employee_id),overlay,payload.id)]:[]),...(row.status==='approved' && !row.manual_data?[legacyRequestCleanup(row)]:[]),update,...(row.status==='approved'?seedRequest(Number(row.employee_id),overlay):[]),database.prepare("DELETE FROM hr_manual_request_guard")]);
+      await notifyUsers([Number(row.requester_user_id)], {
+        type:"employee_request_updated",title:row.status==="approved"?"Your approved request was updated":"Your request was updated",
+        message:requestTypeLabels[payload.data.type]+" for "+payload.data.dateFrom+" · "+(payload.leavePaid?"Paid":"Unpaid"),
+        targetView:"requests",entityId:payload.id,actorUserId:session.userId,
+      });
     }
     if (payload.action === "delete") {
       if (!session.isAdmin) return accessError(403, "Only an administrator can delete employee requests.");

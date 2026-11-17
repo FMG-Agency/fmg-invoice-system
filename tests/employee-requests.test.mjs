@@ -10,11 +10,12 @@ test('Employee request reviews and Friday exchanges reach payroll safely',async 
   const admin={userId:1,isAdmin:true,permissions:['requests','attendance'],employeeId:null,displayName:'Admin',username:'admin'};
   const employee={userId:2,isAdmin:false,permissions:['requests'],employeeId:1,displayName:'Employee',username:'employee'};
   globalThis.requestSession=admin;
+  globalThis.requestNotices=[];
   await mkdir('work',{recursive:true});const bundle=new URL('../work/employee-requests-test.mjs',import.meta.url);
   await build({stdin:{contents:`export * from './app/lib/hr';export * from './app/lib/hr-export';export {database} from './app/lib/database';export {POST} from './app/api/requests/route';export {POST as MANUAL} from './app/api/hr/manual-requests/route';`,resolveDir:process.cwd()},outfile:fileURLToPath(bundle),bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'fixtures',setup(b){
     b.onResolve({filter:/auth-server$/},()=>({path:'auth',namespace:'fixture'}));
     b.onResolve({filter:/\/notifications$/},()=>({path:'notifications',namespace:'fixture'}));
-    b.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path==='auth'?`export async function getSession(){return globalThis.requestSession} export async function ensureAuthDatabase(){} export function getDatabase(){return globalThis.requestDb} export async function requirePermission(r,p){return !globalThis.requestSession?Response.json({}, {status:401}):!globalThis.requestSession.isAdmin&&!globalThis.requestSession.permissions.includes(p)?Response.json({}, {status:403}):null}`:`export async function administratorUserIds(){return [1]} export async function notifyUsers(){}`}));
+    b.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path==='auth'?`export async function getSession(){return globalThis.requestSession} export async function ensureAuthDatabase(){} export function getDatabase(){return globalThis.requestDb} export async function requirePermission(r,p){return !globalThis.requestSession?Response.json({}, {status:401}):!globalThis.requestSession.isAdmin&&!globalThis.requestSession.permissions.includes(p)?Response.json({}, {status:403}):null}`:`export async function administratorUserIds(){return [1]} export async function notifyUsers(ids,input){globalThis.requestNotices.push({ids,input})}`}));
   }}]});
   const app=await import(bundle.href),db=app.database;globalThis.requestDb=db;
   await db.prepare(`CREATE TABLE auth_users(id INTEGER PRIMARY KEY,display_name TEXT,role_label TEXT,permissions_json TEXT,active INTEGER,is_admin INTEGER)`).run();
@@ -29,12 +30,18 @@ test('Employee request reviews and Friday exchanges reach payroll safely',async 
     assert.equal((await call({action:'decide',id:r.id,decision:'approved'},{...employee,userId:3,employeeId:null})).status,403);
     assert.equal((await call({action:'edit',id:r.id,version:r.updatedAt,data:draft(),leavePaid:true},employee)).status,403);
     assert.equal((await app.getHrState('2027-01')).attendance.length,0);
-    await decide(r.id,'rejected');assert.equal((await app.getHrState('2027-01')).attendance.length,0);
+    await decide(r.id,'rejected');
+    assert.ok(globalThis.requestNotices.some(n=>n.input.type==='employee_request_created' && n.ids.includes(1)));
+    assert.ok(globalThis.requestNotices.some(n=>n.input.type==='employee_request_rejected' && n.ids.includes(2)));
+    assert.equal((await app.getHrState('2027-01')).attendance.length,0);
   });
   await t.test('Paid/unpaid decision, edit, repeat apply, reimport and delete recalculate without duplicate pay',async()=>{
     const r=await create({dateFrom:'2027-01-05',dateTo:'2027-01-05'});let saved=await decide(r.id,'approved',false);
     let state=await app.getHrState('2027-01');assert.equal(state.attendance[0].leaveDeduction,480);
     const edited=await call({action:'edit',id:r.id,version:saved.updatedAt,data:draft({dateFrom:'2027-01-05',dateTo:'2027-01-05'}),leavePaid:true});assert.equal(edited.status,200,JSON.stringify(edited));
+    assert.ok(globalThis.requestNotices.some(n=>n.input.type==='employee_request_approved' && n.ids.includes(2)));
+    assert.equal(globalThis.requestNotices.at(-1).input.type,'employee_request_updated');
+    assert.deepEqual(globalThis.requestNotices.at(-1).ids,[2]);
     assert.equal((await app.getHrState('2027-01')).attendance[0].leaveDeduction,0);
     for(let i=0;i<2;i++)assert.equal((await call({action:'apply',month:'2027-01'})).status,200);
     assert.equal((await app.getHrState('2027-01')).attendance.length,1);
