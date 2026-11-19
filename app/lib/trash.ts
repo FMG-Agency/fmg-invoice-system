@@ -6,7 +6,7 @@ const kinds: Record<string,string> = {client_product_arrivals:'Product Arrivals'
 type Row = Record<string, unknown>;
 type Link = {table:string;column:string;ids:number[];created:Record<string,string>};
 type Snapshot = {row:Row;children:Record<string,Row[]>;links:Link[]};
-const children: Record<string, [string,string][]> = {agency_tasks:[['task_submissions','task_id']],production_work_orders:[['production_work_order_events','work_order_id']],clients:[['client_portal_plans','client_id']]};
+const children: Record<string, [string,string][]> = {agency_tasks:[['task_submissions','task_id'],['task_revisions','task_id']],production_work_orders:[['production_work_order_events','work_order_id']],clients:[['client_portal_plans','client_id']]};
 const links: Record<string,[string,string][]> = {documents:[['production_work_orders','draft_invoice_id'],['client_financial_transactions','document_id']],production_work_orders:[['documents','production_work_order_id'],['production_crew_reviews','work_order_id']]};
 const q = (name:string) => {if(!/^[a-z_][a-z0-9_]*$/.test(name)) throw new Error('Invalid column');return `"${name}"`;};
 async function exists(table:string){return Boolean(await database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").bind(table).first());}

@@ -19,6 +19,7 @@ export const runtime = "nodejs";
 
 import { taskData, httpUrl } from "../../lib/task-input";
 const payloadSchema = z.discriminatedUnion("action", [
+  z.object({action:z.literal("reject"),id:z.number().int().positive(),userId:z.number().int().positive(),note:z.string().trim().min(3).max(5000)}),
   z.object({action:z.literal("approve"),id:z.number().int().positive(),role:z.enum(["creator","admin"])}),
   z.object({ action: z.literal("delete"), id: z.number().int().positive() }),
   z.object({ action: z.literal("create"), data: taskData }),
@@ -75,6 +76,24 @@ export async function POST(request: Request) {
     }
     const payload = payloadSchema.parse(input);
 
+    if (payload.action === "reject") {
+      const task=await database.prepare("SELECT title,plan_slot,created_by_user_id FROM agency_tasks WHERE id=?").bind(payload.id).first<Record<string,unknown>>();
+      if(!task)return Response.json({error:"Task not found."},{status:404});
+      if(!session.isAdmin && Number(task.created_by_user_id)!==session.userId)return Response.json({error:"Only the task sender or an administrator can request revisions."},{status:403});
+      const token=crypto.randomUUID();
+      const result=await database.batch([
+        database.prepare(`UPDATE agency_tasks SET status='assigned',review_required='1',creator_approval='',admin_approval='',submitted_at='',submission_url='',submitted_by_name='',late_minutes=0,revision_token=?,updated_at=CURRENT_TIMESTAMP
+          WHERE id=? AND EXISTS(SELECT 1 FROM task_submissions WHERE task_id=agency_tasks.id AND user_id=?)
+          AND (assigned_user_id=? OR EXISTS(SELECT 1 FROM json_each(assigned_users_json) WHERE json_extract(value,'$.id')=?))`).bind(token,payload.id,payload.userId,payload.userId,payload.userId),
+        database.prepare(`INSERT INTO task_revisions(task_id,user_id,reviewer_name,note,delivery_json)
+          SELECT s.task_id,s.user_id,?,?,json_object('url',s.url,'notes',s.notes,'method',s.method,'submittedAt',s.submitted_at,'lateMinutes',s.late_minutes)
+          FROM task_submissions s JOIN agency_tasks t ON t.id=s.task_id WHERE t.id=? AND t.revision_token=? AND s.user_id=?`).bind(sessionName(session),payload.note,payload.id,token,payload.userId),
+        database.prepare("DELETE FROM task_submissions WHERE task_id=? AND user_id=? AND EXISTS(SELECT 1 FROM agency_tasks WHERE id=? AND revision_token=?)").bind(payload.id,payload.userId,payload.id,token)
+      ]);
+      if(!result[0].rowsAffected)return Response.json({error:"This delivery is no longer available for review."},{status:409});
+      await notifyUsers([payload.userId],{type:"task_revision_requested",title:"Changes requested",message:String(task.title)+" · "+payload.note,targetView:task.plan_slot?"standard-tasks":"tasks",entityId:payload.id,actorUserId:session.userId});
+      return Response.json(await getTasksState(session,taskCalendar(request)));
+    }
     if (payload.action === "approve") {
       const task=await database.prepare("SELECT id,title,plan_slot,created_by_user_id,assigned_user_id,assigned_users_json FROM agency_tasks WHERE id=?").bind(payload.id).first<Record<string,unknown>>();
       if(!task)return Response.json({error:"Task not found."},{status:404});

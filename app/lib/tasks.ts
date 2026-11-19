@@ -5,6 +5,11 @@ import type { AuthSession } from "./auth-server";
 const CAIRO_TIME_ZONE = "Africa/Cairo";
 
 const taskSchema = [
+  `CREATE TABLE IF NOT EXISTS task_revisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,task_id INTEGER NOT NULL REFERENCES agency_tasks(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL, reviewer_name TEXT NOT NULL, note TEXT NOT NULL,
+    delivery_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
   `CREATE TABLE IF NOT EXISTS skipped_plan_months (slot TEXT PRIMARY KEY)`, 
   `CREATE TABLE IF NOT EXISTS agency_tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,7 +50,7 @@ let tasksDatabaseReady: Promise<void> | null = null;
 export async function ensureTasksDatabase() {
   tasksDatabaseReady ??= database.batch(taskSchema.map((statement) => database.prepare(statement))).then(async () => {
     const columns = (await database.prepare("PRAGMA table_info(agency_tasks)").all<{name:string}>()).results;
-    for (const [name, value] of [["review_required", ""], ["creator_approval", ""], ["admin_approval", ""], ["plan_generated", ""], ["plan_slot", ""], ["individual_tracking", ""], ["grid_post_notes_json", "[]"], ["task_notes", ""], ["grid_cells_json", "[]"], ["assigned_users_json", "[]"], ["submission_method", "link"], ["submission_notes", ""], ["submitted_by_name", ""]]) {
+    for (const [name, value] of [["revision_token", ""], ["review_required", ""], ["creator_approval", ""], ["admin_approval", ""], ["plan_generated", ""], ["plan_slot", ""], ["individual_tracking", ""], ["grid_post_notes_json", "[]"], ["task_notes", ""], ["grid_cells_json", "[]"], ["assigned_users_json", "[]"], ["submission_method", "link"], ["submission_notes", ""], ["submitted_by_name", ""]]) {
       if (columns.some(c => c.name === name)) continue;
       try { await database.prepare(`ALTER TABLE agency_tasks ADD COLUMN ${name} TEXT NOT NULL DEFAULT '${value}'`).run(); }
       catch(error) { if (!/duplicate column/i.test(String(error))) throw error; }
@@ -157,6 +162,7 @@ function taskFromRow(row: Record<string, unknown>, nowEpoch: number): AgencyTask
     ? Math.max(0, Math.ceil((nowEpoch - deadlineEpoch) / 60_000))
     : numberValue(row.lateMinutes);
   return {
+    revisions: JSON.parse(String(row.revisionsJson || "[]")),
     submissions: JSON.parse(String(row.submissionsJson || "[]")),
     id: numberValue(row.id),
     reviewRequired: Boolean(row.reviewRequired),
@@ -237,7 +243,7 @@ export async function getTasksState(session: AuthSession, calendar?: string): Pr
     }
     selection = ` AND t.plan_slot LIKE '%/${year}/${month}/%'`;
   }
-  const query = database.prepare(`SELECT (SELECT json_group_array(json_object('userId',s.user_id,'userName',s.user_name,'part',s.part,'method',s.method,'url',s.url,'notes',s.notes,'submittedAt',s.submitted_at,'lateMinutes',s.late_minutes)) FROM task_submissions s WHERE s.task_id=t.id) AS submissionsJson, t.grid_post_notes_json AS gridPostNotesJson, t.task_notes AS taskNotes, t.grid_cells_json AS gridCellsJson, t.assigned_users_json AS assignedUsersJson, t.submission_method AS submissionMethod, t.submission_notes AS submissionNotes, t.submitted_by_name AS submittedByName, t.review_required AS reviewRequired,t.creator_approval AS creatorApproval,t.admin_approval AS adminApproval,t.id, t.plan_slot AS planSlot, t.title, t.details, t.brief, t.grid_notes AS gridNotes,
+  const query = database.prepare(`SELECT (SELECT json_group_array(json_object('userId',r.user_id,'reviewer',r.reviewer_name,'note',r.note,'date',r.created_at,'delivery',r.delivery_json)) FROM task_revisions r WHERE r.task_id=t.id) AS revisionsJson, (SELECT json_group_array(json_object('userId',s.user_id,'userName',s.user_name,'part',s.part,'method',s.method,'url',s.url,'notes',s.notes,'submittedAt',s.submitted_at,'lateMinutes',s.late_minutes)) FROM task_submissions s WHERE s.task_id=t.id) AS submissionsJson, t.grid_post_notes_json AS gridPostNotesJson, t.task_notes AS taskNotes, t.grid_cells_json AS gridCellsJson, t.assigned_users_json AS assignedUsersJson, t.submission_method AS submissionMethod, t.submission_notes AS submissionNotes, t.submitted_by_name AS submittedByName, t.review_required AS reviewRequired,t.creator_approval AS creatorApproval,t.admin_approval AS adminApproval,t.id, t.plan_slot AS planSlot, t.title, t.details, t.brief, t.grid_notes AS gridNotes,
       t.references_json AS referencesJson, t.start_at AS startAt, t.deadline_at AS deadlineAt,
       t.assigned_user_id AS assignedUserId, t.assigned_user_name AS assignedUserName,
       t.assigned_user_role AS assignedUserRole, t.created_by_user_id AS createdByUserId,

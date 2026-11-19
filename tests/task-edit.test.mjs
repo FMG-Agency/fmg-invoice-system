@@ -31,4 +31,25 @@ globalThis.taskSession={userId:3,isAdmin:true,roleLabel:'Administrator',displayN
 approval=await call({action:'approve',id:1,role:'admin'});
 assert.equal(approval.status,200);
 assert.equal((await approval.json()).tasks[0].status,'submitted');
+
+assert.equal((await call({action:'reject',id:1,userId:2,note:''})).status,400);
+globalThis.taskSession={userId:4,isAdmin:false,roleLabel:'Designer',displayName:'Other'};
+assert.equal((await call({action:'reject',id:1,userId:2,note:'Change the design'})).status,403);
+globalThis.taskSession={userId:3,isAdmin:true,roleLabel:'Administrator',displayName:'Admin'};
+const rejected=await call({action:'reject',id:1,userId:2,note:'Change the design'});
+assert.equal(rejected.status,200);
+const revised=(await rejected.json()).tasks[0];
+assert.equal(revised.status,'assigned');
+assert.equal(revised.creatorApproval,'');
+assert.equal(revised.adminApproval,'');
+assert.equal(revised.revisions[0].note,'Change the design');
+assert.equal(revised.submissions.length,0);
+assert.equal((await call({action:'approve',id:1,role:'admin'})).status,409);
+assert.equal((await call({action:'reject',id:1,userId:2,note:'Change the design'})).status,409);
+globalThis.taskSession={userId:2,isAdmin:false,roleLabel:'Designer',displayName:'Worker'};
+assert.equal((await call({action:'submit',id:1,submissionMethod:'flash_drive'})).status,200);
+globalThis.taskSession={userId:4,isAdmin:false,roleLabel:'Designer',displayName:'Other'};
+const resubmitted=await call({action:'submit',id:1,submissionMethod:'flash_drive'});
+assert.equal(resubmitted.status,200);
+assert.equal((await resubmitted.json()).tasks[0].status,'review');
 });

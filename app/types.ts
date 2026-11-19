@@ -537,6 +537,7 @@ export type TaskGridCell = "design" | "carousel" | "video";
 export type TaskTeamMember = { id: number; displayName: string; roleLabel: string; part?: string };
 export type TaskSubmission = { userId: number; userName: string; part: string; method: string; url: string; notes: string; submittedAt: string; lateMinutes: number };
 export type AgencyTask = {
+  revisions?: {userId:number;reviewer:string;note:string;date:string;delivery:string}[];
   reviewRequired?: boolean;
   creatorApproval?: string;
   adminApproval?: string;

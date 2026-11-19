@@ -135,6 +135,9 @@ export function TaskWorkspace({month,showToast,plan}:{month:string;showToast:(me
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing,setEditing]=useState<AgencyTask|null>(null);
+  const [preview,setPreview]=useState<string|null>(null);
+  const [rejection,setRejection]=useState<{taskId:number;userId:number;name:string}|null>(null);
+  const [revisionNote,setRevisionNote]=useState("");
   const [planOpen,setPlanOpen]=useState(false);
   const [createOpen, setCreateOpen] = useState(Boolean(plan));
   const [draft, setDraft] = useState<TaskDraft>(()=>plan?{...blankDraft(),title:plan.title,startAt:plan.startAt,deadlineAt:plan.deadlineAt,assignedUserId:plan.designerId}:blankDraft());
@@ -340,11 +343,13 @@ export function TaskWorkspace({month,showToast,plan}:{month:string;showToast:(me
               {(task.gridCells.length > 0 || task.gridNotes) && <section><span><FileText size={14} /> INSTAGRAM GRID</span><div className={styles.instagramGrid} dir="ltr">{task.gridCells.map((cell, index) => <div key={index} style={{gridRow: Math.ceil(task.gridCells.length / 3) - Math.floor(index / 3), gridColumn: 3 - index % 3}} className={styles.gridCell} data-kind={cell}><small>#{index + 1}</small><strong>{cell === "design" ? "▧" : cell === "carousel" ? "▣" : "▶"}</strong><span>{cell}</span>{task.gridPostNotes?.[index] && <p className={styles.postNote}><b>Note</b>{task.gridPostNotes[index]}</p>}</div>)}</div>{task.gridNotes && <p>{task.gridNotes}</p>}</section>}
               <section><span><Link2 size={14} /> REFERENCES · {task.references.length}</span>{task.references.length ? <div className={styles.referenceList}>{task.references.map((reference, index) => <a key={`${reference.url}-${index}`} href={reference.url} target="_blank" rel="noopener noreferrer"><span>{reference.label || `Reference ${index + 1}`}</span><ExternalLink size={13} /></a>)}</div> : <p>No references added.</p>}</section>
             </div>
+            {!!task.revisions?.length && <section className={styles.revisions}><h3>Requested changes</h3>{task.revisions.map((revision,index)=><article key={index}><strong>{revision.reviewer} · {revision.date}</strong><small>For {task.assignedUsers.find(person=>person.id===revision.userId)?.displayName || "previous assignee"}</small><p>{revision.note}</p></article>)}</section>}
             <section className={styles.deliveries}><h3>Employee deliveries · {task.submissions.length}/{task.assignedUsers.length}</h3>
               {task.status === "submitted" && !task.submissions.length ? <p>Previously completed task · historical shared delivery by {task.submittedByName || "the team"} on {dateTimeLabel(task.submittedAt)}. Individual delivery times were not recorded.</p> : task.assignedUsers.map(person => {
                 const delivery = task.submissions.find(item => item.userId === person.id);
                 return <article key={person.id}><header><strong>{person.displayName}</strong><span>{delivery ? "Delivered" : "Pending"}</span></header><p>{person.part || person.roleLabel}</p>
-                  {delivery ? <><p><strong>{delivery.part || "Assigned part"}</strong></p><p>{dateTimeLabel(delivery.submittedAt)} · {delivery.lateMinutes ? `${durationLabel(delivery.lateMinutes)} late` : "On time"}</p><p>Delivery: {delivery.method === "flash_drive" ? "Flash drive / USB" : delivery.method === "other" ? "Other" : "Link"}</p>{delivery.notes && <p>{delivery.notes}</p>}{delivery.url && <a href={delivery.url} target="_blank" rel="noopener noreferrer">Open submitted work ↗</a>}</> : <p>{task.liveLateMinutes ? `Overdue by ${durationLabel(task.liveLateMinutes)}` : "Waiting for delivery"}</p>}
+                  {delivery ? <><p><strong>{delivery.part || "Assigned part"}</strong></p><p>{dateTimeLabel(delivery.submittedAt)} · {delivery.lateMinutes ? `${durationLabel(delivery.lateMinutes)} late` : "On time"}</p><p>Delivery: {delivery.method === "flash_drive" ? "Flash drive / USB" : delivery.method === "other" ? "Other" : "Link"}</p>{delivery.notes && <p>{delivery.notes}</p>}{delivery.url && <div className={styles.deliveryActions}><button type="button" onClick={()=>setPreview(delivery.url)}>Preview</button><a href={delivery.url} target="_blank" rel="noopener noreferrer">Open link ↗</a></div>}
+                  {(state.role==="administrator" || task.createdByUserId===state.userId) && <button type="button" className={styles.rejectButton} disabled={saving} onClick={()=>{setRevisionNote("");setRejection({taskId:task.id,userId:person.id,name:person.displayName});}}>Reject / request changes</button>}</> : <p>{task.liveLateMinutes ? `Overdue by ${durationLabel(task.liveLateMinutes)}` : "Waiting for delivery"}</p>}
                 </article>;
               })}
             </section>
@@ -363,6 +368,16 @@ export function TaskWorkspace({month,showToast,plan}:{month:string;showToast:(me
     </section>
 
     </>}
+    {preview && <TaskModal eyebrow="SUBMITTED WORK" title="Delivery preview" description="If the website blocks embedded previews, use Open link to review it." onClose={()=>setPreview(null)}>
+      <div className={styles.previewActions}><a href={preview} target="_blank" rel="noopener noreferrer">Open link ↗</a></div>
+      <iframe className={styles.deliveryPreview} src={preview} title="Submitted task preview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" referrerPolicy="no-referrer"/>
+    </TaskModal>}
+    {rejection && <TaskModal eyebrow="REQUEST CHANGES" title={"Return work to "+rejection.name} description="Describe the changes required before the employee submits again." onClose={()=>!saving && setRejection(null)}>
+      <form className={styles.taskForm} onSubmit={async event=>{event.preventDefault();if(await mutate({action:"reject",id:rejection.taskId,userId:rejection.userId,note:revisionNote})){setRejection(null);showToast("Changes sent to the employee. A new submission and both approvals are required.");}}}>
+        <label>Required changes<textarea required minLength={3} maxLength={5000} rows={6} value={revisionNote} onChange={event=>setRevisionNote(event.target.value)}/></label>
+        <footer><button type="button" className={styles.cancelButton} disabled={saving} onClick={()=>setRejection(null)}>Cancel</button><button className={styles.saveButton} disabled={saving || revisionNote.trim().length<3}>Reject and send changes</button></footer>
+      </form>
+    </TaskModal>}
     {planOpen && <PlanTaskLauncher showToast={showToast} close={()=>setPlanOpen(false)}/>}
     {createOpen && <TaskModal eyebrow={editing?"EDIT TASK":"ASSIGN NEW WORK"} title={editing?"Edit task":"Create a detailed task"} description={editing ? "Update the task brief, notes, grid and schedule. Existing deliveries stay recorded." : state.role === "account_manager" ? "Account Managers can assign to the team, excluding administrators and Operation Managers." : "Choose any internal user, define the work, and set an exact start and deadline."} onClose={() => {if(!saving){setCreateOpen(false);plan?.close();}}}>
       <form className={styles.taskForm} onSubmit={(event) => void createTask(event)}>
