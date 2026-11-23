@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import {bui
 test('task creator and admin can edit without altering delivery history; others cannot',async()=>{
 process.env.TURSO_DATABASE_URL='file::memory:';delete process.env.TURSO_AUTH_TOKEN;
 const path=new URL('../work/task-edit-test.mjs',import.meta.url);
-await build({stdin:{contents:"export * from './app/api/tasks/route';export {database} from './app/lib/database';export {ensureTasksDatabase} from './app/lib/tasks';",resolveDir:process.cwd()},outfile:fileURLToPath(path),bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'mock-auth',setup(b){b.onResolve({filter:/auth-server$/},()=>({path:'auth',namespace:'test'}));b.onResolve({filter:/lib\/notifications$/},()=>({path:'notify',namespace:'test'}));b.onLoad({filter:/.*/,namespace:'test'},({path})=>({contents:path==='auth'?"export async function ensureAuthDatabase(){};export async function getSession(){return globalThis.taskSession};export async function requirePermission(){return globalThis.taskSession?null:Response.json({}, {status:401})}":"export async function notifyUsers(ids,data){globalThis.taskNotices.push({ids,data})};export async function administratorUserIds(){return []};export async function workflowRecipientUserIds(){return []}"}));}}]});
+await build({stdin:{contents:"export * from './app/api/tasks/route';export {database} from './app/lib/database';export {ensureTasksDatabase} from './app/lib/tasks';",resolveDir:process.cwd()},outfile:fileURLToPath(path),bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'mock-auth',setup(b){b.onResolve({filter:/auth-server$/},()=>({path:'auth',namespace:'test'}));b.onResolve({filter:/lib\/notifications$/},()=>({path:'notify',namespace:'test'}));b.onLoad({filter:/.*/,namespace:'test'},({path})=>({contents:path==='auth'?"export async function ensureAuthDatabase(){};export async function getSession(){return globalThis.taskSession};export async function requirePermission(){return globalThis.taskSession?null:Response.json({}, {status:401})}":"export async function notifyUsers(ids,data){globalThis.taskNotices.push({ids,data})};export async function administratorUserIds(){return [3]};export async function workflowRecipientUserIds(){return []}"}));}}]});
 const app=await import(path.href),db=app.database;
 await db.prepare('CREATE TABLE auth_users(id INTEGER PRIMARY KEY,display_name TEXT,username TEXT,role_label TEXT,employee_id INTEGER,client_id INTEGER,active INTEGER,is_admin INTEGER)').run();await db.prepare("INSERT INTO auth_users VALUES(1,'Creator','creator','Account Manager',NULL,NULL,1,0),(2,'Worker','worker','Designer',NULL,NULL,1,0),(3,'Admin','admin','Administrator',NULL,NULL,1,1),(4,'Other','other','Operation Manager',NULL,NULL,1,0)").run();await db.prepare('CREATE TABLE employees(id INTEGER PRIMARY KEY,title TEXT)').run();await app.ensureTasksDatabase();
 await db.prepare("INSERT INTO agency_tasks(id,title,details,start_at,deadline_at,assigned_user_id,assigned_user_name,created_by_user_id,created_by_name) VALUES(1,'Original','Original details','2026-10-20T11:00','2026-10-20T20:00',2,'Worker',1,'Creator')").run();await db.prepare("INSERT INTO task_submissions VALUES(1,2,'Worker','Design','flash_drive','','Delivered','2026-10-20T19:00',0)").run();
@@ -38,6 +38,10 @@ assert.equal((await call({action:'reject',id:1,userId:2,note:'Change the design'
 globalThis.taskSession={userId:3,isAdmin:true,roleLabel:'Administrator',displayName:'Admin'};
 const rejected=await call({action:'reject',id:1,userId:2,note:'Change the design'});
 assert.equal(rejected.status,200);
+assert.deepEqual(globalThis.taskNotices.at(-1).ids,[2]);
+assert.equal(globalThis.taskNotices.at(-1).data.type,'task_revision_requested');
+assert.ok(globalThis.taskNotices.at(-1).data.message.includes('Change the design'));
+assert.equal(globalThis.taskNotices.at(-1).data.targetView,'tasks');
 const revised=(await rejected.json()).tasks[0];
 assert.equal(revised.status,'assigned');
 assert.equal(revised.creatorApproval,'');
@@ -52,4 +56,17 @@ globalThis.taskSession={userId:4,isAdmin:false,roleLabel:'Designer',displayName:
 const resubmitted=await call({action:'submit',id:1,submissionMethod:'flash_drive'});
 assert.equal(resubmitted.status,200);
 assert.equal((await resubmitted.json()).tasks[0].status,'review');
+assert.deepEqual([...new Set(globalThis.taskNotices.at(-1).ids)].sort(),[1,3]);
+assert.equal(globalThis.taskNotices.at(-1).data.title,'Task awaiting approval');
+await db.prepare("UPDATE agency_tasks SET plan_slot='1/2026/11/1' WHERE id=1").run();
+globalThis.taskSession={userId:1,isAdmin:false,roleLabel:'Account Manager',displayName:'Creator'};
+assert.equal((await call({action:'reject',id:1,userId:2,note:'Monthly plan revisions'})).status,200);
+assert.deepEqual(globalThis.taskNotices.at(-1).ids,[2]);
+assert.ok(globalThis.taskNotices.at(-1).data.message.includes('Monthly plan revisions'));
+assert.equal(globalThis.taskNotices.at(-1).data.targetView,'standard-tasks');
+globalThis.taskSession={userId:2,isAdmin:false,roleLabel:'Designer',displayName:'Worker'};
+assert.equal((await call({action:'submit',id:1,submissionMethod:'flash_drive'})).status,200);
+assert.deepEqual([...new Set(globalThis.taskNotices.at(-1).ids)].sort(),[1,3]);
+assert.equal(globalThis.taskNotices.at(-1).data.targetView,'standard-tasks');
+assert.equal(globalThis.taskNotices.at(-1).data.title,'Task awaiting approval');
 });
