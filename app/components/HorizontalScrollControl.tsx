@@ -56,7 +56,7 @@ export function HorizontalScrollControl() {
         const rtl = getComputedStyle(element).direction === "rtl";
         const maximum = element.scrollWidth - element.clientWidth;
         const width = Math.min(420, right - left);
-        selected = {target:element,left:x-width/2,top:bottom-47,width,maximum,position:rtl?maximum+element.scrollLeft:element.scrollLeft,rtl};
+        selected = {target:element,left:x-width/2,top:Math.max(8,viewportBottom-44),width,maximum,position:rtl?maximum+element.scrollLeft:element.scrollLeft,rtl};
         best = height;
       }
       setRail(selected);
