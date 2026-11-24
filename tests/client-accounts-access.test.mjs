@@ -12,6 +12,7 @@ await app.ensureAuthDatabase();
 await db.prepare("CREATE TABLE clients(id INTEGER PRIMARY KEY,name TEXT,company_name TEXT,owner_name TEXT,lifecycle_status TEXT DEFAULT 'active')").run();await db.prepare("INSERT INTO clients(id,name,company_name,owner_name) VALUES(1,'Eleve','Eleve','Owner'),(2,'Other','Other','Other')").run();
 await db.prepare('CREATE TABLE employees(id INTEGER PRIMARY KEY,name TEXT,title TEXT,department TEXT,active INTEGER)').run();
 await db.prepare('CREATE TABLE documents(id INTEGER PRIMARY KEY,type TEXT,client_id INTEGER,generated_code TEXT,pdf_key TEXT)').run();await db.prepare("INSERT INTO documents VALUES(1,'invoice',1,'TEST-1',''),(2,'invoice',2,'TEST-2','')").run();
+await db.prepare('ALTER TABLE documents ADD COLUMN created_by_user_id INTEGER').run();
 function req(body,cookie='',method='POST'){return new Request('https://fixture.test/api',{method,headers:{'Content-Type':'application/json',cookie},...(method==='GET'?{}:{body:JSON.stringify(body)})})}
 let result=await app.auth.POST(req({action:'setup',username:'admin',password:'FixturePassword123'}));assert.equal(result.status,201);const admin=result.headers.get('set-cookie').split(';')[0];
 async function create(username,roleLabel,clientId=1){return app.users.POST(req({action:'create',data:{username,displayName:username,roleLabel,password:'FixturePassword123',active:true,permissions:['client_portal'],employeeId:null,clientId}},admin))}

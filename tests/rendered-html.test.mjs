@@ -153,7 +153,7 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(usersApi, /effectivePermissions/);
   assert.match(component, /function canOpenDocumentArchive/);
   assert.match(component, /\["all_data", "invoices", "quotations"\]/);
-  assert.match(api, /SELECT type FROM documents WHERE id = \?/);
+  assert.match(api, /SELECT type,created_by_user_id AS createdByUserId FROM documents WHERE id = \?/);
   assert.match(api, /allowed\("all_data"\)/);
   assert.match(api, /isOperationManager\(session\.roleLabel\)/);
   assert.match(api, /operationManagerInvoiceAccess/);
@@ -246,7 +246,7 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(pdf, /category\.name\.trim\(\)\.toLowerCase\(\) === "media guide"/);
   assert.match(pdf, /const mediaGuideDocument = category\.name/);
   assert.match(pdf, /function quotationScopeText/);
-  assert.match(pdf, /item\.includedServices\.length/);
+  assert.match(pdf, /Array\.isArray\(item\.includedServices\)/);
   assert.match(component, /paper-scope-name/);
   assert.doesNotMatch(pdf, /const mediaGuideQuotation = draft\.type === "quotation"/);
   assert.match(pdf, /\["#", addonGroup \? "ADD-ON NAME" : "BUNDLE NAME", "INPUTS", "OUTPUTS"/);

@@ -40,6 +40,8 @@ export type LineItem = {
   id: string;
   date: string;
   description: string;
+  textAlign?: "left" | "center" | "right";
+  fontSize?: number;
   qty: number;
   unit: string;
   unitPrice: number;

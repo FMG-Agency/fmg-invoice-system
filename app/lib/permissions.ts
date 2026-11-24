@@ -82,3 +82,7 @@ export function canAccess(permissions: AccessPermission[], permission: AccessPer
 }
 
 export const CONTENT_CREATOR_PERMISSIONS: AccessPermission[] = ["production", "tasks", "requests"];
+
+export function hasOwnQuotationAccess(access: {isAdmin:boolean;permissions:AccessPermission[]}) {
+  return !access.isAdmin && access.permissions.includes("quotations") && !access.permissions.includes("all_data") && !access.permissions.includes("invoices");
+}

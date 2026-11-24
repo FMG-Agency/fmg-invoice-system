@@ -27,11 +27,14 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   let state=await app.state(new Request('https://fixture.test/api/state')).then(async r=>{const b=await r.json();assert.equal(r.status,200,JSON.stringify(b));return b;});
   const category=state.categories.find(c=>c.name==='Media Guide');
   const client=state.clients[0];
-  const data={type:'quotation',companyKey:'fmg',clientId:client.id,categoryId:category.id,date:'2026-09-10',preparedBy:'Finance Department',currency:'EGP',status:'Draft',items:[{id:'item',description:'Fixture',qty:1,unitPrice:10}],pdfBase64:Buffer.from('Isolated PDF placeholder').toString('base64')};
+  const data={type:'quotation',companyKey:'fmg',clientId:client.id,categoryId:category.id,date:'2026-09-10',preparedBy:'Finance Department',currency:'EGP',status:'Draft',items:[{id:'item',description:'Fixture',qty:1,unitPrice:10,textAlign:'right',fontSize:12}],pdfBase64:Buffer.from('Isolated PDF placeholder').toString('base64')};
   state=await call(app.save,{action:'saveDocument',data});
   const legacy=state.documents[0];
   assert.equal(legacy.createdByName,'Original Author');
   assert.equal(legacy.createdByUserId,101);
+  assert.equal(legacy.items[0].textAlign,'right');
+  assert.equal(legacy.items[0].fontSize,12);
+  for (const fontSize of [0,15,100]) assert.equal((await app.save(request({action:'saveDocument',data:{...data,items:[{...data.items[0],fontSize}]}}))).status,400);
   for(const type of ['quotation','invoice']) {
     const multi=await call(app.save,{action:'saveDocument',data:{...data,type,items:[{id:'b1',description:'Bundle one',kind:'package',catalogId:3,qty:1,unitPrice:100},{id:'b2',description:'Bundle two',kind:'package',catalogId:4,qty:2,unitPrice:200}]}});
     assert.equal(multi.documents[0].items.filter(item=>item.kind==='package').length,2);
@@ -69,6 +72,12 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   await call(app.directorySave,{action:'removePhoto',kind:'crew',id:person.id});
   assert.equal((await app.database.prepare('SELECT photo_key AS key FROM production_crew_members WHERE id=?').bind(person.id).first()).key,'');
   assert.equal((await app.directoryGet(new Request('https://fixture.test/api/production-directory?photo=crew&id='+person.id))).status,404);
+  globalThis.documentTestSession={...adminSession,userId:102,isAdmin:false,permissions:['quotations']};
+  const ownState=await call(app.save,{action:'saveDocument',data:{...data,items:[{...data.items[0],description:'Own quotation'}]}});
+  assert.ok(ownState.documents.length>0);
+  assert.ok(ownState.documents.every(d=>d.type==='quotation' && d.createdByUserId===102));
+  assert.equal((await app.save(request({action:'saveDocument',data:{...data,id:legacy.id}}))).status,403);
+  assert.equal((await app.pdf(new Request('https://fixture.test/api/pdf/'+legacy.id),{params:Promise.resolve({id:String(legacy.id)})})).status,403);
   globalThis.documentTestSession=null;
   assert.equal((await app.directoryGet(new Request('https://fixture.test/api/production-directory?photo=crew&id='+person.id))).status,401);
   globalThis.documentTestSession=adminSession;

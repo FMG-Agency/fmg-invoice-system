@@ -1392,3 +1392,22 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; -
 @media(prefers-reduced-motion:reduce) {
   .brand-account { transition:none; }
 }
+
+/* Quotation typography: saved per line and applied to the exported PDF. */
+.quotation-text-controls{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0}
+.quotation-text-controls label{display:grid;gap:5px;font-size:11px;min-width:100px;flex:1}
+.quotation-text-controls select{width:100%;min-width:0}
+.item-service-cell textarea{width:100%;min-width:0;resize:vertical;overflow-wrap:anywhere}
+.paper-preview table{table-layout:fixed;width:100%}
+.paper-preview td,.paper-preview th{overflow-wrap:anywhere;white-space:pre-wrap;word-break:normal}
+.paper-preview .paper-scope-name small{font-size:inherit;line-height:1.4}
+
+.paper-preview{container-type:inline-size;aspect-ratio:auto;min-height:420px;padding-bottom:20px}
+.paper-preview table:not(.paper-package-table) th:nth-child(1){width:6%}
+.paper-preview table:not(.paper-package-table) th:nth-child(2){width:50%}
+.paper-preview table:not(.paper-package-table) th:nth-child(3){width:8%}
+.paper-preview table:not(.paper-package-table) th:nth-child(4),.paper-preview table:not(.paper-package-table) th:nth-child(5){width:18%}
+
+.quotation-format-toolbar{align-items:center;padding:12px;border:1px solid var(--border);border-radius:12px;margin-bottom:16px}
+.quotation-format-toolbar label{flex:0 1 180px}
+.quotation-format-toolbar>span{font-size:12px;flex:1;min-width:180px;opacity:.75}

@@ -133,62 +133,21 @@ function quotationScopeText(item: DocumentDraft["items"][number]) {
   return [item.description || "—", ...details.map((detail) => `• ${detail}`)].join("\n");
 }
 
-function itemRowHeight(doc: jsPDF, draft: DocumentDraft, item: DocumentDraft["items"][number], widths: number[], mediaGuideDocument: boolean) {
-  if (!mediaGuideDocument) {
-    if (draft.type !== "quotation" || !item.includedServices.length) return 10;
-    doc.setFont("FMGArial", "normal");
-    doc.setFontSize(7);
-    const detailLines = doc.splitTextToSize(arabicText(doc, quotationScopeText(item)), widths[1] - 5) as string[];
-    return Math.max(10, 5 + detailLines.length * 3.6);
-  }
-  const invoice = draft.type === "invoice";
-  const nameIndex = invoice ? 1 : 0;
-  const inputIndex = invoice ? 2 : 1;
-  const outputIndex = invoice ? 3 : 2;
-  doc.setFont("FMGArial", "normal");
-  doc.setFontSize(7);
-  const nameLines = doc.splitTextToSize(arabicText(doc, quotationNameText(item)), widths[nameIndex] - 5) as string[];
-  const inputLines = doc.splitTextToSize(arabicText(doc, quotationInputsText(item)), widths[inputIndex] - 5) as string[];
-  const outputLines = doc.splitTextToSize(arabicText(doc, quotationOutputsText(item)), widths[outputIndex] - 5) as string[];
-  return Math.max(12, 5 + Math.max(nameLines.length, inputLines.length, outputLines.length) * 3.6);
+function itemLayout(doc: jsPDF, draft: DocumentDraft, item: DocumentDraft["items"][number], index: number, widths: number[], media: boolean) {
+ const invoice = draft.type === "invoice", fontSize = Math.max(6, Math.min(14, item.fontSize || 7)), lineHeight = fontSize * 0.352778 * 1.3;
+ const values = media ? [...(invoice ? [String(index+1)] : []), quotationNameText(item), quotationInputsText(item), quotationOutputsText(item), formatMoney(item.qty*item.unitPrice,draft.currency)] : [String(index+1), invoice ? item.description : quotationScopeText(item), String(item.qty), ...(invoice ? [] : [item.unit]), formatMoney(item.unitPrice,""), formatMoney(item.qty*item.unitPrice,"")];
+ doc.setFont("FMGArial","normal"); doc.setFontSize(fontSize);
+ const cells = values.map((v,c) => ({align: (media ? (invoice ? c>=1 && c<=3 : c<3) : c===1) ? (item.textAlign || "left") : "center" as "center", lines: doc.splitTextToSize(arabicText(doc,v.trim() || "—"),widths[c]-5) as string[]}));
+ return {cells,fontSize,lineHeight,lineCount:Math.max(...cells.map(c=>c.lines.length))};
 }
-
-function itemRow(doc: jsPDF, draft: DocumentDraft, item: DocumentDraft["items"][number], index: number, y: number, widths: number[], mediaGuideDocument: boolean) {
-  const invoice = draft.type === "invoice";
-  const values = mediaGuideDocument
-    ? invoice
-      ? [String(index + 1), quotationNameText(item), quotationInputsText(item), quotationOutputsText(item), formatMoney(item.qty * item.unitPrice, draft.currency)]
-      : [quotationNameText(item), quotationInputsText(item), quotationOutputsText(item), formatMoney(item.qty * item.unitPrice, draft.currency)]
-    : invoice
-      ? [String(index + 1), item.description, String(item.qty), formatMoney(item.unitPrice, ""), formatMoney(item.qty * item.unitPrice, "")]
-      : [String(index + 1), quotationScopeText(item), String(item.qty), item.unit, formatMoney(item.unitPrice, ""), formatMoney(item.qty * item.unitPrice, "")];
-  const rowHeight = itemRowHeight(doc, draft, item, widths, mediaGuideDocument);
-  let x = 14;
-  values.forEach((value, cell) => {
-    doc.setFillColor(index % 2 === 0 ? "#ffffff" : "#fafafa");
-    doc.setDrawColor("#d8d8d8");
-    doc.rect(x, y, widths[cell], rowHeight, "FD");
-    const mediaTextCell = mediaGuideDocument && (invoice ? cell >= 1 && cell <= 3 : cell < 3);
-    const mediaNameCell = mediaGuideDocument && cell === (invoice ? 1 : 0);
-    const scopeDetailsCell = !mediaGuideDocument && !invoice && cell === 1 && item.includedServices.length > 0;
-    if (mediaTextCell || scopeDetailsCell) {
-      doc.setFont("FMGArial", mediaNameCell ? "bold" : "normal");
-      doc.setFontSize(mediaNameCell ? 7.2 : 6.8);
-      doc.setTextColor(BLACK);
-      const processed = arabicText(doc, value.trim());
-      const lines = doc.splitTextToSize(processed, widths[cell] - 5) as string[];
-      doc.text(lines, x + 2.5, y + 5, { lineHeightFactor: 1.15 });
-    } else {
-      const leftAligned = cell === 1;
-      text(doc, value.trim(), leftAligned ? x + 2.5 : x + widths[cell] / 2, y + Math.min(6.2, rowHeight / 2 + 2), {
-        align: leftAligned ? "left" : "center",
-        fontSize: 7,
-        maxWidth: widths[cell] - 5,
-      });
-    }
-    x += widths[cell];
-  });
-  return rowHeight;
+function drawItemSegment(doc:jsPDF, layout:ReturnType<typeof itemLayout>, widths:number[], index:number, y:number, offset:number, count:number) {
+ const height=Math.max(10,5+count*layout.lineHeight); let x=14;
+ layout.cells.forEach((cell,c)=>{
+ doc.setFillColor(index%2===0 ? "#ffffff" : "#fafafa"); doc.setDrawColor("#d8d8d8"); doc.rect(x,y,widths[c],height,"FD");
+ doc.setFont("FMGArial","normal");doc.setFontSize(layout.fontSize);doc.setTextColor(BLACK);
+ const lines=cell.lines.slice(offset,offset+count), anchor=cell.align==="right" ? x+widths[c]-2.5 : cell.align==="center" ? x+widths[c]/2 : x+2.5;
+ if(lines.length) doc.text(lines,anchor,y+2.5+layout.fontSize*0.352778,{align:cell.align,lineHeightFactor:1.3});
+ x+=widths[c]; });return height;
 }
 
 function totals(doc: jsPDF, draft: DocumentDraft, y: number, theme: PdfTheme) {
@@ -321,17 +280,21 @@ export async function generateDocumentPdf(draft: DocumentDraft, client: Client, 
     y += 9;
     for (let index = 0; index < group.items.length; index += 1) {
       const item = group.items[index];
-      const rowHeight = itemRowHeight(doc, draft, item, widths, mediaGuideDocument);
-      if (y + rowHeight > 225) {
-        footer(doc, category, theme, digitalEmpire);
-        doc.addPage();
-        drawHeader(true);
-        if (group.addon) addonBand(doc, 39, theme); else band(doc, group.label, 39, theme);
-        y = group.addon ? 52 : 49;
-        widths = itemHeader(doc, draft, y, mediaGuideDocument, theme, group.addon);
-        y += 9;
+      const layout = itemLayout(doc,draft,item,index,widths,mediaGuideDocument);
+      let offset=0;
+      while(offset<layout.lineCount) {
+        const remainingHeight=5+(layout.lineCount-offset)*layout.lineHeight;
+        if(y+10>225 || (offset===0 && remainingHeight<=160 && y+remainingHeight>225)) {
+          footer(doc,category,theme,digitalEmpire);doc.addPage();drawHeader(true);
+          if(group.addon) addonBand(doc,39,theme); else band(doc,group.label,39,theme);
+          y=group.addon ? 52 : 49;
+          widths=itemHeader(doc,draft,y,mediaGuideDocument,theme,group.addon);y+=9;
+        }
+        const capacity=Math.floor((225-y-5)/layout.lineHeight);
+        if(capacity<1){y=225;continue;}
+        const count=Math.min(capacity,layout.lineCount-offset);
+        y+=drawItemSegment(doc,layout,widths,index,y,offset,count);offset+=count;
       }
-      y += itemRow(doc, draft, item, index, y, widths, mediaGuideDocument);
     }
   }
 

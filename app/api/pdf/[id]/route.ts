@@ -3,7 +3,7 @@ import { renderSavedDocumentPdf } from "../../../lib/server-document-pdf";
 import { get } from "@vercel/blob";
 import { database } from "../../../lib/database";
 import { getSession, requireAnyPermission } from "../../../lib/auth-server";
-import { canAccess } from "../../../lib/permissions";
+import { canAccess, hasOwnQuotationAccess } from "../../../lib/permissions";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,9 +17,10 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const { id } = await context.params;
     const numericId = Number(id);
     if (!Number.isInteger(numericId) || numericId <= 0) return new Response("Invalid document", { status: 400 });
-    const row = await database.prepare("SELECT type, client_id AS clientId, generated_code AS generatedCode, pdf_key AS pdfKey FROM documents WHERE id = ?")
-      .bind(numericId).first<{ type: "invoice" | "quotation"; clientId: number; generatedCode: string; pdfKey: string }>();
+    const row = await database.prepare("SELECT type,created_by_user_id AS createdByUserId, client_id AS clientId, generated_code AS generatedCode, pdf_key AS pdfKey FROM documents WHERE id = ?")
+      .bind(numericId).first<{ type: "invoice" | "quotation"; createdByUserId:number; clientId: number; generatedCode: string; pdfKey: string }>();
     if (!row) return new Response("Document not found", { status: 404 });
+    if(hasOwnQuotationAccess(session) && (row.type!=="quotation" || Number(row.createdByUserId)!==session.userId)) return new Response("Access denied",{status:403});
     const documentPermission = row.type === "invoice" ? "invoices" : "quotations";
     if (session.clientId !== null && (!clientAccess(session.roleLabel).invoices || row.type !== "invoice" || Number(row.clientId) !== session.clientId)) {
       return new Response("Access denied", { status: 403 });

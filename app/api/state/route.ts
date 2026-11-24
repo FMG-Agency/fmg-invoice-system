@@ -1,3 +1,4 @@
+import { hasOwnQuotationAccess } from "../../lib/permissions";
 import { archiveStatement, trashDelete } from '../../lib/trash';
 import type { DocumentRecord } from "../../types";
 import { invoicePaymentSummary, setPartialInvoicePayment } from "../../lib/invoice-payments";
@@ -42,6 +43,8 @@ const itemPayload = z.object({
   id: z.string(),
   date: z.string().default(""),
   description: z.string().trim().min(1).max(500),
+  textAlign: z.enum(["left", "center", "right"]).optional(),
+  fontSize: z.number().int().min(6).max(14).optional(),
   qty: z.number().finite().min(0),
   unit: z.string().trim().max(40).default("Unit"),
   unitPrice: z.number().finite(),
@@ -364,6 +367,7 @@ function filterState(state: WorkspaceState, session: AuthSession): WorkspaceStat
   const allowed = (permission: AccessPermission) => canAccess(session.permissions, permission, session.isAdmin);
   const dashboardAccess = allowed("dashboard");
   const documents = state.documents.flatMap((document) => {
+    if(hasOwnQuotationAccess(session) && ((document as Record<string, unknown>).type!=="quotation" || Number((document as Record<string, unknown>).createdByUserId)!==session.userId)) return [];
     const documentPermission = String((document as Record<string, unknown>).type) === "invoice" ? "invoices" : "quotations";
     if (allowed("all_data") || allowed(documentPermission)) return [document];
     if (!dashboardAccess) return [];
@@ -400,7 +404,7 @@ function filterState(state: WorkspaceState, session: AuthSession): WorkspaceStat
     clients,
     categories: allowed("categories") || allowed("all_data") || allowed("invoices") || allowed("quotations") ? state.categories : [],
     documents,
-    deletedDocuments: state.deletedDocuments.filter(d => allowed("all_data") || allowed(d.type === "invoice" ? "invoices" : "quotations")),
+    deletedDocuments: state.deletedDocuments.filter(d => !hasOwnQuotationAccess(session) && (allowed("all_data") || allowed(d.type === "invoice" ? "invoices" : "quotations"))),
     quotationCatalog: allowed("quotations") ? state.quotationCatalog : [],
     settings: allowed("settings") || allowed("invoices") || allowed("quotations") ? state.settings : null,
   };
@@ -462,14 +466,16 @@ export async function POST(request: Request) {
             ? "all_data"
             : "settings";
     if (payload.action === "saveDocument" && payload.data.id) {
-      const existing = await database.prepare("SELECT type FROM documents WHERE id = ?").bind(payload.data.id).first<{ type: "invoice" | "quotation" }>();
+      const existing = await database.prepare("SELECT type,created_by_user_id AS createdByUserId FROM documents WHERE id = ?").bind(payload.data.id).first<{ type: "invoice" | "quotation"; createdByUserId:number }>();
       if (!existing) return Response.json({ error: "Document not found." }, { status: 404 });
+      if(hasOwnQuotationAccess(session) && (existing.type!=="quotation" || Number(existing.createdByUserId)!==session.userId)) return accessDenied();
       if (existing.type !== payload.data.type) return Response.json({ error: "A document type cannot be changed after it is created." }, { status: 400 });
       requiredPermission = existing.type === "invoice" ? "invoices" : "quotations";
     }
     if (payload.action === "setDocumentStatus" || payload.action === "deleteDocument") {
-      const existing = await database.prepare("SELECT type FROM documents WHERE id = ?").bind(payload.id).first<{ type: "invoice" | "quotation" }>();
+      const existing = await database.prepare("SELECT type,created_by_user_id AS createdByUserId FROM documents WHERE id = ?").bind(payload.id).first<{ type: "invoice" | "quotation"; createdByUserId:number }>();
       if (!existing) return Response.json({ error: "Document not found." }, { status: 404 });
+      if(hasOwnQuotationAccess(session) && (existing.type!=="quotation" || Number(existing.createdByUserId)!==session.userId)) return accessDenied();
       requiredPermission = existing.type === "invoice" ? "invoices" : "quotations";
     }
     const documentLifecycleAction = payload.action === "setDocumentStatus" || payload.action === "deleteDocument";
