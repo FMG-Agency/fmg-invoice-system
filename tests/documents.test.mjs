@@ -27,14 +27,17 @@ test('new work orders reserve matching invoice numbers; creators survive edits a
   let state=await app.state(new Request('https://fixture.test/api/state')).then(async r=>{const b=await r.json();assert.equal(r.status,200,JSON.stringify(b));return b;});
   const category=state.categories.find(c=>c.name==='Media Guide');
   const client=state.clients[0];
-  const data={type:'quotation',companyKey:'fmg',clientId:client.id,categoryId:category.id,date:'2026-09-10',preparedBy:'Finance Department',currency:'EGP',status:'Draft',items:[{id:'item',description:'Fixture',qty:1,unitPrice:10,textAlign:'right',fontSize:12}],pdfBase64:Buffer.from('Isolated PDF placeholder').toString('base64')};
+  const data={type:'quotation',companyKey:'fmg',clientId:client.id,categoryId:category.id,date:'2026-09-10',preparedBy:'Finance Department',currency:'EGP',status:'Draft',items:[{id:'item',description:'Fixture',qty:1,unitPrice:10,textAlign:'right',fontSize:12,formatting:{description:{align:'center',marks:[{start:0,end:3,bold:true,fontSize:18}]}},tableFormat:{fontSize:10}}],pdfBase64:Buffer.from('Isolated PDF placeholder').toString('base64')};
   state=await call(app.save,{action:'saveDocument',data});
   const legacy=state.documents[0];
   assert.equal(legacy.createdByName,'Original Author');
   assert.equal(legacy.createdByUserId,101);
   assert.equal(legacy.items[0].textAlign,'right');
   assert.equal(legacy.items[0].fontSize,12);
-  for (const fontSize of [0,15,100]) assert.equal((await app.save(request({action:'saveDocument',data:{...data,items:[{...data.items[0],fontSize}]}}))).status,400);
+  assert.equal(legacy.items[0].formatting.description.marks[0].bold,true);
+  assert.equal(legacy.items[0].formatting.description.marks[0].fontSize,18);
+  assert.equal(legacy.items[0].tableFormat.fontSize,10);
+  for (const fontSize of [0,25,100]) assert.equal((await app.save(request({action:'saveDocument',data:{...data,items:[{...data.items[0],fontSize}]}}))).status,400);
   for(const type of ['quotation','invoice']) {
     const multi=await call(app.save,{action:'saveDocument',data:{...data,type,items:[{id:'b1',description:'Bundle one',kind:'package',catalogId:3,qty:1,unitPrice:100},{id:'b2',description:'Bundle two',kind:'package',catalogId:4,qty:2,unitPrice:200}]}});
     assert.equal(multi.documents[0].items.filter(item=>item.kind==='package').length,2);

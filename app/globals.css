@@ -1411,3 +1411,20 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; -
 .quotation-format-toolbar{align-items:center;padding:12px;border:1px solid var(--border);border-radius:12px;margin-bottom:16px}
 .quotation-format-toolbar label{flex:0 1 180px}
 .quotation-format-toolbar>span{font-size:12px;flex:1;min-width:180px;opacity:.75}
+
+/* Compact document editing ribbon, shared by invoices and quotations. */
+.document-format-toolbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:10px;margin:0 0 12px;border:1px solid var(--line-strong);border-radius:12px;background:var(--surface-2);position:sticky;top:82px;z-index:5}
+.document-format-toolbar button{display:grid;place-items:center;min-width:34px;height:34px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--ink);cursor:pointer}
+.document-format-toolbar button:hover,.document-format-toolbar button[aria-pressed=true]{background:var(--yellow);color:#111;border-color:#b5a000}
+.document-format-toolbar select{width:auto!important;min-width:64px;height:34px;padding:4px 8px}
+.document-format-toolbar i{height:24px;border-left:1px solid var(--line-strong);margin:0 4px}
+.document-format-toolbar small{font-size:11px;opacity:.7;margin-left:8px}
+.document-rich-cell{min-height:44px;padding:10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.45;cursor:text;max-width:100%;outline:none}
+.document-rich-cell:empty:before{content:attr(data-placeholder);opacity:.45;font-size:12px;pointer-events:none}
+.document-rich-cell:focus{border-color:var(--yellow);box-shadow:0 0 0 2px #ffdf0020}
+.document-edit-table .item-service-cell{min-width:240px;gap:8px;display:grid}
+.document-edit-table td{vertical-align:top;overflow-wrap:anywhere}
+@media(max-width:600px){.document-format-toolbar{top:70px}.document-format-toolbar small{flex-basis:100%;margin:4px 0}.document-format-toolbar select:first-child{max-width:150px}}
+
+.document-edit-table thead th{font-size:inherit;font-weight:inherit;text-align:inherit}
+.paper-preview .formatted-document-preview th{width:auto!important}

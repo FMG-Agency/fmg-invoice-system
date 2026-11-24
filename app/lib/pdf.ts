@@ -1,4 +1,6 @@
 import { jsPDF } from "jspdf";
+import {cellFormat,textRuns} from "./document-text";
+import type {CellFormat,DocumentTextField} from "../types";
 import type { Category, Client, DocumentDraft } from "../types";
 import { formatDocumentDate } from "./document-date";
 
@@ -102,14 +104,19 @@ function itemHeader(doc: jsPDF, draft: DocumentDraft, y: number, mediaGuideDocum
     : invoice
     ? ["#", "SERVICE / DELIVERABLE", "QTY", "PRICE", "TOTAL"]
     : ["#", "SERVICE / DELIVERABLE", "QTY", "UNIT", "PRICE", "TOTAL"];
-  let x = 14;
-  labels.forEach((label, index) => {
-    doc.setFillColor(theme.dark);
-    doc.rect(x, y, widths[index], 9, "F");
-    text(doc, label, x + widths[index] / 2, y + 5.7, { align: "center", fontSize: 6.5, bold: true, color: index === 0 ? theme.accent : "#ffffff" });
-    x += widths[index];
+  const format=draft.items[0]?.tableFormat;
+  const fontSize=format?.fontSize || 6.5,bold=format?.bold ?? true,align=format?.align || "center";
+  doc.setFont("FMGArial",bold?"bold":"normal");doc.setFontSize(fontSize);
+  const lines=labels.map((label,i)=>doc.splitTextToSize(label,widths[i]-5) as string[]);
+  const height=Math.max(9,5+Math.max(...lines.map(l=>l.length))*fontSize*0.352778*1.3);
+  let x=14;
+  labels.forEach((label,index)=>{
+    doc.setFillColor(theme.dark);doc.rect(x,y,widths[index],height,"F");
+    doc.setTextColor(index===0?theme.accent:"#ffffff");
+    const anchor=align==="right"?x+widths[index]-2.5:align==="center"?x+widths[index]/2:x+2.5;
+    doc.text(lines[index],anchor,y+2.5+fontSize*0.352778,{align,lineHeightFactor:1.3});x+=widths[index];
   });
-  return widths;
+  return Object.assign(widths,{headerHeight:height});
 }
 
 function quotationNameText(item: DocumentDraft["items"][number]) {
@@ -133,21 +140,56 @@ function quotationScopeText(item: DocumentDraft["items"][number]) {
   return [item.description || "—", ...details.map((detail) => `• ${detail}`)].join("\n");
 }
 
+type PdfRun = {text:string;fontSize:number;bold:boolean;width:number};
+function wrapRuns(doc:jsPDF,text:string,format:CellFormat,width:number):PdfRun[][] {
+ const lines:PdfRun[][]=[[]];let used=0;
+ const measure=(text:string,fontSize:number,bold:boolean)=>{doc.setFont("FMGArial",bold?"bold":"normal");doc.setFontSize(fontSize);return doc.getTextWidth(arabicText(doc,text));};
+ for(const run of textRuns(text,format)){
+  const tokens=run.text.match(/\n|[^\S\n]+|[^\s]+/gu) || [];
+  for(const token of tokens){
+   if(token==='\n'){lines.push([]);used=0;continue;}
+   const w=measure(token,run.fontSize,run.bold);
+   if(w<=width){
+    if(used+w>width+0.001){lines.push([]);used=0;}
+    lines[lines.length-1].push({text:token,fontSize:run.fontSize,bold:run.bold,width:w});used+=w;
+   }else{
+    for(const ch of token){const cw=measure(ch,run.fontSize,run.bold);if(used+cw>width+0.001){lines.push([]);used=0;}lines[lines.length-1].push({text:ch,fontSize:run.fontSize,bold:run.bold,width:cw});used+=cw;}
+   }
+  }
+ }
+ return lines.map(line=>{const joined:PdfRun[]=[];for(const run of line){const last=joined.at(-1);if(last && last.fontSize===run.fontSize && last.bold===run.bold){last.text+=run.text;last.width=measure(last.text,last.fontSize,last.bold);}else joined.push({...run});}return joined;});
+}
 function itemLayout(doc: jsPDF, draft: DocumentDraft, item: DocumentDraft["items"][number], index: number, widths: number[], media: boolean) {
- const invoice = draft.type === "invoice", fontSize = Math.max(6, Math.min(14, item.fontSize || 7)), lineHeight = fontSize * 0.352778 * 1.3;
- const values = media ? [...(invoice ? [String(index+1)] : []), quotationNameText(item), quotationInputsText(item), quotationOutputsText(item), formatMoney(item.qty*item.unitPrice,draft.currency)] : [String(index+1), invoice ? item.description : quotationScopeText(item), String(item.qty), ...(invoice ? [] : [item.unit]), formatMoney(item.unitPrice,""), formatMoney(item.qty*item.unitPrice,"")];
- doc.setFont("FMGArial","normal"); doc.setFontSize(fontSize);
- const cells = values.map((v,c) => ({align: (media ? (invoice ? c>=1 && c<=3 : c<3) : c===1) ? (item.textAlign || "left") : "center" as "center", lines: doc.splitTextToSize(arabicText(doc,v.trim() || "—"),widths[c]-5) as string[]}));
- return {cells,fontSize,lineHeight,lineCount:Math.max(...cells.map(c=>c.lines.length))};
+ const invoice=draft.type==='invoice';
+ const field=(name:DocumentTextField,text:string)=>{const format=cellFormat(item,name);return {text,format,blocks:[{text,format}]};};
+ const description=field('description',item.description || '—');
+ const append=(base:typeof description,extra:typeof description)=>({...base,text:base.text+'\n'+extra.text,blocks:[...base.blocks,...extra.blocks]});
+ let name=description;
+ if(media && item.kind==='addon' && item.appliesTo)name=append(name,field('description','For '+item.appliesTo));
+ if(media && item.kind==='addon' && item.bundleTotal!=null)name=append(name,field('description','Bundle total: '+formatMoney(item.bundleTotal,'EGP')));
+ if(!media && !invoice && item.includedServices?.length)name=append(name,field('includedServices',item.includedServices.join('\n')));
+ const values=media ? [...(invoice?[field('number',String(index+1))]:[]),name,field('inputs',(item.inputs || []).join('\n') || '—'),field('outputs',(item.outputs || []).join('\n') || '—'),field('total',formatMoney(item.qty*item.unitPrice,draft.currency))] : [field('number',String(index+1)),name,field('qty',String(item.qty)),...(invoice?[]:[field('unit',item.unit)]),field('unitPrice',formatMoney(item.unitPrice,'')),field('total',formatMoney(item.qty*item.unitPrice,''))];
+ const cells=values.map(({format,blocks},c)=>{const rows=blocks.flatMap(block=>wrapRuns(doc,block.text,block.format,widths[c]-5).map(runs=>({runs,align:block.format.align || 'left' as const})));const runs=rows.map(r=>r.runs);return {align:format.align || 'left',lineAligns:rows.map(r=>r.align),runs,lines:runs.map(line=>line.map(r=>r.text).join(''))};});
+ const fontSize=item.fontSize || 7;
+ const largest=Math.max(fontSize,...cells.flatMap(c=>c.runs.flatMap(line=>line.map(r=>r.fontSize))));
+ const lineHeight=largest*0.352778*1.3;
+ return {cells,fontSize,lineHeight,largest,lineCount:Math.max(...cells.map(c=>c.lines.length))};
 }
 function drawItemSegment(doc:jsPDF, layout:ReturnType<typeof itemLayout>, widths:number[], index:number, y:number, offset:number, count:number) {
- const height=Math.max(10,5+count*layout.lineHeight); let x=14;
+ const height=Math.max(10,5+count*layout.lineHeight);let x=14;
  layout.cells.forEach((cell,c)=>{
- doc.setFillColor(index%2===0 ? "#ffffff" : "#fafafa"); doc.setDrawColor("#d8d8d8"); doc.rect(x,y,widths[c],height,"FD");
- doc.setFont("FMGArial","normal");doc.setFontSize(layout.fontSize);doc.setTextColor(BLACK);
- const lines=cell.lines.slice(offset,offset+count), anchor=cell.align==="right" ? x+widths[c]-2.5 : cell.align==="center" ? x+widths[c]/2 : x+2.5;
- if(lines.length) doc.text(lines,anchor,y+2.5+layout.fontSize*0.352778,{align:cell.align,lineHeightFactor:1.3});
- x+=widths[c]; });return height;
+  doc.setFillColor(index%2===0?'#ffffff':'#fafafa');doc.setDrawColor('#d8d8d8');doc.rect(x,y,widths[c],height,'FD');doc.setTextColor(BLACK);
+  cell.runs.slice(offset,offset+count).forEach((runs,line)=>{
+   const total=runs.reduce((sum,r)=>sum+r.width,0);
+   const align=cell.lineAligns[offset+line] || cell.align;
+   const anchor=align==='right'?x+widths[c]-2.5:align==='center'?x+widths[c]/2:x+2.5;
+   const baseline=y+2.5+layout.largest*0.352778+line*layout.lineHeight;
+   if(runs.length===1){const r=runs[0];doc.setFont('FMGArial',r.bold?'bold':'normal');doc.setFontSize(r.fontSize);doc.text(arabicText(doc,r.text),anchor,baseline,{align});return;}
+   let cursor=align==='right'?anchor-total:align==='center'?anchor-total/2:anchor;
+   const ordered=/[\u0600-\u06ff]/.test(runs.map(r=>r.text).join(''))?[...runs].reverse():runs;
+   for(const r of ordered){doc.setFont('FMGArial',r.bold?'bold':'normal');doc.setFontSize(r.fontSize);doc.text(arabicText(doc,r.text),cursor,baseline,{align:'left'});cursor+=r.width;}
+  });x+=widths[c];
+ });return height;
 }
 
 function totals(doc: jsPDF, draft: DocumentDraft, y: number, theme: PdfTheme) {
@@ -277,7 +319,7 @@ export async function generateDocumentPdf(draft: DocumentDraft, client: Client, 
       y += 6;
     }
     let widths = itemHeader(doc, draft, y, mediaGuideDocument, theme, group.addon);
-    y += 9;
+    y += widths.headerHeight;
     for (let index = 0; index < group.items.length; index += 1) {
       const item = group.items[index];
       const layout = itemLayout(doc,draft,item,index,widths,mediaGuideDocument);
@@ -288,7 +330,7 @@ export async function generateDocumentPdf(draft: DocumentDraft, client: Client, 
           footer(doc,category,theme,digitalEmpire);doc.addPage();drawHeader(true);
           if(group.addon) addonBand(doc,39,theme); else band(doc,group.label,39,theme);
           y=group.addon ? 52 : 49;
-          widths=itemHeader(doc,draft,y,mediaGuideDocument,theme,group.addon);y+=9;
+          widths=itemHeader(doc,draft,y,mediaGuideDocument,theme,group.addon);y+=widths.headerHeight;
         }
         const capacity=Math.floor((225-y-5)/layout.lineHeight);
         if(capacity<1){y=225;continue;}

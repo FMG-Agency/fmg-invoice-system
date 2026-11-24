@@ -39,20 +39,27 @@ const categoryPayload = z.object({
   footerText2: optionalText,
 });
 
+const cellFormatPayload = z.object({
+  fontSize: z.number().int().min(6).max(24).optional(), bold: z.boolean().optional(),
+  align: z.enum(["left", "center", "right"]).optional(),
+  marks: z.array(z.object({start:z.number().int().min(0).max(20000),end:z.number().int().min(0).max(20000),fontSize:z.number().int().min(6).max(24).optional(),bold:z.boolean().optional()}).refine(mark=>mark.end>mark.start)).max(2000).optional(),
+});
 const itemPayload = z.object({
   id: z.string(),
   date: z.string().default(""),
-  description: z.string().trim().min(1).max(500),
+  description: z.string().min(1).max(500).refine(value=>value.trim().length>0),
   textAlign: z.enum(["left", "center", "right"]).optional(),
-  fontSize: z.number().int().min(6).max(14).optional(),
+  fontSize: z.number().int().min(6).max(24).optional(),
+  tableFormat:cellFormatPayload.optional(),
+  formatting:z.object({description:cellFormatPayload.optional(),includedServices:cellFormatPayload.optional(),inputs:cellFormatPayload.optional(),outputs:cellFormatPayload.optional(),unit:cellFormatPayload.optional(),qty:cellFormatPayload.optional(),unitPrice:cellFormatPayload.optional(),total:cellFormatPayload.optional(),number:cellFormatPayload.optional()}).optional(),
   qty: z.number().finite().min(0),
-  unit: z.string().trim().max(40).default("Unit"),
+  unit: z.string().max(40).default("Unit"),
   unitPrice: z.number().finite(),
   kind: z.enum(["package", "addon", "custom"]).default("custom"),
   catalogId: z.number().int().positive().nullable().default(null),
-  includedServices: z.array(z.string().trim().min(1).max(300)).max(30).default([]),
-  inputs: z.array(z.string().trim().min(1).max(300)).max(30).default([]),
-  outputs: z.array(z.string().trim().min(1).max(300)).max(30).default([]),
+  includedServices: z.array(z.string().max(300)).max(30).default([]),
+  inputs: z.array(z.string().max(300)).max(30).default([]),
+  outputs: z.array(z.string().max(300)).max(30).default([]),
   appliesTo: z.string().trim().max(160).default(""),
   bundleTotal: z.number().finite().min(0).nullable().default(null),
 });

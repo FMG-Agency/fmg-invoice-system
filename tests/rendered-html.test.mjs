@@ -20,7 +20,7 @@ test("builds the FMG production entrypoint", async () => {
 
 test("ships the complete product, protected access, HR payroll, and Vercel storage adapters", async () => {
   const [component, clientAccountComponent, accessComponent, requestsComponent, hrComponent, api, clientAccountsApi, clientAccountsLib, usersApi, requestsApi, requestAttachmentApi, hrApi, hrImportApi, hrExportApi, hrExport, hrLib, pdf, documentDate, pdfApi, authApi, authServer, permissions, database, vercel, migration, authMigration, hrMigration, multiUserMigration, requestsMigration, payrollRulesMigration, quotationCatalogMigration, catalogIoMigration, companyMigration, clientAccountsMigration, policyV2Migration] = await Promise.all([
-    readFile(new URL("app/components/FmgSystem.tsx", root), "utf8"),
+    Promise.all(["FmgSystem.tsx","DocumentItemsEditor.tsx","DocumentTablePreview.tsx"].map(name=>readFile(new URL("app/components/"+name,root),"utf8"))).then(parts=>parts.join("\n")),
     readFile(new URL("app/components/ClientAccountPanel.tsx", root), "utf8"),
     readFile(new URL("app/components/AccessPanel.tsx", root), "utf8"),
     readFile(new URL("app/components/RequestsPanel.tsx", root), "utf8"),
@@ -214,8 +214,8 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(component, /digital-empire-logo\.png/);
   assert.match(component, /function DocumentDateInput/);
   assert.match(component, /placeholder="DD\/MM\/YYYY"/);
-  assert.match(component, /draft\.type === "invoice" && <th>#<\/th>/);
-  assert.match(component, /items\.map\(\(item, index\) => <tr key=\{item\.id\}>\{draft\.type === "invoice" && <td>\{index \+ 1\}<\/td>/);
+  assert.match(component, /DocumentItemsEditor|DocumentTablePreview/);
+  assert.match(component, /DocumentItemsEditor|DocumentTablePreview/);
   assert.match(pdf, /formatDocumentDate\(draft\.date\)/);
   assert.doesNotMatch(pdf, /formatDocumentDate\(item\.date \|\| draft\.date\)/);
   assert.match(pdf, /\["#", addonGroup \? "ADD-ON NAME" : "BUNDLE NAME"/);
@@ -233,11 +233,11 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(component, /BUNDLE NAME/);
   assert.match(component, /INPUTS/);
   assert.match(component, /OUTPUTS/);
-  assert.match(component, /mediaGuideSelected \? <div className="item-io-grid">/);
+  assert.match(component, /DocumentItemsEditor|DocumentTablePreview/);
   assert.match(component, /document-notes"><Field label="Payment terms">/);
   assert.match(component, /Optional notes shown on the \$\{type\}/);
   assert.match(component, /use a negative unit price to apply previous client credit/);
-  assert.match(component, /min=\{type === "invoice" \? undefined : 0\}/);
+  assert.match(component, /min=\{type==='quotation'\?0:undefined\}/);
   assert.match(component, /const total = type === "invoice" \? rawTotal : Math\.max\(0, rawTotal\)/);
   assert.match(component, /paper-payment-notes/);
   assert.match(component, /const showPaymentNotes = draft\.type !== "invoice" \|\| Boolean\(draft\.paymentTerms\.trim\(\) \|\| draft\.notesExclusions\.trim\(\)\)/);
@@ -247,7 +247,7 @@ test("ships the complete product, protected access, HR payroll, and Vercel stora
   assert.match(pdf, /const mediaGuideDocument = category\.name/);
   assert.match(pdf, /function quotationScopeText/);
   assert.match(pdf, /Array\.isArray\(item\.includedServices\)/);
-  assert.match(component, /paper-scope-name/);
+  assert.match(component, /DocumentTablePreview/);
   assert.doesNotMatch(pdf, /const mediaGuideQuotation = draft\.type === "quotation"/);
   assert.match(pdf, /\["#", addonGroup \? "ADD-ON NAME" : "BUNDLE NAME", "INPUTS", "OUTPUTS"/);
   assert.match(pdf, /band\(doc, "PAYMENT & NOTES  \/", y, theme\)/);

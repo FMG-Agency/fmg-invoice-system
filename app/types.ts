@@ -36,12 +36,17 @@ export type Category = {
   updatedAt: string;
 };
 
+export type TextMark = { start: number; end: number; fontSize?: number; bold?: boolean };
+export type CellFormat = { fontSize?: number; bold?: boolean; align?: "left" | "center" | "right"; marks?: TextMark[] };
+export type DocumentTextField = "description" | "includedServices" | "inputs" | "outputs" | "unit" | "qty" | "unitPrice" | "total" | "number";
 export type LineItem = {
   id: string;
   date: string;
   description: string;
   textAlign?: "left" | "center" | "right";
   fontSize?: number;
+  formatting?: Partial<Record<DocumentTextField, CellFormat>>;
+  tableFormat?: CellFormat;
   qty: number;
   unit: string;
   unitPrice: number;
