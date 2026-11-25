@@ -446,6 +446,8 @@ export type EmployeeRequestStatus = "pending" | "approved" | "rejected" | "cance
 export type EmployeeLeaveKind = "vacation" | "occasional_leave" | "resort_leave" | "sick_leave" | "urgent_leave" | "normal_leave";
 
 export type EmployeeRequest = {
+  limitExceeded?: boolean;
+  limitValue?: number | null;
   isManual?: boolean;
   dayType?: "normal" | "holiday";
   reason?: "sick" | "normal" | "other";
@@ -484,7 +486,10 @@ export type RequestReviewer = {
   roleLabel: string;
 };
 
+export type RequestLimitRule = { employeeId:number;type:EmployeeRequestType;maxRequests:number;overflowMode:"block"|"warn" };
 export type RequestsState = {
+  requestLimits?: RequestLimitRule[];
+  limitEmployees?: {id:number;name:string;active:number}[];
   requests: EmployeeRequest[];
   reviewers: RequestReviewer[];
   overtimeStartsAt: string;

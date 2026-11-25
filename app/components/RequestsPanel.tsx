@@ -1,4 +1,6 @@
 "use client";
+import {RequestLimitsPanel} from "./RequestLimitsPanel";
+import {requestAllowance} from "../lib/request-limit-policy";
 
 import {
   AlarmClock,
@@ -171,6 +173,7 @@ function RequestModal({ title, description, onClose, children }: { title: string
 
 export function RequestsPanel({ showToast }: { showToast: (message: string) => void }) {
   const [state, setState] = useState<RequestsState>(emptyState);
+  const [limitsOpen,setLimitsOpen]=useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState<"all" | "mine" | "review" | "pending" | "decided">("all");
@@ -289,8 +292,11 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
     .filter((request) => request.status === "approved" && ["mission", "friday_work", "overtime", "early_arrival"].includes(request.type))
     .reduce((sum, request) => sum + request.durationMinutes, 0);
   const canCreate = Boolean(state.employeeId);
+  const quotaChecks=(bothOvertime?[draft.type,"early_arrival" as EmployeeRequestType]:[draft.type]).map(type=>requestAllowance(state.requests,state.requestLimits||[],state.employeeId??-1,type,draft.dateFrom.slice(0,7)));
 
   return <>
+    {state.isAdmin&&<div className="request-limits-launch"><button type="button" className="secondary-button" onClick={()=>setLimitsOpen(true)}><ShieldAlert size={17}/> Request limits · حدود الطلبات</button></div>}
+    {limitsOpen&&state.isAdmin&&<RequestLimitsPanel state={state} saving={saving} onClose={()=>setLimitsOpen(false)} onSave={(employeeId,rules)=>mutate({action:"saveLimits",employeeId,rules},"Monthly request limits saved.")} />}
     <section className="request-summary-grid">
       <article className="panel request-summary"><span className="request-summary-icon yellow"><Clock3 size={21} /></span><div><small>PENDING</small><strong>{state.pendingCount}</strong><p>Waiting for a decision</p></div></article>
       <article className="panel request-summary"><span className="request-summary-icon"><FileCheck2 size={21} /></span><div><small>APPROVED</small><strong>{approved}</strong><p>Reflected in attendance</p></div></article>
@@ -318,6 +324,7 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
           <div className="request-card-main">
             <div className="request-card-title"><div><span>{requestLabel(request.type)}</span><h3>{request.employeeName}</h3><small>{request.employeeTitle || "Employee"} · Request #{request.id}</small></div><span className={`request-status ${request.status}`}>{request.status}</span></div>
             <div className="request-meta"><span><CalendarDays size={14} /> {dateLabel(request.dateFrom)}{request.dateTo !== request.dateFrom ? ` → ${dateLabel(request.dateTo)}` : ""}</span>{request.type === "leave" && <span>{leaveLabel(request.leaveKind)}{request.status === "approved" ? ` · ${request.leavePaid === false ? "Unpaid" : "Paid"}` : ""}</span>}{request.type==="mission"&&<span>{request.dayType==="holiday"?"Holiday · ×2":"Normal working day · ×1"}</span>}{request.type==="leave"&&request.reason==="other"&&<span>Other reason</span>}{request.status==="approved" && !["leave","friday_exchange"].includes(request.type) && <span>{request.leavePaid===false?"Unpaid":"Paid / excused"}</span>}{request.startTime && <span><Clock3 size={14} /> {request.startTime}{request.endTime ? ` – ${request.endTime}` : ""}{request.durationMinutes ? ` · ${minutesLabel(request.durationMinutes)} requested` : request.type === "mission" ? ` · No eligible OT after ${timeLabel(state.overtimeStartsAt)}` : ""}</span>}</div>
+            {request.limitExceeded&&<div className="request-limit-notice warn"><ShieldAlert size={16}/><span>Exceeded monthly limit when submitted ({request.limitValue}). {request.status==="pending"?"Administrator exception required.":"Recorded at submission."}</span></div>}
             <p className="request-details">{request.details}</p>
             {request.hasAttachment && <a className="request-attachment" href={`/api/requests/attachment/${request.id}`} target="_blank" rel="noreferrer"><Paperclip size={14} /> {request.attachmentName || "View attachment"}</a>}
             <div className="request-route"><Route size={15} /><span>Sent by <strong>{request.requesterName}</strong></span><ArrowRight size={14} /><span>{request.assignedReviewerName ? <>Forwarded to <strong>{request.assignedReviewerName}</strong></> : <strong>Administrator</strong>}</span></div>
@@ -354,7 +361,8 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
         </div>
         {editingRequest && draft.type!=="friday_exchange"&&<label className="field"><span>Payroll treatment</span><select value={String(reviewLeavePaid)} onChange={e=>setReviewLeavePaid(e.target.value==="true")}><option value="true">Paid / excused</option><option value="false">Unpaid / normal deduction</option></select></label>}
         <div className="request-payroll-note">{typeIcon(draft.type, 17)}<span>{policyNote(draft, state)}</span></div>
-        <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Saving…" : editingRequest?"Save changes":"Send request"}</button></div>
+        {!editingRequest&&quotaChecks.map((quota,index)=>quota&&<div key={index} role={quota.exceeded?"alert":"status"} className={"request-limit-notice "+(quota.blocked?"blocked":quota.exceeded?"warn":"")}><ShieldAlert size={16}/><span><strong>{requestLabel(quota.type)} · {draft.dateFrom.slice(0,7)}: {quota.used}/{quota.maxRequests} used</strong><br/>{quota.blocked?"وصلت للحد الشهري — لا يمكنك إرسال طلب جديد من هذا النوع.":quota.exceeded?"تجاوزت الحد الشهري. يمكنك الإرسال وسيظهر لك وللأدمن أنه يحتاج استثناء.":(quota.maxRequests-quota.used)+" requests remaining before this submission."}</span></div>)}
+        <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primary-button" disabled={saving||(!editingRequest&&quotaChecks.some(q=>q?.blocked))}>{saving ? "Saving…" : editingRequest?"Save changes":"Send request"}</button></div>
       </form>
     </RequestModal>}
 
@@ -365,7 +373,7 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
       {reviewing.hasAttachment && <a className="request-attachment review" href={`/api/requests/attachment/${reviewing.id}`} target="_blank" rel="noreferrer"><Paperclip size={15} /> Open {reviewing.attachmentName || "attachment"}</a>}
       {reviewing.type !== "friday_exchange" && <label className="field"><span>Payroll treatment <small>Chosen by the reviewer</small></span><select value={reviewLeavePaid ? "paid" : "unpaid"} onChange={(event) => setReviewLeavePaid(event.target.value === "paid")}><option value="paid">Paid / excused · include eligible pay</option><option value="unpaid">Unpaid · no additional pay / normal deduction</option></select></label>}
       <label className="field"><span>Decision note <small>Visible to the employee</small></span><textarea rows={4} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} placeholder="Add the manager's approval note, or explain the rejection." /></label>
-      <div className="request-decision-actions"><button className="reject-button" disabled={saving} onClick={() => void decide("rejected")}><XCircle size={17} /> Reject</button><button className="approve-button" disabled={saving} onClick={() => void decide("approved")}><Check size={17} /> Approve & apply</button></div>
+      <div className="request-decision-actions"><button className="reject-button" disabled={saving} onClick={() => void decide("rejected")}><XCircle size={17} /> Reject</button><button className="approve-button" disabled={saving} onClick={() => void decide("approved")}><Check size={17} /> {reviewing.limitExceeded?"Approve exception & apply":"Approve & apply"}</button></div>
     </RequestModal>}
   </>;
 }

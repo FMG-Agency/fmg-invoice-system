@@ -10,6 +10,8 @@ import { administratorUserIds, notifyUsers } from "../../lib/notifications";
 import { canAccess, parsePermissions } from "../../lib/permissions";
 import type { EmployeeRequest, RequestReviewer, RequestsState } from "../../types";
 
+import {ensureRequestLimits,requestLimitRules,requestLimitUsage,requestLimitGuard,requestLimitSnapshot} from "../../lib/request-limits";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -68,6 +70,7 @@ function sessionName(session: { displayName: string; username: string }) {
 }
 
 const actionPayload = z.discriminatedUnion("action", [
+  z.object({action:z.literal("saveLimits"),employeeId:z.number().int().positive(),rules:z.array(z.object({type:z.enum(["leave","early_leave","late_arrival","friday_exchange","friday_work","mission","overtime","early_arrival"]),maxRequests:z.number().int().min(0).max(10000).nullable(),overflowMode:z.enum(["block","warn"])})).length(8).refine(rules=>new Set(rules.map(r=>r.type)).size===8,"Include each request type once.")}),
   z.object({ action: z.literal("create"), data: requestData }),
   z.object({ action: z.literal("edit"), id:z.number().int().positive(), data:requestData, leavePaid:z.boolean(), version:z.string() }),
   z.object({ action: z.literal("apply"), month:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }),
@@ -84,6 +87,7 @@ function numberValue(value: unknown) {
 function requestFromRow(row: Record<string, unknown>): EmployeeRequest {
   const metadata=row.manualData?JSON.parse(String(row.manualData)):{};
   return {
+    limitExceeded:Number(row.limitExceeded)===1,limitValue:row.limitValue==null?null:Number(row.limitValue),
     dayType:metadata.dayType||"normal",reason:metadata.reason||(row.leaveKind==="sick_leave"?"sick":"normal"),
     isManual: Boolean(row.manualData) && JSON.parse(String(row.manualData)).origin !== "employee",
     id: numberValue(row.id),
@@ -251,7 +255,7 @@ async function getRequestsState(session: NonNullable<Awaited<ReturnType<typeof g
     : "(r.employee_id = ? OR r.assigned_reviewer_id = ?)";
   const statement = database.prepare(`SELECT r.id, r.employee_id AS employeeId, e.name AS employeeName,
       e.title AS employeeTitle, r.requester_user_id AS requesterUserId, requester.display_name AS requesterName,
-      r.manual_data AS manualData, r.type, r.leave_kind AS leaveKind, r.date_from AS dateFrom, r.date_to AS dateTo,
+      r.limit_exceeded AS limitExceeded,r.limit_value AS limitValue, r.manual_data AS manualData, r.type, r.leave_kind AS leaveKind, r.date_from AS dateFrom, r.date_to AS dateTo,
       r.start_time AS startTime, r.end_time AS endTime, r.duration_minutes AS durationMinutes, r.leave_paid AS leavePaid,
       r.details, r.attachment_name AS attachmentName, r.attachment_type AS attachmentType,
       CASE WHEN r.attachment_key <> '' THEN 1 ELSE 0 END AS hasAttachment,
@@ -278,6 +282,8 @@ async function getRequestsState(session: NonNullable<Awaited<ReturnType<typeof g
   const requests = result.results.map((row) => requestFromRow(row as Record<string, unknown>));
   return {
     requests,
+    requestLimits:await requestLimitRules(session.isAdmin?undefined:session.employeeId??-1),
+    limitEmployees:session.isAdmin?(await database.prepare("SELECT id,name,active FROM employees ORDER BY active DESC,name COLLATE NOCASE").all<{id:number;name:string;active:number}>()).results:[],
     reviewers: session.isAdmin ? await reviewers() : [],
     ...policy,
     employeeId: session.employeeId,
@@ -293,6 +299,7 @@ function accessError(status = 403, message = "You do not have access to employee
 }
 
 function responseError(error: unknown) {
+  if(/request_limit_guard|CHECK constraint failed: ok=1/.test(String(error)))return Response.json({error:"Monthly request limit reached. Your request was not sent. Refresh to see your current allowance.",code:"REQUEST_LIMIT_REACHED"},{status:409});
   if(/manual_request_no_overlap/.test(String(error))) return Response.json({error:"The request changed or overlaps another request. Reload and check the dates."},{status:409});
   const message = error instanceof z.ZodError ? error.issues[0]?.message ?? "Invalid request data." : error instanceof Error ? error.message : "Could not process this request.";
   return Response.json({ error: message }, { status: error instanceof z.ZodError || error instanceof Error ? 400 : 500 });
@@ -311,6 +318,7 @@ export async function GET(request: Request) {
     await ensureHrDatabase();
     const access = await sessionForRequests(request);
     if (access.error || !access.session) return access.error;
+    await ensureRequestLimits();
     return Response.json(await getRequestsState(access.session));
   } catch (error) {
     return responseError(error);
@@ -323,9 +331,15 @@ export async function POST(request: Request) {
     await ensureHrDatabase();
     const access = await sessionForRequests(request);
     if (access.error || !access.session) return access.error;
+    await ensureRequestLimits();
     const session = access.session;
     const payload = actionPayload.parse(await request.json());
 
+    if(payload.action==="saveLimits"){
+      if(!session.isAdmin)return accessError(403,"Only administrators can manage request limits.");
+      if(!await database.prepare("SELECT id FROM employees WHERE id=?").bind(payload.employeeId).first())return accessError(404,"Employee not found.");
+      await database.batch([database.prepare("DELETE FROM employee_request_limits WHERE employee_id=?").bind(payload.employeeId),...payload.rules.filter(r=>r.maxRequests!==null).map(r=>database.prepare("INSERT INTO employee_request_limits(employee_id,request_type,max_requests,overflow_mode,updated_by) VALUES(?,?,?,?,?)").bind(payload.employeeId,r.type,r.maxRequests,r.overflowMode,session.userId))]);
+    }
     if(payload.action === "apply") {
       if(!session.isAdmin) return accessError(403,"Only an administrator can apply requests.");
       const rows=await database.prepare("SELECT * FROM employee_requests WHERE status='approved' AND ((type='friday_exchange' AND (substr(date_from,1,7)=? OR substr(date_to,1,7)=?)) OR (type<>'friday_exchange' AND substr(date_from,1,7)<=? AND substr(date_to,1,7)>=?))").bind(payload.month,payload.month,payload.month,payload.month).all();
@@ -375,6 +389,8 @@ export async function POST(request: Request) {
       if(payload.data.bothOvertime) entries.push({...payload.data,type:"early_arrival",startTime:payload.data.earlyStartTime,endTime:payload.data.earlyEndTime,bothOvertime:false});
       const durations:number[]=[];
       for(const data of entries){
+        const limit=await requestLimitUsage(session.employeeId,data.type,data.dateFrom);
+        if(limit && limit.overflowMode==="block" && limit.used>=limit.maxRequests)return Response.json({error:`${requestTypeLabels[data.type]}: monthly limit reached (${limit.used}/${limit.maxRequests}) for ${data.dateFrom.slice(0,7)}. This request cannot be sent.`,code:"REQUEST_LIMIT_REACHED"},{status:409});
         await validatePolicyRequest(session.employeeId,data,policy);
         const duration=durationForRequest(data,policy);durations.push(duration);
         await assertExchangeAvailable(session.employeeId,requestOverlay(data,true));
@@ -388,6 +404,7 @@ export async function POST(request: Request) {
       const attachment = attachmentBuffer(payload.data);
       let attachmentKey = "";
       let createdRequestId = 0;
+      let createdRequestIds:number[]=[];
       const attachmentName = attachment ? payload.data.attachmentName.replace(/[\r\n"]/g, "").slice(0, 180) || "attachment" : "";
       try {
         if (attachment) {
@@ -401,21 +418,25 @@ export async function POST(request: Request) {
           });
         }
         const statements=entries.flatMap((data,index)=>[
+          requestLimitGuard(session.employeeId!,data.type,data.dateFrom),
           exchangeGuard(session.employeeId!,requestOverlay(data,true)),
           database.prepare(`INSERT INTO employee_requests
             (employee_id,requester_user_id,type,leave_kind,date_from,date_to,start_time,end_time,duration_minutes,details,attachment_key,attachment_name,attachment_type,manual_data)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(session.employeeId,session.userId,data.type,data.leaveKind,data.dateFrom,data.dateTo,data.startTime,data.endTime,durations[index],data.details,index===0?attachmentKey:'',index===0?attachmentName:'',index===0?(attachment?.contentType??''):'',JSON.stringify(requestOverlay(data,true)))
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(session.employeeId,session.userId,data.type,data.leaveKind,data.dateFrom,data.dateTo,data.startTime,data.endTime,durations[index],data.details,index===0?attachmentKey:'',index===0?attachmentName:'',index===0?(attachment?.contentType??''):'',JSON.stringify(requestOverlay(data,true))),
+          requestLimitSnapshot(session.employeeId!,data.type,data.dateFrom)
         ]);
-        const results=await database.batch([...statements,database.prepare("DELETE FROM hr_manual_request_guard")]);
-        createdRequestId=Number(results[1].lastInsertRowid);
+        const results=await database.batch([...statements,database.prepare("DELETE FROM hr_manual_request_guard"),database.prepare("DELETE FROM request_limit_guard")]);
+        createdRequestIds=entries.map((_,index)=>Number(results[index*4+2].lastInsertRowid));
+        createdRequestId=createdRequestIds[0];
       } catch (error) {
         if (attachmentKey) await del(attachmentKey).catch(() => undefined);
         throw error;
       }
+      const hasLimitException=Boolean(await database.prepare(`SELECT id FROM employee_requests WHERE limit_exceeded=1 AND id IN (${createdRequestIds.map(()=>"?").join(",")}) LIMIT 1`).bind(...createdRequestIds).first());
       await notifyUsers(await administratorUserIds(session.userId), {
         type: "employee_request_created",
         title: payload.data.bothOvertime?"New Early + Extra overtime requests":"New employee request",
-        message: `${sessionName(session)} sent a ${requestTypeLabels[payload.data.type]} for ${payload.data.dateFrom}.`,
+        message: `${sessionName(session)} sent a ${requestTypeLabels[payload.data.type]} for ${payload.data.dateFrom}.${hasLimitException?" Monthly limit exceeded — administrator exception required.":""}`,
         targetView: "requests",
         entityId: createdRequestId,
         actorUserId: session.userId,
