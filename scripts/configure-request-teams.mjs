@@ -16,18 +16,19 @@ if(new Set(users.map(u=>u.employee_id)).size!==7)throw Error('Expected seven dis
 const user=name=>users.find(u=>u.username===name);
 for(const name of ['hana','sandy'])if(!JSON.parse(user(name).permissions_json).includes('requests'))throw Error(name+' needs Employee Requests access.');
 const teams=[{id:'hana-team',name:'Hana · Marina · Rawan',members:['hana','marina','rawan']},{id:'sandy-team',name:'Sandy · Sara · Shady',members:['sandy','sara','shady']}];
-console.log(JSON.stringify({teams:teams.map(t=>({name:t.name,members:t.members,monthlyLimitPerType:1,overflow:'warn'})),samehReviewers:['Administrator','hana','sandy'],apply:process.argv.includes('--apply')}));
+console.log(JSON.stringify({teams:teams.map(t=>({name:t.name,members:t.members,monthlyLimitPerType:1,limitedTypes:['leave','early_leave','late_arrival'],overflow:'warn'})),samehReviewers:['Administrator','hana','sandy'],apply:process.argv.includes('--apply')}));
 if(process.argv.includes('--apply')){
  await ensureRequestLimits();
  const existing={};for(const table of ['employee_request_limits','request_teams','request_team_members','request_review_policy'])existing[table]=(await db.prepare('SELECT * FROM '+table).all()).results;
  await writeFile('work/request-teams-config-before-'+Date.now()+'.json',JSON.stringify(existing,null,2));
- const types=['leave','early_leave','late_arrival','friday_exchange','friday_work','mission','overtime','early_arrival'];
+ const types=['leave','early_leave','late_arrival'];
  const admin=await db.prepare('SELECT id FROM auth_users WHERE active=1 AND is_admin=1 ORDER BY id LIMIT 1').first();if(!admin)throw Error('Existing administrator not found.');
  const statements=[];
  for(const team of teams){
   const owner=user(team.members[0]).employee_id;
   statements.push(db.prepare('INSERT INTO request_teams(id,name,owner_employee_id) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,owner_employee_id=excluded.owner_employee_id').bind(team.id,team.name,owner));
   for(const name of team.members)statements.push(db.prepare('INSERT INTO request_team_members(employee_id,team_id) VALUES(?,?) ON CONFLICT(employee_id) DO UPDATE SET team_id=excluded.team_id').bind(user(name).employee_id,team.id));
+  for(const name of team.members)statements.push(db.prepare("DELETE FROM employee_request_limits WHERE employee_id=? AND request_type NOT IN ('leave','early_leave','late_arrival')").bind(user(name).employee_id));
   for(const type of types)statements.push(db.prepare("INSERT INTO employee_request_limits(employee_id,request_type,max_requests,overflow_mode,updated_by) VALUES(?,?,1,'warn',?) ON CONFLICT(employee_id,request_type) DO UPDATE SET max_requests=1,overflow_mode='warn',updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP").bind(owner,type,admin.id));
  }
  // Sameh remains independent; preserve any personal caps but use warning mode.
@@ -37,6 +38,6 @@ if(process.argv.includes('--apply')){
  for(const name of ['hana','sandy'])statements.push(db.prepare('INSERT INTO request_review_policy(employee_id,user_id) VALUES(?,?)').bind(user('sameh').employee_id,user(name).id));
  await db.batch(statements);
  const verified=(await db.prepare("SELECT team_name,COUNT(DISTINCT employee_id) AS members,COUNT(*) AS rules,MIN(max_requests) AS minLimit,MAX(max_requests) AS maxLimit,MIN(overflow_mode) AS mode FROM effective_request_limits WHERE team_name IS NOT NULL GROUP BY team_name").all()).results;
- if(verified.length!==2||verified.some(t=>t.members!==3||t.rules!==24||t.minLimit!==1||t.maxLimit!==1||t.mode!=='warn'))throw Error('Team configuration verification failed');
+ if(verified.length!==2||verified.some(t=>t.members!==3||t.rules!==9||t.minLimit!==1||t.maxLimit!==1||t.mode!=='warn'))throw Error('Team configuration verification failed');
  console.log(JSON.stringify({verified,samehReviewers:(await db.prepare('SELECT COUNT(*) AS n FROM request_review_policy WHERE employee_id=?').bind(user('sameh').employee_id).first()).n}));
 }
