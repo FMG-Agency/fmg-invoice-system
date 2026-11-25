@@ -445,7 +445,10 @@ export type EmployeeRequestType = "friday_work" | "friday_exchange" | "leave" | 
 export type EmployeeRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
 export type EmployeeLeaveKind = "vacation" | "occasional_leave" | "resort_leave" | "sick_leave" | "urgent_leave" | "normal_leave";
 
+export type RequestApprovalStep = {key:string;name:string;userId:number|null;approvedAt:string;note:string};
 export type EmployeeRequest = {
+  approvalSteps?:RequestApprovalStep[];
+  canReview?:boolean;
   limitExceeded?: boolean;
   limitValue?: number | null;
   isManual?: boolean;
@@ -486,8 +489,9 @@ export type RequestReviewer = {
   roleLabel: string;
 };
 
-export type RequestLimitRule = { employeeId:number;type:EmployeeRequestType;maxRequests:number;overflowMode:"block"|"warn" };
+export type RequestLimitRule = { teamName?:string;scopeId?:string;memberIds?:number[];employeeId:number;type:EmployeeRequestType;maxRequests:number;overflowMode:"block"|"warn" };
 export type RequestsState = {
+  sharedUsage?:{type:EmployeeRequestType;month:string;used:number}[];
   requestLimits?: RequestLimitRule[];
   limitEmployees?: {id:number;name:string;active:number}[];
   requests: EmployeeRequest[];

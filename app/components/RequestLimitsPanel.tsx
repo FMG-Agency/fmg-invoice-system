@@ -12,14 +12,16 @@ export function RequestLimitsPanel({state,saving,onSave,onClose}:{state:Requests
  const [month,setMonth]=useState(new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Cairo',year:'numeric',month:'2-digit'}).format(new Date()).slice(0,7));
  const [dirty,setDirty]=useState(false);
  const patch=(type:EmployeeRequestType,change:Partial<RuleDraft>)=>{setDirty(true);setRules(current=>current.map(r=>r.type===type?{...r,...change}:r));};
+ const teamRule=state.requestLimits?.find(r=>r.employeeId===employeeId&&r.teamName);
  const icons={early_leave:LogOut,late_arrival:LogIn,leave:CalendarDays,overtime:AlarmClock,early_arrival:Sunrise,friday_work:Clock3,friday_exchange:ArrowLeftRight,mission:BriefcaseBusiness};
  const close=()=>{if(!dirty||window.confirm('Discard unsaved request limit changes?'))onClose();};
- return <div className="modal-layer"><section className="modal-card request-limits-modal" role="dialog" aria-modal="true" aria-label="Employee request limits"><header className="modal-heading"><span className="limits-title-icon"><ShieldAlert size={24}/></span><div><span className="eyebrow">ADMINISTRATOR SETTINGS</span><h2>Request limits</h2><p>Monthly allowance for each employee and request type.</p></div><button type="button" className="icon-button" aria-label="Close request limits" onClick={close}><X size={19}/></button></header>
+ return <div className="modal-layer"><section className="modal-card request-limits-modal" role="dialog" aria-modal="true" aria-label="Employee request limits"><header className="modal-heading"><span className="limits-title-icon"><ShieldAlert size={24}/></span><div><span className="eyebrow">ADMINISTRATOR SETTINGS</span><h2>Request limits</h2><p>Monthly allowances for employees and shared teams.</p></div><button type="button" className="icon-button" aria-label="Close request limits" onClick={close}><X size={19}/></button></header>
  <form onSubmit={async e=>{e.preventDefault();if(await onSave(employeeId,rules)){setDirty(false);}}}>
  <div className="request-limits-body"><div className="request-limits-selectors"><label className="field"><span>Employee</span><select required value={employeeId} disabled={saving} onChange={e=>{if(dirty&&!window.confirm('Discard unsaved changes for this employee?'))return;const id=Number(e.target.value);setEmployeeId(id);setRules(load(id));setDirty(false);}}>{!employees.length&&<option value={0}>No employees</option>}{employees.map(e=><option key={e.id} value={e.id}>{e.name}{e.active?'':' · Inactive'}</option>)}</select></label><label className="field"><span>Usage month</span><input type="month" required value={month} onChange={e=>setMonth(e.target.value)}/></label></div>
+ {teamRule&&<div className="request-team-banner"><strong>{teamRule.teamName}</strong><span>Shared monthly allowance · changes apply to everyone in this team.</span></div>}
  <div className="limits-section-heading"><div><span className="eyebrow">MONTHLY ALLOWANCES</span><h3>Set the rules for each request</h3></div><span className="limits-count">{rules.filter(r=>r.maxRequests!==null).length} of {rules.length} limits set</span></div>
  <div className="request-limit-rows">{rules.map(rule=>{
- const used=monthlyRequestUsage(state.requests,employeeId,rule.type,month);
+ const used=monthlyRequestUsage(state.requests,employeeId,rule.type,month,teamRule?.memberIds);
  const [title,subtitle]=(requestLimitTypes.find(t=>t.type===rule.type)?.label || '').split(' · ');
  const Icon=icons[rule.type],limited=rule.maxRequests!==null;
  const mode=!limited?'unlimited':rule.maxRequests===0&&rule.overflowMode==='block'?'disabled':rule.overflowMode;

@@ -90,4 +90,47 @@ test('Monthly per-employee request limits enforce blocking, warnings and atomic 
     await assert.rejects(db.batch([db.prepare("INSERT INTO employee_requests(employee_id,requester_user_id,type,date_from,date_to,details) VALUES(1,2,'leave','2027-05-01','2027-05-01','Must roll back')"),app.requestLimitGuard(1,'early_arrival','2027-05-01')]));
     assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM employee_requests').first()).n,count);
   });
+  await t.test('Shared team quotas warn across members without exposing request details',async()=>{
+    await reset();
+    await db.prepare("INSERT INTO employees(id,name) VALUES(4,'Rawan'),(5,'Sandy'),(6,'Sara'),(7,'Shady'),(8,'Sameh')").run();
+    await db.prepare(`INSERT INTO auth_users VALUES(4,'Rawan','Designer','["requests"]',1,0),(5,'Sandy','Manager','["requests"]',1,0),(6,'Sara','Designer','["requests"]',1,0),(7,'Shady','Designer','["requests"]',1,0),(8,'Sameh','Employee','["requests"]',1,0)`).run();
+    await db.prepare("INSERT INTO request_teams VALUES('hana','Hana + Marina + Rawan',1),('sandy','Sandy + Sara + Shady',5)").run();
+    await db.prepare("INSERT INTO request_team_members VALUES(1,'hana'),(2,'hana'),(4,'hana'),(5,'sandy'),(6,'sandy'),(7,'sandy')").run();
+    await limits(Object.fromEntries(types.map(type=>[type,{maxRequests:1,overflowMode:'warn'}])),1);
+    await limits(Object.fromEntries(types.map(type=>[type,{maxRequests:1,overflowMode:'warn'}])),5);
+    const hana=await create({type:'early_leave',startTime:'17:00'});
+    const marina={...employee,employeeId:2,userId:3};
+    let state=await get(marina);assert.equal(state.sharedUsage.find(r=>r.type==='early_leave').used,1);assert.equal(state.requests.length,0);assert.equal(state.requestLimits[0].teamName,'Hana + Marina + Rawan');
+    const second=await call({action:'create',data:draft({type:'early_leave',startTime:'17:00'})},marina);assert.equal(second.status,200,JSON.stringify(second));assert.equal(second.requests[0].limitExceeded,true);
+    const sandy={...employee,employeeId:5,userId:5};
+    const other=await call({action:'create',data:draft({type:'early_leave',startTime:'17:00'})},sandy);assert.equal(other.requests[0].limitExceeded,false);
+    const feb=await call({action:'create',data:draft({type:'early_leave',startTime:'17:00',dateFrom:'2027-02-03',dateTo:'2027-02-03'})},marina);assert.equal(feb.requests[0].limitExceeded,false);
+    await decide(hana.id,'rejected');assert.equal((await get(marina)).sharedUsage.find(r=>r.type==='early_leave'&&r.month==='2027-01').used,1);
+    await limits({early_leave:{maxRequests:2,overflowMode:'warn'}},2);assert.equal((await get(employee)).requestLimits.find(r=>r.type==='early_leave').maxRequests,2);
+  });
+  await t.test('Sameh requires administrator, Hana and Sandy; only final approval applies attendance',async()=>{
+    await db.prepare('DELETE FROM employee_requests').run();
+    await db.prepare('INSERT INTO request_review_policy VALUES(8,2),(8,5)').run();
+    const sameh={...employee,employeeId:8,userId:8},sandy={...employee,employeeId:5,userId:5},outsider={...employee,employeeId:2,userId:3};
+    const createSameh=async date=>{const state=await call({action:'create',data:draft({type:'early_leave',startTime:'17:00',dateFrom:date,dateTo:date})},sameh);assert.equal(state.status,200,JSON.stringify(state));return state.requests.find(r=>r.dateFrom===date);};
+    const r=await createSameh('2027-06-03');
+    assert.deepEqual(globalThis.requestNotices.at(-1).ids.sort(),[1,2,5]);
+    assert.equal((await get(employee)).requests.find(v=>v.id===r.id).canReview,true);
+    assert.equal((await get(outsider)).requests.some(v=>v.id===r.id),false);
+    const approve=async(session,id=r.id,leavePaid=true)=>call({action:'decide',id,decision:'approved',leavePaid},session);
+    assert.equal((await approve(outsider)).status,403);
+    assert.equal((await approve(employee)).requests.find(v=>v.id===r.id).status,'pending');
+    assert.equal((await approve(employee)).status,409);
+    assert.equal((await approve(admin,r.id,false)).requests.find(v=>v.id===r.id).status,'pending');
+    assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM attendance_records WHERE employee_id=8 AND work_date='2027-06-03'").first()).n,0);
+    const final=await approve(sandy,r.id,true);assert.equal(final.status,200,JSON.stringify(final));const approved=final.requests.find(v=>v.id===r.id);assert.equal(approved.status,'approved');assert.equal(approved.leavePaid,false);assert.equal(approved.approvalSteps.filter(s=>s.approvedAt).length,3);
+    assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM attendance_records WHERE employee_id=8 AND work_date='2027-06-03'").first()).n,1);
+    const edit=await call({action:'edit',id:r.id,version:approved.updatedAt,data:draft({type:'early_leave',startTime:'16:00',dateFrom:r.dateFrom,dateTo:r.dateTo}),leavePaid:true});assert.equal(edit.status,200,JSON.stringify(edit));assert.equal(edit.requests.find(v=>v.id===r.id).status,'pending');assert.ok(edit.requests.find(v=>v.id===r.id).approvalSteps.every(s=>!s.approvedAt));
+    const rejected=await call({action:'decide',id:r.id,decision:'rejected',note:'Please change the timing'},sandy);assert.equal(rejected.status,200,JSON.stringify(rejected));assert.equal(rejected.requests.find(v=>v.id===r.id).status,'rejected');assert.equal((await approve(admin)).status,409);
+    const concurrent=await createSameh('2027-06-04');globalThis.requestSession=admin;
+    const results=await Promise.all([1,2].map(()=>app.POST(new Request('http://fixture/api/requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'decide',id:concurrent.id,decision:'approved',leavePaid:true})}))));
+    assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
+    assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM request_review_votes WHERE request_id=?').bind(concurrent.id).first()).n,1);
+  });
+
 });

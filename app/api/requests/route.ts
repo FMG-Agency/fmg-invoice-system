@@ -1,3 +1,4 @@
+import {decorateRequestReviews,reviewPolicy,requestRecipients,decideReviewChain} from '../../lib/request-review-chain';
 import { requestOverlay, seedRequest, assertExchangeAvailable, legacyRequestCleanup, overlayFromRow, exchangeGuard, approvalConflictGuard } from "../../lib/request-attendance";
 import { manualRequestSchema, requestDates } from "../../lib/manual-attendance";
 import { archiveStatement } from '../../lib/trash';
@@ -10,7 +11,7 @@ import { administratorUserIds, notifyUsers } from "../../lib/notifications";
 import { canAccess, parsePermissions } from "../../lib/permissions";
 import type { EmployeeRequest, RequestReviewer, RequestsState } from "../../types";
 
-import {ensureRequestLimits,requestLimitRules,requestLimitUsage,requestLimitGuard,requestLimitSnapshot} from "../../lib/request-limits";
+import {ensureRequestLimits,requestLimitRules,requestLimitUsage,requestLimitGuard,requestLimitSnapshot,requestSharedUsage} from "../../lib/request-limits";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -252,7 +253,7 @@ async function reviewers(): Promise<RequestReviewer[]> {
 async function getRequestsState(session: NonNullable<Awaited<ReturnType<typeof getSession>>>): Promise<RequestsState> {
   const accessWhere = session.isAdmin
     ? "1 = 1"
-    : "(r.employee_id = ? OR r.assigned_reviewer_id = ?)";
+    : "(r.employee_id = ? OR r.assigned_reviewer_id = ? OR EXISTS(SELECT 1 FROM request_review_policy p WHERE p.employee_id=r.employee_id AND p.user_id=? AND (r.manual_data='' OR json_extract(r.manual_data,'$.origin')='employee')))";
   const statement = database.prepare(`SELECT r.id, r.employee_id AS employeeId, e.name AS employeeName,
       e.title AS employeeTitle, r.requester_user_id AS requesterUserId, requester.display_name AS requesterName,
       r.limit_exceeded AS limitExceeded,r.limit_value AS limitValue, r.manual_data AS manualData, r.type, r.leave_kind AS leaveKind, r.date_from AS dateFrom, r.date_to AS dateTo,
@@ -272,7 +273,7 @@ async function getRequestsState(session: NonNullable<Awaited<ReturnType<typeof g
     ORDER BY CASE r.status WHEN 'pending' THEN 0 ELSE 1 END, r.created_at DESC, r.id DESC`);
   const result = session.isAdmin
     ? await statement.all<Record<string, unknown>>()
-    : await statement.bind(session.employeeId ?? -1, session.userId).all<Record<string, unknown>>();
+    : await statement.bind(session.employeeId ?? -1, session.userId,session.userId).all<Record<string, unknown>>();
   const [employee, policy] = await Promise.all([
     session.employeeId
       ? database.prepare("SELECT name FROM employees WHERE id = ? AND active = 1").bind(session.employeeId).first<{ name: string }>()
@@ -280,7 +281,9 @@ async function getRequestsState(session: NonNullable<Awaited<ReturnType<typeof g
     requestPolicy(),
   ]);
   const requests = result.results.map((row) => requestFromRow(row as Record<string, unknown>));
+  await decorateRequestReviews(requests,session);
   return {
+    sharedUsage:session.employeeId?await requestSharedUsage(session.employeeId):[],
     requests,
     requestLimits:await requestLimitRules(session.isAdmin?undefined:session.employeeId??-1),
     limitEmployees:session.isAdmin?(await database.prepare("SELECT id,name,active FROM employees ORDER BY active DESC,name COLLATE NOCASE").all<{id:number;name:string;active:number}>()).results:[],
@@ -338,7 +341,9 @@ export async function POST(request: Request) {
     if(payload.action==="saveLimits"){
       if(!session.isAdmin)return accessError(403,"Only administrators can manage request limits.");
       if(!await database.prepare("SELECT id FROM employees WHERE id=?").bind(payload.employeeId).first())return accessError(404,"Employee not found.");
-      await database.batch([database.prepare("DELETE FROM employee_request_limits WHERE employee_id=?").bind(payload.employeeId),...payload.rules.filter(r=>r.maxRequests!==null).map(r=>database.prepare("INSERT INTO employee_request_limits(employee_id,request_type,max_requests,overflow_mode,updated_by) VALUES(?,?,?,?,?)").bind(payload.employeeId,r.type,r.maxRequests,r.overflowMode,session.userId))]);
+      const scope=await database.prepare("SELECT rule_employee_id AS ownerId FROM request_limit_scopes WHERE employee_id=?").bind(payload.employeeId).first<{ownerId:number}>();
+      const ownerId=scope?.ownerId??payload.employeeId;
+      await database.batch([database.prepare("DELETE FROM employee_request_limits WHERE employee_id=?").bind(ownerId),...payload.rules.filter(r=>r.maxRequests!==null).map(r=>database.prepare("INSERT INTO employee_request_limits(employee_id,request_type,max_requests,overflow_mode,updated_by) VALUES(?,?,?,?,?)").bind(ownerId,r.type,r.maxRequests,r.overflowMode,session.userId))]);
     }
     if(payload.action === "apply") {
       if(!session.isAdmin) return accessError(403,"Only an administrator can apply requests.");
@@ -358,14 +363,15 @@ export async function POST(request: Request) {
       if(String(row.updated_at)!==payload.version) return accessError(409,"Request changed. Reload before editing.");
 
       if(payload.data.bothOvertime) return accessError(400,"Edit each overtime request separately.");
+      const chained=(await reviewPolicy(Number(row.employee_id))).length>0;
       const duration=durationForRequest(payload.data,await requestPolicy());
       const overlay=requestOverlay(payload.data,payload.leavePaid);
       await assertExchangeAvailable(Number(row.employee_id),overlay,payload.id);
       const update=database.prepare("UPDATE employee_requests SET type=?,leave_kind=?,date_from=?,date_to=?,start_time=?,end_time=?,duration_minutes=?,details=?,leave_paid=?,manual_data=?,reviewed_by_user_id=?,updated_at=strftime('%Y-%m-%d %H:%M:%f','now') WHERE id=? AND updated_at=?")
         .bind(payload.data.type,payload.data.leaveKind,payload.data.dateFrom,payload.data.dateTo,payload.data.startTime,payload.data.endTime,duration,payload.data.details,payload.leavePaid?1:0,JSON.stringify(overlay),session.userId,payload.id,payload.version);
-      await database.batch([database.prepare("INSERT INTO hr_manual_request_guard SELECT CASE WHEN EXISTS(SELECT 1 FROM employee_requests WHERE id=? AND updated_at=?) THEN 1 ELSE 0 END").bind(payload.id,payload.version),exchangeGuard(Number(row.employee_id),overlay,payload.id),...(row.status==='approved'?[approvalConflictGuard(Number(row.employee_id),overlay,payload.id)]:[]),...(row.status==='approved' && !row.manual_data?[legacyRequestCleanup(row)]:[]),update,...(row.status==='approved'?seedRequest(Number(row.employee_id),overlay):[]),database.prepare("DELETE FROM hr_manual_request_guard")]);
-      await notifyUsers([Number(row.requester_user_id)], {
-        type:"employee_request_updated",title:row.status==="approved"?"Your approved request was updated":"Your request was updated",
+      await database.batch([database.prepare("INSERT INTO hr_manual_request_guard SELECT CASE WHEN EXISTS(SELECT 1 FROM employee_requests WHERE id=? AND updated_at=?) THEN 1 ELSE 0 END").bind(payload.id,payload.version),exchangeGuard(Number(row.employee_id),overlay,payload.id),...(row.status==='approved'?[approvalConflictGuard(Number(row.employee_id),overlay,payload.id)]:[]),...(row.status==='approved' && !row.manual_data?[legacyRequestCleanup(row)]:[]),update,...(chained?[database.prepare("DELETE FROM request_review_votes WHERE request_id=?").bind(payload.id),database.prepare("UPDATE employee_requests SET status='pending',reviewed_at='',reviewer_note='',decision_token='' WHERE id=?").bind(payload.id)]:row.status==='approved'?seedRequest(Number(row.employee_id),overlay):[]),database.prepare("DELETE FROM hr_manual_request_guard")]);
+      await notifyUsers([Number(row.requester_user_id),...(chained?await requestRecipients(Number(row.employee_id),session.userId):[])], {
+        type:"employee_request_updated",title:chained?"Request updated — approvals reset":row.status==="approved"?"Your approved request was updated":"Your request was updated",
         message:requestTypeLabels[payload.data.type]+" for "+payload.data.dateFrom+" · "+(payload.leavePaid?"Paid":"Unpaid"),
         targetView:"requests",entityId:payload.id,actorUserId:session.userId,
       });
@@ -433,7 +439,7 @@ export async function POST(request: Request) {
         throw error;
       }
       const hasLimitException=Boolean(await database.prepare(`SELECT id FROM employee_requests WHERE limit_exceeded=1 AND id IN (${createdRequestIds.map(()=>"?").join(",")}) LIMIT 1`).bind(...createdRequestIds).first());
-      await notifyUsers(await administratorUserIds(session.userId), {
+      await notifyUsers(await requestRecipients(session.employeeId!,session.userId), {
         type: "employee_request_created",
         title: payload.data.bothOvertime?"New Early + Extra overtime requests":"New employee request",
         message: `${sessionName(session)} sent a ${requestTypeLabels[payload.data.type]} for ${payload.data.dateFrom}.${hasLimitException?" Monthly limit exceeded — administrator exception required.":""}`,
@@ -477,7 +483,7 @@ export async function POST(request: Request) {
         RETURNING id, assigned_reviewer_id AS assignedReviewerId`)
         .bind(payload.id, session.employeeId, session.userId).first<{ id: number; assignedReviewerId: number | null }>();
       if (!cancelled) return accessError(409, "Only your own pending requests can be cancelled.");
-      const cancellationRecipients = cancelled.assignedReviewerId ? [cancelled.assignedReviewerId] : await administratorUserIds(session.userId);
+      const cancellationRecipients = [...new Set([...(cancelled.assignedReviewerId ? [cancelled.assignedReviewerId] : []),...await requestRecipients(session.employeeId,session.userId)])];
       await notifyUsers(cancellationRecipients, {
         type: "employee_request_cancelled",
         title: "Employee request cancelled",
@@ -503,6 +509,9 @@ export async function POST(request: Request) {
       if (!row) return accessError(404, "Request not found.");
       const employeeRequest = requestFromRow(row);
       if (employeeRequest.status !== "pending") return accessError(409, "This request has already been decided.");
+      const chainResult=await decideReviewChain(employeeRequest,session,payload.decision,payload.note,payload.leavePaid);
+      if(chainResult instanceof Response)return chainResult;
+      if(chainResult)return Response.json(await getRequestsState(session));
       if (!session.isAdmin) return accessError(403, "Only an administrator can approve or reject employee requests.");
       const decisionToken = crypto.randomUUID();
       const leavePaid = payload.leavePaid;

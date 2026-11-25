@@ -1,3 +1,4 @@
+import {ensureRequestLimits} from '../../../../lib/request-limits';
 import { get } from "@vercel/blob";
 import { ensureAuthDatabase, getSession } from "../../../../lib/auth-server";
 import { database } from "../../../../lib/database";
@@ -15,6 +16,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     if (!session) return new Response("Authentication required", { status: 401 });
     if (!canAccess(session.permissions, "requests", session.isAdmin)) return new Response("Access denied", { status: 403 });
 
+    await ensureRequestLimits();
     const { id } = await context.params;
     const numericId = Number(id);
     if (!Number.isInteger(numericId) || numericId <= 0) return new Response("Invalid request", { status: 400 });
@@ -28,7 +30,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         attachmentType: string;
       }>();
     if (!row) return new Response("Request not found", { status: 404 });
-    if (!session.isAdmin && row.employeeId !== session.employeeId && row.assignedReviewerId !== session.userId) {
+    const chainReviewer=await database.prepare("SELECT 1 FROM employee_requests r JOIN request_review_policy p ON p.employee_id=r.employee_id WHERE r.id=? AND p.user_id=? AND (r.manual_data='' OR json_extract(r.manual_data,'$.origin')='employee')").bind(numericId,session.userId).first();
+    if (!session.isAdmin && row.employeeId !== session.employeeId && row.assignedReviewerId !== session.userId && !chainReviewer) {
       return new Response("Access denied", { status: 403 });
     }
     if (!row.attachmentKey) return new Response("Attachment not found", { status: 404 });

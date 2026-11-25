@@ -267,7 +267,7 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
 
   async function decide(decision: "approved" | "rejected") {
     if (!reviewing) return;
-    const saved = await mutate({ action: "decide", id: reviewing.id, decision, note: decisionNote, leavePaid: reviewLeavePaid }, decision === "approved" ? "Request approved and attendance/payroll updated." : "Request rejected and returned to the employee.");
+    const saved = await mutate({ action: "decide", id: reviewing.id, decision, note: decisionNote, leavePaid: reviewLeavePaid }, decision === "approved" ? (reviewing.approvalSteps?.length ? "Approval recorded. Attendance updates after all required approvals." : "Request approved and attendance/payroll updated.") : "Request rejected and returned to the employee.");
     if (saved) { setReviewing(null); setDecisionNote(""); }
   }
 
@@ -281,7 +281,7 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
     if(employeeFilter && request.employeeId!==Number(employeeFilter)) return false;
     if(monthFilter && !(request.type==="friday_exchange"?[request.dateFrom,request.dateTo].some(d=>d.startsWith(monthFilter)):request.dateFrom.slice(0,7)<=monthFilter && request.dateTo.slice(0,7)>=monthFilter)) return false;
     if (filter === "mine") return state.employeeId !== null && request.employeeId === state.employeeId;
-    if (filter === "review") return request.status === "pending" && (state.isAdmin || request.assignedReviewerId === state.userId);
+    if (filter === "review") return request.status === "pending" && (request.canReview || state.isAdmin || request.assignedReviewerId === state.userId);
     if (filter === "pending") return request.status === "pending";
     if (filter === "decided") return request.status !== "pending";
     return true;
@@ -292,7 +292,7 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
     .filter((request) => request.status === "approved" && ["mission", "friday_work", "overtime", "early_arrival"].includes(request.type))
     .reduce((sum, request) => sum + request.durationMinutes, 0);
   const canCreate = Boolean(state.employeeId);
-  const quotaChecks=(bothOvertime?[draft.type,"early_arrival" as EmployeeRequestType]:[draft.type]).map(type=>requestAllowance(state.requests,state.requestLimits||[],state.employeeId??-1,type,draft.dateFrom.slice(0,7)));
+  const quotaChecks=(bothOvertime?[draft.type,"early_arrival" as EmployeeRequestType]:[draft.type]).map(type=>requestAllowance(state.requests,state.requestLimits||[],state.employeeId??-1,type,draft.dateFrom.slice(0,7),state.sharedUsage));
 
   return <>
     {state.isAdmin&&<div className="request-limits-launch"><button type="button" className="secondary-button" onClick={()=>setLimitsOpen(true)}><ShieldAlert size={17}/> Request limits · حدود الطلبات</button></div>}
@@ -304,20 +304,20 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
       <button className="primary-button request-create" onClick={() => {setBothOvertime(false);setEditingRequest(null);setDraft(blankDraft());setCreateOpen(true);}} disabled={!canCreate}><Plus size={17} /> New request</button>
     </section>
 
-    {!loading && !canCreate && <section className="request-link-warning"><ShieldAlert size={20} /><div><strong>Your account is not linked to an employee profile.</strong><p>An administrator can link it from Users & Access. Only administrators approve, reject, or edit requests.</p></div></section>}
+    {!loading && !canCreate && <section className="request-link-warning"><ShieldAlert size={20} /><div><strong>Your account is not linked to an employee profile.</strong><p>An administrator can link it from Users & Access. Requests follow their assigned approval policy. Only administrators can edit requests.</p></div></section>}
 
     <section className="panel data-panel requests-panel">
       <div className="request-organizer"><label className="field"><span>Employee</span><select value={employeeFilter} onChange={e=>setEmployeeFilter(e.target.value)}><option value="">All employees</option>{Array.from(new Map(state.requests.map(r=>[r.employeeId,r.employeeName]))).sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label><label className="field"><span>Month</span><input type="month" value={monthFilter} onChange={e=>setMonthFilter(e.target.value)}/></label><span>{visibleRequests.length} requests</span>{state.isAdmin&&<div className="request-apply"><label className="field"><span>Uploaded sheet month</span><input type="month" value={applyMonth} onChange={e=>setApplyMonth(e.target.value)}/></label><button className="primary-button" disabled={saving||!applyMonth} onClick={()=>void mutate({action:"apply",month:applyMonth},"Approved requests applied. Reopen Attendance or export the updated sheet.")}>Apply approved requests to sheet</button></div>}</div>
       <div className="data-tabs request-tabs">
         <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <span>{state.requests.length}</span></button>
         {state.employeeId && <button className={filter === "mine" ? "active" : ""} onClick={() => setFilter("mine")}>My requests <span>{state.requests.filter((request) => request.employeeId === state.employeeId).length}</span></button>}
-        {(state.isAdmin || state.requests.some((request) => request.assignedReviewerId === state.userId)) && <button className={filter === "review" ? "active" : ""} onClick={() => setFilter("review")}>Needs review <span>{state.requests.filter((request) => request.status === "pending" && (state.isAdmin || request.assignedReviewerId === state.userId)).length}</span></button>}
+        {(state.isAdmin || state.requests.some((request) => request.canReview || request.assignedReviewerId === state.userId)) && <button className={filter === "review" ? "active" : ""} onClick={() => setFilter("review")}>Needs review <span>{state.requests.filter((request) => request.status === "pending" && (request.canReview || state.isAdmin || request.assignedReviewerId === state.userId)).length}</span></button>}
         <button className={filter === "pending" ? "active" : ""} onClick={() => setFilter("pending")}>Pending</button>
         <button className={filter === "decided" ? "active" : ""} onClick={() => setFilter("decided")}>Decided</button>
       </div>
 
       {loading ? <div className="empty-panel"><div className="empty-icon"><Clock3 size={24} /></div><h3>Loading employee requests…</h3></div> : visibleRequests.length ? <div className="request-list">{visibleRequests.map((request,index) => {
-        const canReview = request.status === "pending" && state.isAdmin;
+        const canReview = request.canReview ?? (request.status === "pending" && state.isAdmin);
         const ownRequest = state.employeeId !== null && request.employeeId === state.employeeId && request.requesterUserId === state.userId;
         return <Fragment key={request.id}>{(index===0||visibleRequests[index-1].employeeId!==request.employeeId||visibleRequests[index-1].dateFrom.slice(0,7)!==request.dateFrom.slice(0,7))&&<h3 className="request-group-heading">{request.employeeName}<span>{request.dateFrom.slice(0,7)}</span></h3>}<article className="request-card">
           <div className={`request-type-icon ${request.type}`}>{typeIcon(request.type, 21)}</div>
@@ -327,11 +327,12 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
             {request.limitExceeded&&<div className="request-limit-notice warn"><ShieldAlert size={16}/><span>Exceeded monthly limit when submitted ({request.limitValue}). {request.status==="pending"?"Administrator exception required.":"Recorded at submission."}</span></div>}
             <p className="request-details">{request.details}</p>
             {request.hasAttachment && <a className="request-attachment" href={`/api/requests/attachment/${request.id}`} target="_blank" rel="noreferrer"><Paperclip size={14} /> {request.attachmentName || "View attachment"}</a>}
-            <div className="request-route"><Route size={15} /><span>Sent by <strong>{request.requesterName}</strong></span><ArrowRight size={14} /><span>{request.assignedReviewerName ? <>Forwarded to <strong>{request.assignedReviewerName}</strong></> : <strong>Administrator</strong>}</span></div>
+            <div className="request-route"><Route size={15} /><span>Sent by <strong>{request.requesterName}</strong></span><ArrowRight size={14} /><span>{request.assignedReviewerName ? <>Forwarded to <strong>{request.assignedReviewerName}</strong></> : <strong>{request.approvalSteps?.length?"Administrator + required reviewers":"Administrator"}</strong>}</span></div>
+            {Boolean(request.approvalSteps?.length)&&(request.status==="pending"||request.approvalSteps!.some(step=>step.approvedAt))&&<div className="request-approval-steps">{request.approvalSteps!.map(step=><span key={step.key} className={step.approvedAt?'approved':''} title={step.note}>{step.approvedAt?'✓':'○'} {step.name}<small>{step.approvedAt?'Approved · '+step.approvedAt:request.status==='pending'?'Awaiting approval':request.status==='approved'?'Previously approved':'Not approved'}</small></span>)}</div>}
             {request.status !== "pending" && <div className={`request-decision-note ${request.status}`}><span>{request.status === "approved" ? <Check size={15} /> : <XCircle size={15} />}</span><p><strong>{request.status === "approved" ? "Approved" : request.status === "rejected" ? "Rejected" : "Cancelled"}{request.reviewedByName ? ` by ${request.reviewedByName}` : ""}</strong>{request.reviewerNote && <small>{request.reviewerNote}</small>}</p></div>}
           </div>
           <div className="request-card-actions">
-            {state.isAdmin && request.status === "pending" && <label><span>Share for viewing</span><select value={request.assignedReviewerId ?? ""} disabled={saving} onChange={(event) => void mutate({ action: "assign", id: request.id, reviewerId: event.target.value ? Number(event.target.value) : null }, event.target.value ? "Request shared for viewing; the administrator still makes the decision." : "Request returned to administrator review.")}><option value="">Administrator only</option>{state.reviewers.filter((reviewer) => reviewer.id !== request.requesterUserId).map((reviewer) => <option key={reviewer.id} value={reviewer.id}>{reviewer.displayName} · {reviewer.roleLabel}</option>)}</select></label>}
+            {state.isAdmin && !request.approvalSteps?.length && request.status === "pending" && <label><span>Share for viewing</span><select value={request.assignedReviewerId ?? ""} disabled={saving} onChange={(event) => void mutate({ action: "assign", id: request.id, reviewerId: event.target.value ? Number(event.target.value) : null }, event.target.value ? "Request shared for viewing; the administrator still makes the decision." : "Request returned to administrator review.")}><option value="">Administrator only</option>{state.reviewers.filter((reviewer) => reviewer.id !== request.requesterUserId).map((reviewer) => <option key={reviewer.id} value={reviewer.id}>{reviewer.displayName} · {reviewer.roleLabel}</option>)}</select></label>}
             {canReview && <button className="table-review" onClick={() => { setReviewing(request); setDecisionNote(""); setReviewLeavePaid(request.leavePaid ?? true); }}><FileCheck2 size={15} /> Review request</button>}
             {ownRequest && request.status === "pending" && <button className="request-cancel" disabled={saving} onClick={() => window.confirm("Cancel this pending request?") && void mutate({ action: "cancel", id: request.id }, "Request cancelled.")}><X size={15} /> Cancel</button>}
             {state.isAdmin && <button className="table-review" disabled={saving} onClick={()=>{if(request.isManual){showToast("Edit this request in Employees → Manual Requests to preserve its original category and payroll settings.");return;}setBothOvertime(false);setEditingRequest(request);setDraft({...blankDraft(),...request,dayType:request.dayType||"normal",reason:request.reason||"normal",attachmentBase64:""});setReviewLeavePaid(request.leavePaid??true);setCreateOpen(true);}}>{request.isManual?"Edit in Manual Requests":"Edit request"}</button>}
@@ -361,7 +362,7 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
         </div>
         {editingRequest && draft.type!=="friday_exchange"&&<label className="field"><span>Payroll treatment</span><select value={String(reviewLeavePaid)} onChange={e=>setReviewLeavePaid(e.target.value==="true")}><option value="true">Paid / excused</option><option value="false">Unpaid / normal deduction</option></select></label>}
         <div className="request-payroll-note">{typeIcon(draft.type, 17)}<span>{policyNote(draft, state)}</span></div>
-        {!editingRequest&&quotaChecks.map((quota,index)=>quota&&<div key={index} role={quota.exceeded?"alert":"status"} className={"request-limit-notice "+(quota.blocked?"blocked":quota.exceeded?"warn":"")}><ShieldAlert size={16}/><span><strong>{requestLabel(quota.type)} · {draft.dateFrom.slice(0,7)}: {quota.used}/{quota.maxRequests} used</strong><br/>{quota.blocked?"وصلت للحد الشهري — لا يمكنك إرسال طلب جديد من هذا النوع.":quota.exceeded?"تجاوزت الحد الشهري. يمكنك الإرسال وسيظهر لك وللأدمن أنه يحتاج استثناء.":(quota.maxRequests-quota.used)+" requests remaining before this submission."}</span></div>)}
+        {!editingRequest&&quotaChecks.map((quota,index)=>quota&&<div key={index} role={quota.exceeded?"alert":"status"} className={"request-limit-notice "+(quota.blocked?"blocked":quota.exceeded?"warn":"")}><ShieldAlert size={16}/><span><strong>{quota.teamName ? quota.teamName+" · " : ""}{requestLabel(quota.type)} · {draft.dateFrom.slice(0,7)}: {quota.used}/{quota.maxRequests} used</strong><br/>{quota.blocked?"وصلت للحد الشهري — لا يمكنك إرسال طلب جديد من هذا النوع.":quota.exceeded?"تجاوزت الحد الشهري. يمكنك الإرسال وسيظهر لك وللأدمن أنه يحتاج استثناء.":(quota.maxRequests-quota.used)+" requests remaining before this submission."}</span></div>)}
         <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primary-button" disabled={saving||(!editingRequest&&quotaChecks.some(q=>q?.blocked))}>{saving ? "Saving…" : editingRequest?"Save changes":"Send request"}</button></div>
       </form>
     </RequestModal>}
@@ -371,9 +372,9 @@ export function RequestsPanel({ showToast }: { showToast: (message: string) => v
       {reviewing.type==="mission"&&<p className="request-payroll-note">{reviewing.dayType==="holiday"?"Holiday assignment · hours ×2":"Normal working day · additional assignment hours ×1"}</p>}
       {reviewing.type==="leave"&&reviewing.reason==="other"&&<p>Absence reason: Other</p>}
       {reviewing.hasAttachment && <a className="request-attachment review" href={`/api/requests/attachment/${reviewing.id}`} target="_blank" rel="noreferrer"><Paperclip size={15} /> Open {reviewing.attachmentName || "attachment"}</a>}
-      {reviewing.type !== "friday_exchange" && <label className="field"><span>Payroll treatment <small>Chosen by the reviewer</small></span><select value={reviewLeavePaid ? "paid" : "unpaid"} onChange={(event) => setReviewLeavePaid(event.target.value === "paid")}><option value="paid">Paid / excused · include eligible pay</option><option value="unpaid">Unpaid · no additional pay / normal deduction</option></select></label>}
+      {state.isAdmin && reviewing.type !== "friday_exchange" && <label className="field"><span>Payroll treatment <small>Chosen by the reviewer</small></span><select value={reviewLeavePaid ? "paid" : "unpaid"} onChange={(event) => setReviewLeavePaid(event.target.value === "paid")}><option value="paid">Paid / excused · include eligible pay</option><option value="unpaid">Unpaid · no additional pay / normal deduction</option></select></label>}
       <label className="field"><span>Decision note <small>Visible to the employee</small></span><textarea rows={4} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} placeholder="Add the manager's approval note, or explain the rejection." /></label>
-      <div className="request-decision-actions"><button className="reject-button" disabled={saving} onClick={() => void decide("rejected")}><XCircle size={17} /> Reject</button><button className="approve-button" disabled={saving} onClick={() => void decide("approved")}><Check size={17} /> {reviewing.limitExceeded?"Approve exception & apply":"Approve & apply"}</button></div>
+      <div className="request-decision-actions"><button className="reject-button" disabled={saving} onClick={() => void decide("rejected")}><XCircle size={17} /> Reject</button><button className="approve-button" disabled={saving} onClick={() => void decide("approved")}><Check size={17} /> {reviewing.approvalSteps?.length?"Record my approval":reviewing.limitExceeded?"Approve exception & apply":"Approve & apply"}</button></div>
     </RequestModal>}
   </>;
 }
